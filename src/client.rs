@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use bullet_exchange_interface::message::UserActionDiscriminants;
 
 use crate::generated::Client;
 use crate::{SDKError, SDKResult};
@@ -38,6 +39,9 @@ pub const MAINNET_URL: &str = "https://tradingapi.bullet.xyz";
 impl TradingApi {
     /// Create a new TradingApi from an URL.
     pub async fn new(url: &str, reqwest_client: Option<reqwest::Client>) -> SDKResult<Self> {
+        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim};
+        use bullet_exchange_interface::transaction::Transaction;
+
         let parsed = Url::parse(url).map_err(|_| SDKError::InvalidNetworkUrl)?;
 
         let (rest_url, ws_url) = match parsed.scheme() {
@@ -50,25 +54,35 @@ impl TradingApi {
             None => Client::new(&rest_url),
         };
 
-        // fetch chain_id if not provided
-        let constants = generated_client.constants().await?;
-        let chain_id = u64::try_from(constants.chain_id).map_err(SDKError::ChainIdCastError)?;
-
         // fetch schema
-        let schema = generated_client.schema().await?;
-        // XXX validate schema
+        let schema_obj = generated_client.schema().await?;
 
-        let chain_hash_hex = schema
-            .get("chain_hash")
-            .and_then(|v| v.as_str())
-            .ok_or(SDKError::InvalidSchemaResponse("chain_hash"))?;
+        // validate the remote schema
+        let obj = schema_obj.into_inner();
+        let sobj = serde_json::to_string(&obj).unwrap();
+        let schema_file = serde_json::from_str::<SchemaFile>(&sobj).unwrap();
+        let our_schema = Schema::of_single_type::<Transaction>().unwrap();
+        let left = trim(&our_schema, &Self::filter_variants);
+        let right = trim(&schema_file.schema, &Self::filter_variants);
+        if left != right {
+            panic!("Schema outdated - recompile the binary to update bullet-exchange-interface.")
+        }
 
-        let chain_hash_bytes = hex::decode(chain_hash_hex.replace("0x", ""))
+        // get chain_hash
+        let chain_hash_bytes = hex::decode(schema_file.chain_hash.replace("0x", ""))
             .map_err(|e| SDKError::InvalidChainHash(e.to_string()))?;
 
         let chain_hash = chain_hash_bytes.try_into().map_err(|v: Vec<u8>| {
             SDKError::InvalidChainHash(format!("expected 32 bytes, got {}", v.len()))
         })?;
+
+        // get chain-id - XXX unfortunatelly this field is private upstream
+        let chain_id = obj
+            .get("schema")
+            .and_then(|x| x.get("chain_data"))
+            .and_then(|x| x.get("chain_id"))
+            .and_then(|x| x.as_u64())
+            .ok_or(SDKError::InvalidSchemaResponse("chain_id"))?;
 
         Ok(Self {
             rest_url,
@@ -77,6 +91,22 @@ impl TradingApi {
             chain_id,
             chain_hash,
         })
+    }
+
+    /// This is a white-list of Transaction variants that must not
+    /// change to not break our binary.
+    fn filter_variants(name: &str, variant: &str) -> bool {
+        match name {
+            "Transaction" => variant == "V0",
+            "RuntimeCall" => variant == "Exchange",
+            "CallMessage" => variant == "User",
+            "UserAction" => UserActionDiscriminants::try_from(variant).is_ok(),
+            "UniquenessData" => variant == "Generation",
+            _ => {
+                // include the variant - to be sure we fail afterwards
+                true
+            }
+        }
     }
 
     /// Connect to the mainnet environment.

@@ -7,7 +7,7 @@
 //!
 //! ```no_run
 //! use bullet_rust_sdk::ws::topics::{Topic, OrderbookDepth, KlineInterval};
-//! use trading_api_types::RequestId;
+//! use bullet_rust_sdk::types::RequestId;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! # let api = bullet_rust_sdk::TradingApi::mainnet().await?;
