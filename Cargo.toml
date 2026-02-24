@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bullet-exchange-interface = { git = "ssh://git@github.com/bulletxyz/bullet-exchange-interface.git" }
-bullet-ws-interface = { git = "ssh://git@github.com/bulletxyz/bullet-ws-interface.git" }
+bullet-exchange-interface = { git = "https://github.com/bulletxyz/bullet-exchange-interface.git" }
+bullet-ws-interface = { git = "https://github.com/bulletxyz/bullet-ws-interface.git" }
 
 progenitor-client = "0.11"
 reqwest = { version = "0.12", features = ["blocking"] }
