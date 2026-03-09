@@ -13,10 +13,10 @@ use crate::types::{
     AggTradeMessage, BookTickerMessage, DepthUpdate, ErrorMessage, ForceOrderMessage,
     MarkPriceMessage, OrderUpdateMessage, PongMessage, RequestId, StatusMessage,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Result message for subscribe/unsubscribe success
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct MethodResult {
     #[serde(default)]
     pub id: Option<RequestId>,
@@ -27,7 +27,7 @@ pub struct MethodResult {
 }
 
 /// Result message for list_subscriptions
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ListSubscriptionsResult {
     #[serde(default)]
     pub id: Option<RequestId>,
@@ -38,7 +38,7 @@ pub struct ListSubscriptionsResult {
 }
 
 /// Tagged messages from the server (have an "e" event type field)
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "e", rename_all = "snake_case")]
 pub enum TaggedMessage {
     Status(StatusMessage),
@@ -53,7 +53,7 @@ pub enum TaggedMessage {
 ///
 /// Uses untagged deserialization - serde tries each variant in order until one matches.
 /// The `Unknown` variant captures any message that doesn't match known types.
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
 pub enum ServerMessage {
     // Tagged messages with "e" field - try these first
