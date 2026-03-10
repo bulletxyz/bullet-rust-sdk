@@ -1,4 +1,5 @@
 use bullet_rust_sdk::TradingApi;
+use futures_util::TryStreamExt as _;
 use wasm_bindgen::prelude::*;
 
 use crate::errors::WasmResult;
