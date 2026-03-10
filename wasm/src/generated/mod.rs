@@ -1,7 +1,9 @@
-//! Wasm-bindgen wrappers for all generated REST response types, organised by domain.
+//! Wasm-bindgen wrappers for all generated REST response types and endpoints,
+//! organised by domain.
 //!
-//! | Module      | Types                                                                  |
+//! | Module      | Contents                                                               |
 //! |-------------|------------------------------------------------------------------------|
+//! | `client`    | `impl WasmTradingApi` — all progenitor REST endpoint wrappers          |
 //! | `account`   | `Account`, `AccountAsset`, `AccountPosition`, `Balance`               |
 //! | `borrow`    | `BorrowLendPoolResponse`, `InsuranceAsset`, `InsuranceBalance`         |
 //! | `common`    | `ChainInfo`, `ModuleRef`, `RateLimit`, `RateParams`, `RollupConstants` |
@@ -13,6 +15,7 @@
 
 pub mod account;
 pub mod borrow;
+pub mod client;
 pub mod common;
 pub mod market;
 pub mod orders;

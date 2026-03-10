@@ -1,6 +1,8 @@
 use bullet_rust_sdk::Keypair;
 use wasm_bindgen::prelude::*;
 
+use crate::WasmResult;
+
 /// Ed25519 keypair for signing transactions.
 #[wasm_bindgen(js_name = Keypair)]
 pub struct WasmKeypair {
@@ -18,18 +20,16 @@ impl WasmKeypair {
 
     /// Create from a 32-byte hex private key (with or without `0x` prefix).
     #[wasm_bindgen(js_name = fromHex)]
-    pub fn from_hex(hex: &str) -> Result<WasmKeypair, JsValue> {
-        Keypair::from_hex(hex)
-            .map(|inner| WasmKeypair { inner })
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+    pub fn from_hex(hex: &str) -> WasmResult<WasmKeypair> {
+        Ok(WasmKeypair {
+            inner: Keypair::from_hex(hex)?,
+        })
     }
 
     /// Create from a raw 32-byte `Uint8Array`.
     #[wasm_bindgen(js_name = fromBytes)]
-    pub fn from_bytes(bytes: &[u8]) -> Result<WasmKeypair, JsValue> {
-        let arr: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| JsValue::from_str("Expected exactly 32 bytes"))?;
+    pub fn from_bytes(bytes: &[u8]) -> WasmResult<WasmKeypair> {
+        let arr: [u8; 32] = bytes.try_into()?;
         Ok(WasmKeypair {
             inner: Keypair::from_bytes(arr),
         })
