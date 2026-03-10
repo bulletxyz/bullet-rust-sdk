@@ -1,14 +1,20 @@
+[workspace]
+members = [".", "wasm"]
+resolver = "2"
+
 [package]
 name = "bullet-rust-sdk"
 version = "0.1.0"
 edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bullet-exchange-interface = { git = "https://github.com/bulletxyz/bullet-exchange-interface.git" }
 bullet-ws-interface = { git = "https://github.com/bulletxyz/bullet-ws-interface.git" }
 
 progenitor-client = "0.11"
-reqwest = { version = "0.12", features = ["blocking"] }
 serde = "1.0.216"
 serde_json = { version = "1.0.133", features = ["preserve_order"] }
 futures = "0.3"
@@ -32,10 +38,12 @@ web-time = "1.1"
 # Cross-platform async timer (works on both native and WASM)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 futures-timer = "3"
+reqwest = { version = "0.12", features = ["blocking"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 futures-timer = { version = "3", features = ["wasm-bindgen"] }
 getrandom = { version = "0.2", features = ["js"] }
+reqwest = { version = "0.12" }
 
 [build-dependencies]
 progenitor = "0.12"
