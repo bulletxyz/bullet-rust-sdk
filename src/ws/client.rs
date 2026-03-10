@@ -168,7 +168,7 @@ impl TradingApi {
         &self,
         config: WebsocketConfig,
     ) -> SDKResult<WebsocketHandle, WSErrors> {
-        use reqwest_websocket::RequestBuilderExt;
+        use reqwest_websocket::Upgrade;
 
         let response = self
             .client
