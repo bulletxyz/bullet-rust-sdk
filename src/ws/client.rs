@@ -14,12 +14,12 @@
 //! # Example
 //!
 //! ```no_run
-//! use bullet_rust_sdk::TradingApi;
+//! use bullet_rust_sdk::Client;
 //! use bullet_rust_sdk::errors::WSErrors;
 //! use bullet_rust_sdk::types::ClientMessage;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let api = TradingApi::mainnet().await?;
+//! let api = Client::mainnet().await?;
 //!
 //! 'reconnect: loop {
 //!     let mut ws = api.connect_ws().await?;
@@ -63,7 +63,7 @@ use web_time::Duration;
 use super::models::{ServerMessage, TaggedMessage};
 use super::topics::Topic;
 use crate::errors::WSErrors;
-use crate::{SDKResult, TradingApi};
+use crate::{Client, SDKResult};
 
 /// Default connection timeout in seconds.
 const DEFAULT_CONNECTION_TIMEOUT_SECS: u64 = 10;
@@ -85,11 +85,11 @@ pub struct WebsocketHandle {
 /// # Example
 ///
 /// ```no_run
-/// use bullet_rust_sdk::{TradingApi, ws::WebsocketConfig};
+/// use bullet_rust_sdk::{Client, ws::WebsocketConfig};
 /// use web_time::Duration;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let api = TradingApi::mainnet().await?;
+/// let api = Client::mainnet().await?;
 ///
 /// // Use a longer connection timeout
 /// let config = WebsocketConfig {
@@ -122,7 +122,7 @@ impl Deref for WebsocketHandle {
     }
 }
 
-impl TradingApi {
+impl Client {
     /// Connect to the WebSocket API with default configuration.
     ///
     /// Returns a [`WebsocketHandle`] ready for sending and receiving messages.
@@ -130,10 +130,10 @@ impl TradingApi {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::TradingApi;
+    /// use bullet_rust_sdk::Client;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = TradingApi::mainnet().await?;
+    /// let api = Client::mainnet().await?;
     /// let mut ws = api.connect_ws().await?;
     /// // Connection is ready to use
     /// # Ok(())
@@ -151,11 +151,11 @@ impl TradingApi {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::{TradingApi, ws::WebsocketConfig};
+    /// use bullet_rust_sdk::{Client, ws::WebsocketConfig};
     /// use web_time::Duration;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = TradingApi::mainnet().await?;
+    /// let api = Client::mainnet().await?;
     ///
     /// let config = WebsocketConfig {
     ///     connection_timeout: Duration::from_secs(30),
@@ -237,10 +237,10 @@ impl WebsocketHandle {
     ///
     /// ```no_run
     /// use bullet_rust_sdk::types::ClientMessage;
-    /// # use bullet_rust_sdk::TradingApi;
+    /// # use bullet_rust_sdk::Client;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let api = TradingApi::mainnet().await?;
+    /// # let api = Client::mainnet().await?;
     /// # let mut ws = api.connect_ws().await?;
     /// // Subscribe to aggregated trades
     /// ws.send(ClientMessage::Subscribe {
@@ -284,10 +284,10 @@ impl WebsocketHandle {
     /// use bullet_rust_sdk::ws::models::{ServerMessage, TaggedMessage};
     /// use bullet_rust_sdk::errors::WSErrors;
     /// use bullet_rust_sdk::types::ClientMessage;
-    /// # use bullet_rust_sdk::TradingApi;
+    /// # use bullet_rust_sdk::Client;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = TradingApi::mainnet().await?;
+    /// let api = Client::mainnet().await?;
     ///
     /// 'reconnect: loop {
     ///     let mut ws = api.connect_ws().await?;
@@ -369,11 +369,11 @@ impl WebsocketHandle {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::{TradingApi, Topic, OrderbookDepth};
+    /// use bullet_rust_sdk::{Client, Topic, OrderbookDepth};
     /// use bullet_rust_sdk::types::RequestId;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = TradingApi::mainnet().await?;
+    /// let api = Client::mainnet().await?;
     /// let mut ws = api.connect_ws().await?;
     ///
     /// // Subscribe to multiple topics using type-safe builders
@@ -415,11 +415,11 @@ impl WebsocketHandle {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::{TradingApi, Topic};
+    /// use bullet_rust_sdk::{Client, Topic};
     /// use bullet_rust_sdk::types::RequestId;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = TradingApi::mainnet().await?;
+    /// let api = Client::mainnet().await?;
     /// let mut ws = api.connect_ws().await?;
     ///
     /// let topic = Topic::agg_trade("BTC-USD");
@@ -450,11 +450,11 @@ impl WebsocketHandle {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::TradingApi;
+    /// use bullet_rust_sdk::Client;
     /// use bullet_rust_sdk::types::RequestId;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = TradingApi::mainnet().await?;
+    /// let api = Client::mainnet().await?;
     /// let mut ws = api.connect_ws().await?;
     ///
     /// ws.list_subscriptions(Some(RequestId::new(1))).await?;
@@ -476,11 +476,11 @@ impl WebsocketHandle {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::TradingApi;
+    /// use bullet_rust_sdk::Client;
     /// use bullet_rust_sdk::types::RequestId;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = TradingApi::mainnet().await?;
+    /// let api = Client::mainnet().await?;
     /// let mut ws = api.connect_ws().await?;
     ///
     /// let tx_bytes = "base64_encoded_transaction";
@@ -511,11 +511,11 @@ impl WebsocketHandle {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::TradingApi;
+    /// use bullet_rust_sdk::Client;
     /// use bullet_rust_sdk::types::RequestId;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = TradingApi::mainnet().await?;
+    /// let api = Client::mainnet().await?;
     /// let mut ws = api.connect_ws().await?;
     ///
     /// let tx_bytes = "base64_encoded_cancel_transaction";

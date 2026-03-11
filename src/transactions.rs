@@ -7,9 +7,9 @@ use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::generated::types::{SubmitTxRequest, SubmitTxResponse};
 use crate::types::{CallMessage, Transaction as SignedTransaction, UnsignedTransaction};
-use crate::{Keypair, SDKError, SDKResult, TradingApi};
+use crate::{Client, Keypair, SDKError, SDKResult};
 
-impl TradingApi {
+impl Client {
     /// Build an unsigned transaction from a call message.
     ///
     /// This creates an unsigned transaction that can be signed with `sign_transaction`.
@@ -133,13 +133,13 @@ mod tests {
         use bullet_exchange_interface::message::PublicAction;
 
         use crate::types::CallMessage;
-        use crate::{Keypair, MAINNET_URL, TradingApi};
+        use crate::{Client, Keypair, MAINNET_URL};
 
         #[tokio::test]
         async fn test_sign_apply_funding() {
             let endpoint = std::env::var("BULLET_API_ENDPOINT").unwrap_or(MAINNET_URL.to_string());
 
-            let client = TradingApi::new(&endpoint, None)
+            let client = Client::new(&endpoint, None)
                 .await
                 .expect("could not connect");
             let keypair = Keypair::generate();
@@ -155,7 +155,7 @@ mod tests {
                 .sign_transaction(unsigned, &keypair)
                 .expect("Failed to sign transaction");
 
-            assert!(!TradingApi::sign_to_base64(&signed).unwrap().is_empty());
+            assert!(!Client::sign_to_base64(&signed).unwrap().is_empty());
         }
     }
 }

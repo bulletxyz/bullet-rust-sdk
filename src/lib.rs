@@ -6,7 +6,7 @@ mod transactions;
 pub mod errors;
 
 // Re-export main types at crate root for ergonomic imports
-pub use client::{MAINNET_URL, TradingApi};
+pub use client::{Client, MAINNET_URL};
 pub use errors::{SDKError, SDKResult, WSErrors};
 pub use keypair::Keypair;
 // Re-export WebSocket close code for pattern matching
@@ -22,7 +22,7 @@ pub use ws::topics::{KlineInterval, OrderbookDepth, Topic};
 /// Re-export the generated Progenitor client and types.
 ///
 /// Use this module to access specific generated types if needed.
-/// Most users should just use `TradingApi` which provides access
+/// Most users should just use `Client` which provides access
 /// to client methods via `Deref`.
 mod generated;
 pub mod codegen {

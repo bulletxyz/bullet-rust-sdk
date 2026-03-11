@@ -10,7 +10,7 @@
 //! use bullet_rust_sdk::types::RequestId;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! # let api = bullet_rust_sdk::TradingApi::mainnet().await?;
+//! # let api = bullet_rust_sdk::Client::mainnet().await?;
 //! # let mut ws = api.connect_ws().await?;
 //! // Type-safe subscriptions
 //! ws.subscribe([

@@ -1,4 +1,4 @@
-use bullet_rust_sdk::TradingApi;
+use bullet_rust_sdk::Client;
 use wasm_bindgen::prelude::*;
 
 use crate::errors::WasmResult;
@@ -9,7 +9,7 @@ use crate::errors::WasmResult;
 /// Errors are thrown as JavaScript `Error` objects with a `.message` property.
 #[wasm_bindgen(js_name = TradingApi)]
 pub struct WasmTradingApi {
-    pub(crate) inner: TradingApi,
+    pub(crate) inner: Client,
 }
 
 #[wasm_bindgen(js_class = TradingApi)]
@@ -18,12 +18,12 @@ impl WasmTradingApi {
 
     /// Connect to the mainnet REST endpoint and validate the remote schema.
     pub async fn mainnet() -> WasmResult<WasmTradingApi> {
-        Ok(WasmTradingApi { inner: TradingApi::mainnet().await? })
+        Ok(WasmTradingApi { inner: Client::mainnet().await? })
     }
 
     /// Connect to a custom REST endpoint URL.
     pub async fn connect(url: &str) -> WasmResult<WasmTradingApi> {
-        Ok(WasmTradingApi { inner: TradingApi::new(url, None).await? })
+        Ok(WasmTradingApi { inner: Client::new(url, None).await? })
     }
 
     // ── Metadata ──────────────────────────────────────────────────────────────

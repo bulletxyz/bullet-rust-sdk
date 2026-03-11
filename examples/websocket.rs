@@ -16,7 +16,7 @@
 use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::NewOrderArgs;
 use bullet_exchange_interface::types::Side;
-use bullet_rust_sdk::{Keypair, KlineInterval, OrderbookDepth, Topic, TradingApi};
+use bullet_rust_sdk::{Client, Keypair, KlineInterval, OrderbookDepth, Topic};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[tokio::main(flavor = "current_thread")]
@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Connecting to {api_endpoint}...");
 
-    let client = TradingApi::new(&api_endpoint, None).await?;
+    let client = Client::new(&api_endpoint, None).await?;
 
     let mut ws = client.connect_ws().await?;
     println!("Connected to WebSocket");
@@ -102,13 +102,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match line.trim() {
                     "bid" => {
                         let signed_tx = client.sign_transaction(ask_tx.clone(), &keypair)?;
-                        ws.order_place(TradingApi::sign_to_base64(&signed_tx)?, req_id).await?;
+                        ws.order_place(Client::sign_to_base64(&signed_tx)?, req_id).await?;
                         println!("Sent bid. Got ReqId {req_id:?}");
                     },
 
                     "ask" => {
                         let signed_tx = client.sign_transaction(ask_tx.clone(), &keypair)?;
-                        ws.order_place(TradingApi::sign_to_base64(&signed_tx)?, req_id).await?;
+                        ws.order_place(Client::sign_to_base64(&signed_tx)?, req_id).await?;
                         println!("Sent ask. Got ReqId {req_id:?}");
                     }
                     x => {

@@ -27,12 +27,12 @@ tokio = { version = "1", features = ["full"] }
 Example:
 
 ```rust
-use bullet_rust_sdk::TradingApi;
+use bullet_rust_sdk::Client;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Connect to testnet (or use TradingApi::mainnet(), TradingApi::staging())
-    let api = TradingApi::testnet().await?;
+    // Connect to testnet (or use Client::mainnet(), Client::staging())
+    let api = Client::testnet().await?;
 
     // Get exchange info
     let exchange_info = api.exchange_info().await?.into_inner();

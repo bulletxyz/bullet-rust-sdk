@@ -1,6 +1,6 @@
 #![cfg(feature = "integration")]
 
-use bullet_rust_sdk::{MAINNET_URL, TradingApi};
+use bullet_rust_sdk::{Client, MAINNET_URL};
 
 /// Test fixture that provides a configured client and handles cleanup
 ///
@@ -8,7 +8,7 @@ use bullet_rust_sdk::{MAINNET_URL, TradingApi};
 /// - Setup happens in `new()`
 /// - Teardown happens in `Drop::drop()`
 struct TestFixture {
-    client: TradingApi,
+    client: Client,
     test_name: &'static str,
 }
 
@@ -20,7 +20,7 @@ impl TestFixture {
         println!("=== Setting up test: {test_name} ===");
         println!("Testing against API endpoint: {endpoint}");
 
-        let client = TradingApi::new(&endpoint, None)
+        let client = Client::new(&endpoint, None)
             .await
             .expect("could not connect");
 
@@ -28,7 +28,7 @@ impl TestFixture {
     }
 
     /// Get a reference to the client
-    fn client(&self) -> &TradingApi {
+    fn client(&self) -> &Client {
         &self.client
     }
 }

@@ -1,7 +1,7 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use borsh::BorshDeserialize;
-use bullet_rust_sdk::{TradingApi, types::{CallMessage, Transaction}};
+use bullet_rust_sdk::{Client, types::{CallMessage, Transaction}};
 use wasm_bindgen::prelude::*;
 
 use crate::client::WasmTradingApi;
@@ -28,7 +28,7 @@ impl WasmTradingApi {
         let call_msg: CallMessage = serde_json::from_str(call_msg_json)?;
         let unsigned = self.inner.build_transaction(call_msg, u128::from(max_fee))?;
         let signed = self.inner.sign_transaction(unsigned, &keypair.inner)?;
-        Ok(TradingApi::sign_to_base64(&signed)?)
+        Ok(Client::sign_to_base64(&signed)?)
     }
 
     /// Submit a base64-encoded signed transaction via REST.

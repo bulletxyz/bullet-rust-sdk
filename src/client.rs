@@ -1,7 +1,7 @@
 use std::ops::Deref;
 use bullet_exchange_interface::message::UserActionDiscriminants;
 
-use crate::generated::Client;
+use crate::generated::Client as GeneratedClient;
 use crate::{SDKError, SDKResult};
 use reqwest::Url;
 
@@ -18,26 +18,26 @@ use reqwest::Url;
 /// # Example
 ///
 /// ```ignore
-/// use bullet_rust_sdk::{Network, TradingApi};
+/// use bullet_rust_sdk::{Network, Client};
 ///
 /// // Connect to REST API
-/// let api = TradingApi::mainnet().await?;
+/// let api = Client::mainnet().await?;
 ///
 /// // Query via REST
 /// let info = api.exchange_info().await?;
 /// ```
-pub struct TradingApi {
+pub struct Client {
     rest_url: String,
     ws_url: String,
-    generated_client: Client,
+    generated_client: GeneratedClient,
     chain_id: u64,
     chain_hash: [u8; 32],
 }
 
 pub const MAINNET_URL: &str = "https://tradingapi.bullet.xyz";
 
-impl TradingApi {
-    /// Create a new TradingApi from an URL.
+impl Client {
+    /// Create a new Client from a URL.
     pub async fn new(url: &str, reqwest_client: Option<reqwest::Client>) -> SDKResult<Self> {
         use bullet_exchange_interface::schema::{Schema, SchemaFile, trim};
         use bullet_exchange_interface::transaction::Transaction;
@@ -50,8 +50,8 @@ impl TradingApi {
             _ => return Err(SDKError::InvalidNetworkUrl),
         };
         let generated_client = match reqwest_client {
-            Some(client) => Client::new_with_client(&rest_url, client),
-            None => Client::new(&rest_url),
+            Some(client) => GeneratedClient::new_with_client(&rest_url, client),
+            None => GeneratedClient::new(&rest_url),
         };
 
         // fetch schema
@@ -114,10 +114,10 @@ impl TradingApi {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::TradingApi;
+    /// use bullet_rust_sdk::Client;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = TradingApi::mainnet().await?;
+    /// let api = Client::mainnet().await?;
     /// let info = api.exchange_info().await?;
     /// # Ok(())
     /// # }
@@ -128,9 +128,9 @@ impl TradingApi {
 
     /// Get a reference to the underlying generated client.
     ///
-    /// Prefer using `Deref` (calling methods directly on `TradingApi`)
+    /// Prefer using `Deref` (calling methods directly on `Client`)
     /// instead of this method.
-    pub fn client(&self) -> &Client {
+    pub fn client(&self) -> &GeneratedClient {
         &self.generated_client
     }
 
@@ -159,11 +159,11 @@ impl TradingApi {
 /// This enables ergonomic access to all API methods:
 ///
 /// ```ignore
-/// let api = TradingApi::new(network);
+/// let api = Client::new(url, None).await?;
 /// let info = api.exchange_info().await?;
 /// ```
-impl Deref for TradingApi {
-    type Target = Client;
+impl Deref for Client {
+    type Target = GeneratedClient;
 
     fn deref(&self) -> &Self::Target {
         self.client()
