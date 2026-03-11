@@ -3,7 +3,7 @@ use bullet_exchange_interface::message::UserActionDiscriminants;
 
 use crate::generated::Client as GeneratedClient;
 use crate::{SDKError, SDKResult};
-use reqwest::Url;
+use url::Url;
 
 /// The main trading API client for REST operations.
 ///

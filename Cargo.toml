@@ -39,12 +39,10 @@ web-time = "1.1"
 # Cross-platform async timer (works on both native and WASM)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 futures-timer = "3"
-reqwest = { version = "0.12", features = ["blocking"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 futures-timer = { version = "3", features = ["wasm-bindgen"] }
 getrandom = { version = "0.2", features = ["js"] }
-reqwest = { version = "0.12" }
 
 [build-dependencies]
 progenitor = "0.13"

@@ -170,7 +170,7 @@ impl Client {
     ) -> SDKResult<WebsocketHandle, WSErrors> {
         use reqwest_websocket::Upgrade;
 
-        let response = self
+        let response: reqwest_websocket::UpgradeResponse = self
             .client
             .clone()
             .get(self.ws_url())
