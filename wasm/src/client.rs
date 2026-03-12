@@ -40,8 +40,8 @@ impl WasmTradingApi {
 
     /// Chain hash as a lowercase hex string.
     #[wasm_bindgen(js_name = chainHash)]
-    pub fn chain_hash(&self) -> String {
-        hex::encode(self.inner.chain_hash())
+    pub fn chain_hash(&self) -> Vec<u8> {
+        self.inner.chain_hash().to_vec()
     }
 
     /// REST API base URL.
