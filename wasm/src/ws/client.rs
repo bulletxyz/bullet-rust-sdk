@@ -1,4 +1,4 @@
-use bon::{bon, builder};
+use bon::bon;
 use bullet_rust_sdk::{
     types::{ClientMessage, RequestId},
     ws::client::{WebsocketConfig, WebsocketHandle},

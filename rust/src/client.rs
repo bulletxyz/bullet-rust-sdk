@@ -1,4 +1,4 @@
-use bon::{bon, builder};
+use bon::bon;
 use bullet_exchange_interface::message::UserActionDiscriminants;
 use std::ops::Deref;
 
