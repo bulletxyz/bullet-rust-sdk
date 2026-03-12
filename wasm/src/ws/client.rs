@@ -1,3 +1,4 @@
+use bon::{bon, builder};
 use bullet_rust_sdk::{
     types::{ClientMessage, RequestId},
     ws::client::{WebsocketConfig, WebsocketHandle},
@@ -70,15 +71,16 @@ impl WasmWebsocketHandle {
     }
 }
 
-#[wasm_bindgen(js_class = WebsocketConfig)]
+#[wasm_bindgen(js_name = WebsocketConfig)]
 pub struct WasmWebsocketConfig {
     inner: WebsocketConfig,
 }
 
+#[wasm_bindgen(js_class = WebsocketConfig)]
 #[bon]
 impl WasmWebsocketConfig {
     #[builder]
-    pub fn new() -> Self {
+    pub fn new(connection_timeout: Duration) -> Self {
         Self {
             inner: WebsocketConfig::builder()
                 .connection_timeout(connection_timeout)
@@ -96,7 +98,12 @@ impl WasmTradingApi {
         config: Option<WasmWebsocketConfig>,
     ) -> WasmResult<WasmWebsocketHandle> {
         Ok(WasmWebsocketHandle {
-            inner: self.inner.connect_ws(config.map(|c| c.inner)).await?,
+            inner: self
+                .inner
+                .connect_ws()
+                .maybe_config(config.map(|c| c.inner))
+                .call()
+                .await?,
         })
     }
 }

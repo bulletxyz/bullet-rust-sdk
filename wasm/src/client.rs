@@ -18,12 +18,16 @@ impl WasmTradingApi {
 
     /// Connect to the mainnet REST endpoint and validate the remote schema.
     pub async fn mainnet() -> WasmResult<WasmTradingApi> {
-        Ok(WasmTradingApi { inner: Client::mainnet().await? })
+        Ok(WasmTradingApi {
+            inner: Client::mainnet().await?,
+        })
     }
 
     /// Connect to a custom REST endpoint URL.
     pub async fn connect(url: &str) -> WasmResult<WasmTradingApi> {
-        Ok(WasmTradingApi { inner: Client::new(url, None).await? })
+        Ok(WasmTradingApi {
+            inner: Client::builder().url(url).build().await?,
+        })
     }
 
     // ── Metadata ──────────────────────────────────────────────────────────────
@@ -50,5 +54,4 @@ impl WasmTradingApi {
     pub fn ws_url(&self) -> String {
         self.inner.ws_url().to_string()
     }
-
 }
