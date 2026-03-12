@@ -7,9 +7,18 @@
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, rust-overlay }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      rust-overlay,
+    }:
     let
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "aarch64-darwin"
+      ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
       wasmPackVersion = "0.14.0";
@@ -33,9 +42,12 @@
         };
       };
 
-      makeWasmPack = pkgs:
-        let src = wasmPackSources.${pkgs.system};
-        in pkgs.stdenvNoCC.mkDerivation {
+      makeWasmPack =
+        pkgs:
+        let
+          src = wasmPackSources.${pkgs.system};
+        in
+        pkgs.stdenvNoCC.mkDerivation {
           pname = "wasm-pack";
           version = wasmPackVersion;
           src = pkgs.fetchurl { inherit (src) url hash; };
@@ -46,7 +58,8 @@
         };
     in
     {
-      devShells = forAllSystems (system:
+      devShells = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs {
             inherit system;
@@ -54,7 +67,12 @@
           };
 
           rust = pkgs.rust-bin.stable.latest.default.override {
-            extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
+            extensions = [
+              "rust-src"
+              "rust-analyzer"
+              "clippy"
+              "rustfmt"
+            ];
             targets = [ "wasm32-unknown-unknown" ];
           };
 
@@ -73,7 +91,8 @@
               (makeWasmPack pkgs)
               pkgs.pkg-config
               pkgs.openssl
-            ] ++ darwinDeps;
+            ]
+            ++ darwinDeps;
 
             shellHook = ''
               export OPENSSL_NO_VENDOR=1

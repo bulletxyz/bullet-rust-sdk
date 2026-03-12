@@ -18,9 +18,20 @@ build:
 build-release:
     cargo build --release
 
-# Build the WASM package with wasm-pack
-build-wasm:
-    nix run nixpkgs#wasm-pack -- build wasm --target web
+# Build the WASM package for browser environments
+build-wasm-web:
+    wasm-pack build wasm --target web --out-dir pkg/web
+
+# Build the WASM package for Node.js environments
+build-wasm-node:
+    wasm-pack build wasm --target nodejs --out-dir pkg/node
+
+# Build the WASM package for both web and Node.js
+build-wasm: build-wasm-web build-wasm-node
+
+# Remove generated WASM build artifacts
+clean-wasm:
+    rm -rf wasm/pkg/web wasm/pkg/node
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 

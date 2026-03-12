@@ -1,0 +1,23 @@
+{
+  "name": "@bulletxyz/sdk-wasm",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./pkg/node/bullet_rust_sdk_wasm.js",
+  "module": "./pkg/web/bullet_rust_sdk_wasm.js",
+  "types": "./pkg/web/bullet_rust_sdk_wasm.d.ts",
+  "exports": {
+    ".": {
+      "node": {
+        "import": "./pkg/node/bullet_rust_sdk_wasm.js",
+        "require": "./pkg/node/bullet_rust_sdk_wasm.js"
+      },
+      "browser": "./pkg/web/bullet_rust_sdk_wasm.js",
+      "default": "./pkg/web/bullet_rust_sdk_wasm.js"
+    }
+  },
+  "files": [
+    "pkg/node/",
+    "pkg/web/"
+  ],
+  "sideEffects": false
+}
