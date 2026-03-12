@@ -50,14 +50,14 @@ fmt-check:
 
 # Run the REST example (set API_ENDPOINT env var to override)
 example-rest:
-    cargo run --example rest
+    cargo run -p bullet-rust-sdk --example rest
 
 # Run the WebSocket example (set API_ENDPOINT env var to override)
 example-ws:
-    cargo run --example websocket
+    cargo run -p bullet-rust-sdk --example websocket
 
 # ── OpenAPI spec ──────────────────────────────────────────────────────────────
 
 # Fetch and cache the latest OpenAPI spec from mainnet
 fetch-spec endpoint="https://tradingapi.bullet.xyz":
-    curl -sSf {{ endpoint }}/docs/rest/openapi.json | nix run nixpkgs#jq -- . > openapi.json
+    curl -sSf {{ endpoint }}/docs/rest/openapi.json | nix run nixpkgs#jq -- . > rust/openapi.json
