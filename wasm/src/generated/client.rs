@@ -122,6 +122,10 @@ impl WasmTradingApi {
     }
 
     /// Commission rate for an address and symbol.
+    ///
+    /// TODO: Returns `()` because the Trading API's OpenAPI spec defines no response
+    /// schema for this endpoint. Once the spec is updated with a proper response
+    /// type, this will be updated to return the typed response.
     #[wasm_bindgen(js_name = commissionRate)]
     pub async fn commission_rate(&self, address: &str, symbol: &str) -> WasmResult<()> {
         self.inner.commission_rate(address, symbol).await?;
@@ -129,6 +133,10 @@ impl WasmTradingApi {
     }
 
     /// Symbol configuration for an address.
+    ///
+    /// TODO: Returns `()` because the Trading API's OpenAPI spec defines no response
+    /// schema for this endpoint. Once the spec is updated with a proper response
+    /// type, this will be updated to return the typed response.
     #[wasm_bindgen(js_name = symbolConfig)]
     pub async fn symbol_config(&self, address: &str, symbol: Option<String>) -> WasmResult<()> {
         self.inner.symbol_config(address, symbol.as_deref()).await?;

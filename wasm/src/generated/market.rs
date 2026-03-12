@@ -3,7 +3,7 @@
 //! Types: `ExchangeInfo`, `Asset`, `Symbol`, `PriceTicker`, `Ticker24hr`,
 //!        `OrderBook`, `FundingRate`, `Trade`, `TimeResponse`, `PingResponse`
 
-use super::common::to_json;
+use super::common::{to_json, WasmChainInfo, WasmRateLimit};
 use bullet_rust_sdk::codegen::types as sdk;
 use wasm_bindgen::prelude::*;
 
@@ -26,11 +26,17 @@ impl WasmAsset {
         self.0.asset.clone()
     }
 
+    // TODO: should be u16 - the Trading API uses u16 internally but utoipa emits
+    // `format: int32` for unsigned types. Once the Trading API PR adds
+    // `#[schema(format = "uint16")]` and the codegen PR is merged, this will be
+    // generated correctly as u16.
     #[wasm_bindgen(getter, js_name = assetId)]
     pub fn asset_id(&self) -> i32 {
         self.0.asset_id
     }
 
+    // TODO: should be u8 - same codegen issue as asset_id above. Will be fixed
+    // once the Trading API PR adds `#[schema(format = "uint8")]`.
     #[wasm_bindgen(getter)]
     pub fn decimals(&self) -> i32 {
         self.0.decimals
@@ -64,6 +70,31 @@ impl WasmExchangeInfo {
     #[wasm_bindgen(getter, js_name = chainHash)]
     pub fn chain_hash(&self) -> Option<String> {
         self.0.chain_hash.clone()
+    }
+
+    #[wasm_bindgen(getter, js_name = chainInfo)]
+    pub fn chain_info(&self) -> Option<WasmChainInfo> {
+        self.0.chain_info.clone().map(WasmChainInfo)
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn assets(&self) -> Vec<WasmAsset> {
+        self.0.assets.iter().cloned().map(WasmAsset).collect()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn symbols(&self) -> Vec<WasmSymbol> {
+        self.0.symbols.iter().cloned().map(WasmSymbol).collect()
+    }
+
+    #[wasm_bindgen(getter, js_name = rateLimits)]
+    pub fn rate_limits(&self) -> Vec<WasmRateLimit> {
+        self.0
+            .rate_limits
+            .iter()
+            .cloned()
+            .map(WasmRateLimit)
+            .collect()
     }
 }
 

@@ -155,6 +155,9 @@ impl WasmBracket {
         to_json(&self.0)
     }
 
+    // TODO: should be u32 - the Trading API uses an unsigned type internally but
+    // utoipa emits `format: int32`. Will be fixed once the Trading API PR adds
+    // `#[schema(format = "uint32")]` and the codegen PR is merged.
     #[wasm_bindgen(getter)]
     pub fn bracket(&self) -> i32 {
         self.0.bracket
@@ -165,6 +168,7 @@ impl WasmBracket {
         self.0.cum
     }
 
+    // TODO: should be u32 - same codegen issue as bracket above.
     #[wasm_bindgen(getter, js_name = initialLeverage)]
     pub fn initial_leverage(&self) -> i32 {
         self.0.initial_leverage
