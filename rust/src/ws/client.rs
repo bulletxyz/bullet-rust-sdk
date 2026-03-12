@@ -55,6 +55,7 @@
 use std::ops::Deref;
 
 use crate::types::{ClientMessage, OrderParams, RequestId};
+use bon::{bon, builder, Builder};
 use futures::{select, FutureExt, SinkExt, StreamExt};
 use futures_timer::Delay;
 use tracing::{debug, warn};
@@ -99,7 +100,7 @@ pub struct WebsocketHandle {
 /// # Ok(())
 /// # }
 /// ```
-#[bon]
+#[derive(Builder)]
 pub struct WebsocketConfig {
     /// How long to wait for the server's "connected" message during handshake.
     ///

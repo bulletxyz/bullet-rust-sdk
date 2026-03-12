@@ -3,4 +3,4 @@ members = ["rust", "wasm"]
 resolver = "2"
 
 [workspace.dependencies]
-bon = { version = "3.9.0", features = ["alloc"] }
+bon = "3.9.0"

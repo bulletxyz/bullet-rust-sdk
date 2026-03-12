@@ -1,3 +1,4 @@
+use bon::{bon, builder};
 use bullet_exchange_interface::message::UserActionDiscriminants;
 use std::ops::Deref;
 
@@ -125,7 +126,7 @@ impl Client {
     /// # }
     /// ```
     pub async fn mainnet() -> SDKResult<Self> {
-        Self::new(MAINNET_URL, None).await
+        Self::builder().url(MAINNET_URL).build().await
     }
 
     /// Get a reference to the underlying generated client.
