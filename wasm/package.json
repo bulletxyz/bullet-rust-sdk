@@ -2,6 +2,21 @@
   "name": "@bulletxyz/sdk-wasm",
   "version": "0.1.0",
   "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/pkg/"
+    ]
+  },
   "main": "./pkg/node/bullet_rust_sdk_wasm.js",
   "module": "./pkg/web/bullet_rust_sdk_wasm.js",
   "types": "./pkg/web/bullet_rust_sdk_wasm.d.ts",

@@ -7,12 +7,12 @@ use crate::errors::WasmResult;
 ///
 /// All REST responses are returned as JSON strings.
 /// Errors are thrown as JavaScript `Error` objects with a `.message` property.
-#[wasm_bindgen(js_name = TradingApi)]
+#[wasm_bindgen(js_name = Client)]
 pub struct WasmTradingApi {
     pub(crate) inner: Client,
 }
 
-#[wasm_bindgen(js_class = TradingApi)]
+#[wasm_bindgen(js_class = Client)]
 impl WasmTradingApi {
     // ── Constructors ──────────────────────────────────────────────────────────
 

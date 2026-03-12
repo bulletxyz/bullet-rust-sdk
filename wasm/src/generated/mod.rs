@@ -7,8 +7,8 @@
 //! | `account`   | `Account`, `AccountAsset`, `AccountPosition`, `Balance`               |
 //! | `borrow`    | `BorrowLendPoolResponse`, `InsuranceAsset`, `InsuranceBalance`         |
 //! | `common`    | `ChainInfo`, `ModuleRef`, `RateLimit`, `RateParams`, `RollupConstants` |
-//! | `market`    | `Asset`, `ExchangeInfo`, `FundingRate`, `OrderBook`, `PingResponse`,  |
-//! |             | `PriceTicker`, `Symbol`, `Ticker24hr`, `TimeResponse`, `Trade`         |
+ //! | `market`    | `Asset`, `ExchangeInfo`, `FundingRate`, `OrderBook`, `PingResponse`,  |
+ //! |             | `PriceTicker`, `TradingSymbol`, `Ticker24hr`, `TimeResponse`, `Trade`  |
 //! | `orders`    | `BinanceOrder`, `Bracket`, `LeverageBracket`                          |
 //! | `tx`        | `LedgerEvent`, `SubmitTxRequest`, `SubmitTxResponse`,                 |
 //! |             | `TxReceipt`, `TxResult`, `TxStatus`                                    |

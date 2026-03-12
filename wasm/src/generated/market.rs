@@ -214,10 +214,15 @@ impl WasmPriceTicker {
 // Symbol
 // ══════════════════════════════════════════════════════════════════════════════
 
-#[wasm_bindgen(js_name = Symbol)]
+// Named `TradingSymbol` (not `Symbol`) to avoid shadowing the JS built-in
+// `Symbol` global. wasm-bindgen emits `class Symbol { … }` at the top-level
+// of the generated CJS file, which creates a temporal dead zone that breaks
+// every `if (Symbol.dispose) …` guard that appears before the class
+// declaration in the same file.
+#[wasm_bindgen(js_name = TradingSymbol)]
 pub struct WasmSymbol(pub(crate) sdk::Symbol);
 
-#[wasm_bindgen(js_class = Symbol)]
+#[wasm_bindgen(js_class = TradingSymbol)]
 impl WasmSymbol {
     #[wasm_bindgen(js_name = toJSON)]
     pub fn to_json(&self) -> String {

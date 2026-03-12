@@ -1,4 +1,3 @@
-use bon::bon;
 use bullet_rust_sdk::{
     types::{ClientMessage, RequestId},
     ws::client::{WebsocketConfig, WebsocketHandle},
@@ -77,19 +76,18 @@ pub struct WasmWebsocketConfig {
 }
 
 #[wasm_bindgen(js_class = WebsocketConfig)]
-#[bon]
 impl WasmWebsocketConfig {
-    #[builder]
-    pub fn new(connection_timeout: Duration) -> Self {
+    #[wasm_bindgen]
+    pub fn new(connection_timeout: Option<u64>) -> Self {
         Self {
             inner: WebsocketConfig::builder()
-                .connection_timeout(connection_timeout)
+                .maybe_connection_timeout(connection_timeout.map(|ct| Duration::from_secs(ct)))
                 .build(),
         }
     }
 }
 
-#[wasm_bindgen(js_class = TradingApi)]
+#[wasm_bindgen(js_class = Client)]
 impl WasmTradingApi {
     /// Open a WebSocket connection with the default handshake timeout.
     #[wasm_bindgen(js_name = connectWs)]

@@ -15,9 +15,6 @@ serde                = { version = "1", features = ["derive"] }
 serde-wasm-bindgen   = "0.6"
 js-sys               = "0.3"
 serde_json           = "1"
-hex                  = "0.4"
-base64               = "0.22"
-borsh                = "1"
 web-time             = "1.1"
 futures-util         = "0.3"
 bon.workspace        = true

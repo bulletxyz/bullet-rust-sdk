@@ -21,7 +21,7 @@ use crate::generated::{
 };
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(js_class = TradingApi)]
+#[wasm_bindgen(js_class = Client)]
 impl WasmTradingApi {
     // ── Connectivity ──────────────────────────────────────────────────────────
 

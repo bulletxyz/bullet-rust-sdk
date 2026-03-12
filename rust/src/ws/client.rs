@@ -105,14 +105,13 @@ pub struct WebsocketConfig {
     /// How long to wait for the server's "connected" message during handshake.
     ///
     /// Default: 10 seconds
+    #[builder(default = Duration::from_secs(DEFAULT_CONNECTION_TIMEOUT_SECS))]
     pub connection_timeout: Duration,
 }
 
 impl Default for WebsocketConfig {
     fn default() -> Self {
-        Self {
-            connection_timeout: Duration::from_secs(DEFAULT_CONNECTION_TIMEOUT_SECS),
-        }
+        Self::builder().build()
     }
 }
 
