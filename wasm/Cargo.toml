@@ -20,6 +20,7 @@ base64               = "0.22"
 borsh                = "1"
 web-time             = "1.1"
 futures-util         = "0.3"
+bon.workspace        = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }

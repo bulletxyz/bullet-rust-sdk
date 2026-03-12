@@ -1,5 +1,5 @@
-use std::ops::Deref;
 use bullet_exchange_interface::message::UserActionDiscriminants;
+use std::ops::Deref;
 
 use crate::generated::Client as GeneratedClient;
 use crate::{SDKError, SDKResult};
@@ -36,10 +36,12 @@ pub struct Client {
 
 pub const MAINNET_URL: &str = "https://tradingapi.bullet.xyz";
 
+#[bon]
 impl Client {
     /// Create a new Client from a URL.
+    #[builder]
     pub async fn new(url: &str, reqwest_client: Option<reqwest::Client>) -> SDKResult<Self> {
-        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim};
+        use bullet_exchange_interface::schema::{trim, Schema, SchemaFile};
         use bullet_exchange_interface::transaction::Transaction;
 
         let parsed = Url::parse(url).map_err(|_| SDKError::InvalidNetworkUrl)?;

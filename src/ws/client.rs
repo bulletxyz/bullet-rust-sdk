@@ -55,7 +55,7 @@
 use std::ops::Deref;
 
 use crate::types::{ClientMessage, OrderParams, RequestId};
-use futures::{FutureExt, SinkExt, StreamExt, select};
+use futures::{select, FutureExt, SinkExt, StreamExt};
 use futures_timer::Delay;
 use tracing::{debug, warn};
 use web_time::Duration;
@@ -99,6 +99,7 @@ pub struct WebsocketHandle {
 /// # Ok(())
 /// # }
 /// ```
+#[bon]
 pub struct WebsocketConfig {
     /// How long to wait for the server's "connected" message during handshake.
     ///
@@ -122,53 +123,17 @@ impl Deref for WebsocketHandle {
     }
 }
 
+#[bon]
 impl Client {
-    /// Connect to the WebSocket API with default configuration.
-    ///
-    /// Returns a [`WebsocketHandle`] ready for sending and receiving messages.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use bullet_rust_sdk::Client;
-    ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = Client::mainnet().await?;
-    /// let mut ws = api.connect_ws().await?;
-    /// // Connection is ready to use
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn connect_ws(&self) -> SDKResult<WebsocketHandle, WSErrors> {
-        self.connect_ws_with_config(WebsocketConfig::default())
-            .await
-    }
-
-    /// Connect to the WebSocket API with custom configuration.
-    ///
-    /// Use this if you need to adjust the connection timeout.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use bullet_rust_sdk::{Client, ws::WebsocketConfig};
-    /// use web_time::Duration;
-    ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = Client::mainnet().await?;
-    ///
-    /// let config = WebsocketConfig {
-    ///     connection_timeout: Duration::from_secs(30),
-    /// };
-    /// let mut ws = api.connect_ws_with_config(config).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn connect_ws_with_config(
+    /// TODO: Fix docs
+    #[builder]
+    pub async fn connect_ws(
         &self,
-        config: WebsocketConfig,
+        config: Option<WebsocketConfig>,
     ) -> SDKResult<WebsocketHandle, WSErrors> {
         use reqwest_websocket::Upgrade;
+
+        let config = config.unwrap_or_default();
 
         let response: reqwest_websocket::UpgradeResponse = self
             .client
