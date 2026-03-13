@@ -19,5 +19,6 @@ pub use generated::{
     WasmTxReceipt, WasmTxResult, WasmTxStatus,
 };
 pub use keypair::WasmKeypair;
+pub use transactions::{WasmCallMessage, WasmTransaction};
 pub use ws::client::WasmWebsocketHandle;
 pub use ws::topics::{WasmKlineInterval, WasmOrderbookDepth, WasmTopic};

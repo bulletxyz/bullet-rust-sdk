@@ -1,5 +1,6 @@
 use bon::bon;
 use bullet_exchange_interface::message::UserActionDiscriminants;
+use std::fmt::Debug;
 use std::ops::Deref;
 
 use crate::generated::Client as GeneratedClient;

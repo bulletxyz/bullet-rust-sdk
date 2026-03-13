@@ -8,6 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bullet-rust-sdk = { path = "../rust" }
+bullet-exchange-interface = { git = "https://github.com/bulletxyz/bullet-exchange-interface.git" }
 
 wasm-bindgen         = "0.2"
 wasm-bindgen-futures = "0.4"
