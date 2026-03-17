@@ -39,6 +39,10 @@ clean-wasm:
 test:
     cargo nextest run
 
+# Run doc tests
+test-doc:
+    cargo test --doc
+
 # Run integration tests (requires a running API)
 test-integration endpoint="https://tradingapi.bullet.xyz":
     BULLET_API_ENDPOINT={{ endpoint }} cargo nextest run --features integration
@@ -47,8 +51,8 @@ test-integration endpoint="https://tradingapi.bullet.xyz":
 test-wasm:
     cd wasm && npm test
 
-# Run all tests (Rust + WASM)
-test-all: test test-wasm
+# Run all tests (Rust unit + doc + WASM)
+test-all: test test-doc test-wasm
 
 # ── Lint ──────────────────────────────────────────────────────────────────────
 
