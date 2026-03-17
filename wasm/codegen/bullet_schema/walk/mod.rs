@@ -7,14 +7,12 @@ mod structs;
 use std::collections::{HashSet, VecDeque};
 
 use bullet_exchange_interface::schema::Schema;
-use bullet_exchange_interface::transaction::Transaction;
 use sov_universal_wallet::schema::Link;
 
 use super::{FieldInfo, Primitive, SchemaInfo};
 
 /// Walk the Transaction schema and extract everything needed for codegen.
-pub fn extract_schema_info() -> SchemaInfo {
-    let schema = Schema::of_single_type::<Transaction>().expect("failed to build schema");
+pub fn extract_schema_info(schema: &Schema) -> SchemaInfo {
     let types = schema.types();
 
     let action_groups = actions::extract_action_groups(types);

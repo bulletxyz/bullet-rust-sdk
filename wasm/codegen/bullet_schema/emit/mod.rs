@@ -4,15 +4,13 @@ pub mod enums;
 pub mod namespaces;
 pub mod structs;
 
+use sov_universal_wallet::schema::Schema;
+
 use super::map;
 use super::{FieldInfo, SchemaInfo, Types};
 
 /// Emit the complete generated source file.
-pub fn emit_all(info: &SchemaInfo) -> String {
-    let schema = bullet_exchange_interface::schema::Schema::of_single_type::<
-        bullet_exchange_interface::transaction::Transaction,
-    >()
-    .expect("failed to build schema");
+pub fn emit_all(info: &SchemaInfo, schema: Schema) -> String {
     let types = schema.types();
     let wrapper_indices = map::wrapped_struct_indices(&info.structs);
     let enum_indices = map::wrapped_enum_indices(&info.enums);
