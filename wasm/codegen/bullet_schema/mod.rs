@@ -47,7 +47,23 @@ use sov_universal_wallet::ty::Ty;
 pub struct ActionGroup {
     /// The CallMessage variant name: "User", "Vault", "Keeper", "Public", "Admin".
     pub call_message_variant: String,
-    /// The Rust action enum name: "UserAction", "VaultAction", etc.
+    /// The nested enum inside CallMessage that holds the actual action variants.
+    ///
+    /// The domain types are structured as:
+    /// ```ignore
+    /// enum CallMessage {
+    ///     User(UserAction),    // call_message_variant = "User", action_enum = "UserAction"
+    ///     Vault(VaultAction),  // call_message_variant = "Vault", action_enum = "VaultAction"
+    ///     // ...
+    /// }
+    ///
+    /// enum UserAction {
+    ///     Deposit { ... },
+    ///     Withdraw { ... },
+    /// }
+    /// ```
+    ///
+    /// So to construct a deposit, we need: `CallMessage::User(UserAction::Deposit { ... })`
     pub action_enum: String,
     /// All variants within this action enum.
     pub variants: Vec<VariantInfo>,
@@ -197,10 +213,33 @@ pub struct SchemaEnum {
 /// This is the bridge between the two phases:
 /// - **walk** produces `SchemaInfo` by traversing the schema
 /// - **emit** consumes `SchemaInfo` to generate Rust source code
+///
+/// # Relationship between fields
+///
+/// The three collections serve different purposes:
+///
+/// - `action_groups` define the **factory methods** (e.g., `User.deposit(...)`)
+///   that construct `CallMessage` variants. These are the entry points for JS.
+///
+/// - `structs` are **nested types** used as parameters within action variants.
+///   For example, `UserAction::PlaceOrders { orders: Vec<NewOrderArgs> }` needs
+///   `NewOrderArgs` to be exposed so JS can construct order objects.
+///
+/// - `enums` are **C-style enums** used as parameters (e.g., `Side`, `OrderType`).
+///   These become wasm-bindgen enums that JS can pass to factory methods.
+///
+/// The `structs` and `enums` are discovered by walking the action group fields —
+/// any non-primitive type referenced by an action variant gets a wrapper generated.
 #[derive(Debug)]
 pub struct SchemaInfo {
+    /// The five action namespaces: User, Public, Keeper, Vault, Admin.
+    /// Each generates a struct with factory methods that return `WasmCallMessage`.
     pub action_groups: Vec<ActionGroup>,
+    /// Struct types used as parameters in action variants (e.g., `NewOrderArgs`).
+    /// Each generates a `WasmXxx` wrapper with a constructor.
     pub structs: Vec<SchemaStruct>,
+    /// Simple enums used as parameters (e.g., `Side`, `OrderType`).
+    /// Each generates a C-style `WasmXxx` enum with `into_domain()`.
     pub enums: Vec<SchemaEnum>,
 }
 
