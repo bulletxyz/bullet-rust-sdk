@@ -3,7 +3,7 @@
  *
  * Verifies:
  * 1. Legacy buildSignedTransaction method works
- * 2. TransactionBuilder fluent pattern works
+ * 2. Transaction.builder() fluent pattern works
  * 3. Error handling for missing required fields
  * 4. Transaction serialization to base64
  */
@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 const sdk = require('../pkg/node/bullet_rust_sdk_wasm.js') as typeof import('../pkg/node/bullet_rust_sdk_wasm.js');
 
 const {
-  Client, Keypair, TransactionBuilder,
+  Client, Keypair, Transaction,
   User, Public,
   NewOrderArgs,
   Side, OrderType,
@@ -58,19 +58,19 @@ describe('legacy buildSignedTransaction', () => {
   });
 });
 
-// ── TransactionBuilder pattern ───────────────────────────────────────────────
+// ── Transaction.builder() pattern ────────────────────────────────────────────
 
-describe('TransactionBuilder pattern', () => {
-  test('TransactionBuilder exists with expected methods', () => {
-    expect(typeof TransactionBuilder.new).toBe('function');
+describe('Transaction.builder() pattern', () => {
+  test('Transaction.builder exists', () => {
+    expect(typeof Transaction.builder).toBe('function');
   });
 
-  test('build tx using TransactionBuilder', async () => {
+  test('build tx using Transaction.builder()', async () => {
     const client = await Client.connect(ENDPOINT);
     const keypair = Keypair.generate();
 
     const callMsg = Public.applyFunding([]);
-    const tx = TransactionBuilder.new()
+    const tx = Transaction.builder()
       .callMessage(callMsg)
       .maxFee(10_000_000n)
       .signer(keypair)
@@ -87,7 +87,7 @@ describe('TransactionBuilder pattern', () => {
     const keypair = Keypair.generate();
 
     const callMsg = Public.applyFunding([]);
-    const tx = TransactionBuilder.new()
+    const tx = Transaction.builder()
       .callMessage(callMsg)
       .maxFee(10_000_000n)
       .priorityFeeBips(100n)
@@ -108,7 +108,7 @@ describe('TransactionBuilder pattern', () => {
       '50000.0', '0.1', Side.Bid, OrderType.Limit, false,
     );
     const callMsg = User.placeOrders(0, [order], false);
-    const tx = TransactionBuilder.new()
+    const tx = Transaction.builder()
       .callMessage(callMsg)
       .maxFee(10_000_000n)
       .signer(keypair)
@@ -125,7 +125,7 @@ describe('TransactionBuilder pattern', () => {
     const keypair = Keypair.generate();
 
     const callMsg = Public.applyFunding([]);
-    const tx = TransactionBuilder.new()
+    const tx = Transaction.builder()
       .callMessage(callMsg)
       .maxFee(10_000_000n)
       .signer(keypair)
@@ -138,13 +138,13 @@ describe('TransactionBuilder pattern', () => {
 
 // ── Error handling ───────────────────────────────────────────────────────────
 
-describe('TransactionBuilder error handling', () => {
+describe('Transaction.builder() error handling', () => {
   test('missing callMessage throws error', async () => {
     const client = await Client.connect(ENDPOINT);
     const keypair = Keypair.generate();
 
     expect(() => {
-      TransactionBuilder.new()
+      Transaction.builder()
         .maxFee(10_000_000n)
         .signer(keypair)
         .build(client);
@@ -157,7 +157,7 @@ describe('TransactionBuilder error handling', () => {
 
     const callMsg = Public.applyFunding([]);
     expect(() => {
-      TransactionBuilder.new()
+      Transaction.builder()
         .callMessage(callMsg)
         .signer(keypair)
         .build(client);
@@ -169,7 +169,7 @@ describe('TransactionBuilder error handling', () => {
 
     const callMsg = Public.applyFunding([]);
     expect(() => {
-      TransactionBuilder.new()
+      Transaction.builder()
         .callMessage(callMsg)
         .maxFee(10_000_000n)
         .build(client);

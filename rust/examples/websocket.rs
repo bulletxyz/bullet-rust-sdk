@@ -30,9 +30,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Connecting to {api_endpoint}...");
 
-    let client = Client::new(&api_endpoint, None).await?;
+    let client = Client::builder().url(&api_endpoint).build().await?;
 
-    let mut ws = client.connect_ws().await?;
+    let mut ws = client.connect_ws().call().await?;
     println!("Connected to WebSocket");
 
     // Subscribe to multiple topics

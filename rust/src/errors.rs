@@ -27,9 +27,9 @@ pub enum SDKError {
     #[error("API error: {0}")]
     ApiError(String),
 
-    /// No signer configured.
-    #[error("No signer configured. Call .with_signer() before signing transactions.")]
-    NoSigner,
+    /// No keypair available for signing.
+    #[error("No keypair available. Provide a signer via Transaction::builder().signer() or Client::builder().keypair()")]
+    MissingKeypair,
 
     #[error(transparent)]
     StringParseError(#[from] FromUtf8Error),

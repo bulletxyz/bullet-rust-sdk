@@ -20,7 +20,7 @@ pub use generated::{
     WasmTxReceipt, WasmTxResult, WasmTxStatus,
 };
 pub use keypair::WasmKeypair;
-pub use transaction_builder::WasmTransactionBuilder;
+pub use transaction_builder::{WasmTransactionBuilder, WasmTransactionEntry};
 pub use transactions::{Admin, Keeper, Public, User, Vault, WasmCallMessage, WasmTransaction};
 pub use ws::client::WasmWebsocketHandle;
 pub use ws::topics::{WasmKlineInterval, WasmOrderbookDepth, WasmTopic};

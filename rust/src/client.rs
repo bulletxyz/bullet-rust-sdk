@@ -1,10 +1,10 @@
 use bon::bon;
 use bullet_exchange_interface::message::UserActionDiscriminants;
-use std::fmt::Debug;
+use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
 use std::ops::Deref;
 
 use crate::generated::Client as GeneratedClient;
-use crate::{SDKError, SDKResult};
+use crate::{Keypair, SDKError, SDKResult};
 use url::Url;
 
 /// The main trading API client for REST operations.
@@ -34,15 +34,33 @@ pub struct Client {
     generated_client: GeneratedClient,
     chain_id: u64,
     chain_hash: [u8; 32],
+
+    keypair: Option<Keypair>,
+
+    // Transaction Options
+    max_priority_fee_bips: PriorityFeeBips,
+    /// The max fee one is willing to pay for this transaction.
+    max_fee: Amount,
+    /// Optionally limit the number of gas to be used.
+    gas_limit: Option<Gas>,
 }
 
 pub const MAINNET_URL: &str = "https://tradingapi.bullet.xyz";
+pub const MAX_FEE: &'static Amount = &Amount(10000000000_u128);
+pub const MAX_PRIORITY_FEE_BIPS: &'static PriorityFeeBips = &PriorityFeeBips(0);
 
 #[bon]
 impl Client {
     /// Create a new Client from a URL.
     #[builder]
-    pub async fn new(url: &str, reqwest_client: Option<reqwest::Client>) -> SDKResult<Self> {
+    pub async fn new(
+        url: &str,
+        reqwest_client: Option<reqwest::Client>,
+        max_priority_fee_bips: Option<PriorityFeeBips>,
+        max_fee: Option<Amount>,
+        gas_limit: Option<Gas>,
+        keypair: Option<Keypair>,
+    ) -> SDKResult<Self> {
         use bullet_exchange_interface::schema::{trim, Schema, SchemaFile};
         use bullet_exchange_interface::transaction::Transaction;
 
@@ -88,12 +106,19 @@ impl Client {
             .and_then(|x| x.as_u64())
             .ok_or(SDKError::InvalidSchemaResponse("chain_id"))?;
 
+        let max_priority_fee_bips = max_priority_fee_bips.unwrap_or_else(|| *MAX_PRIORITY_FEE_BIPS);
+        let max_fee = max_fee.unwrap_or_else(|| *MAX_FEE);
+
         Ok(Self {
             rest_url,
             ws_url,
             generated_client,
             chain_id,
             chain_hash,
+            gas_limit,
+            max_priority_fee_bips,
+            max_fee,
+            keypair,
         })
     }
 
@@ -155,6 +180,26 @@ impl Client {
     /// The websocket URL.
     pub fn ws_url(&self) -> &str {
         &self.ws_url
+    }
+
+    /// Get the default keypair for signing transactions.
+    pub fn keypair(&self) -> Option<&Keypair> {
+        self.keypair.as_ref()
+    }
+
+    /// Get the default max fee for transactions.
+    pub fn max_fee(&self) -> Amount {
+        self.max_fee
+    }
+
+    /// Get the default max priority fee in basis points.
+    pub fn max_priority_fee_bips(&self) -> PriorityFeeBips {
+        self.max_priority_fee_bips
+    }
+
+    /// Get the default gas limit for transactions.
+    pub fn gas_limit(&self) -> Option<Gas> {
+        self.gas_limit.clone()
     }
 }
 

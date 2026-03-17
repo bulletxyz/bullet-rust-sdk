@@ -10,7 +10,7 @@ pub mod errors;
 pub use client::{Client, MAINNET_URL};
 pub use errors::{SDKError, SDKResult, WSErrors};
 pub use keypair::Keypair;
-pub use transaction_builder::TransactionBuilder;
+pub use transaction_builder::Transaction;
 // Re-export WebSocket close code for pattern matching
 pub use reqwest_websocket::CloseCode;
 pub use types::CallMessage;
@@ -34,7 +34,9 @@ pub mod codegen {
 /// Re-export bullet_rollup types commonly used with the SDK.
 pub mod types {
     pub use bullet_exchange_interface::address::Address;
-    pub use bullet_exchange_interface::transaction::{Transaction, UnsignedTransaction};
+    /// The signed transaction type from bullet-exchange-interface.
+    pub use bullet_exchange_interface::transaction::Transaction as SignedTransaction;
+    pub use bullet_exchange_interface::transaction::UnsignedTransaction;
 
     /// CallMessage type alias with the Address type pre-filled.
     pub type CallMessage = bullet_exchange_interface::message::CallMessage<Address>;

@@ -22,7 +22,7 @@
 //! let api = Client::mainnet().await?;
 //!
 //! 'reconnect: loop {
-//!     let mut ws = api.connect_ws().await?;
+//!     let mut ws = api.connect_ws().call().await?;
 //!
 //!     ws.send(ClientMessage::Subscribe {
 //!         id: Some(1.into()),
@@ -96,7 +96,7 @@ pub struct WebsocketHandle {
 /// let config = WebsocketConfig {
 ///     connection_timeout: Duration::from_secs(30),
 /// };
-/// let mut ws = api.connect_ws_with_config(config).await?;
+/// let mut ws = api.connect_ws().config(config).call().await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -206,7 +206,7 @@ impl WebsocketHandle {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let api = Client::mainnet().await?;
-    /// # let mut ws = api.connect_ws().await?;
+    /// # let mut ws = api.connect_ws().call().await?;
     /// // Subscribe to aggregated trades
     /// ws.send(ClientMessage::Subscribe {
     ///     id: Some(1.into()),
@@ -255,7 +255,7 @@ impl WebsocketHandle {
     /// let api = Client::mainnet().await?;
     ///
     /// 'reconnect: loop {
-    ///     let mut ws = api.connect_ws().await?;
+    ///     let mut ws = api.connect_ws().call().await?;
     ///
     ///     ws.send(ClientMessage::Subscribe {
     ///         id: Some(1.into()),
@@ -339,7 +339,7 @@ impl WebsocketHandle {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let api = Client::mainnet().await?;
-    /// let mut ws = api.connect_ws().await?;
+    /// let mut ws = api.connect_ws().call().await?;
     ///
     /// // Subscribe to multiple topics using type-safe builders
     /// ws.subscribe([
@@ -380,47 +380,12 @@ impl WebsocketHandle {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::{Client, Topic};
-    /// use bullet_rust_sdk::types::RequestId;
-    ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let api = Client::mainnet().await?;
-    /// let mut ws = api.connect_ws().await?;
-    ///
-    /// let topic = Topic::agg_trade("BTC-USD");
-    /// ws.subscribe([topic.clone()], Some(RequestId::new(1))).await?;
-    /// // ... receive some messages ...
-    /// ws.unsubscribe([topic], Some(RequestId::new(2))).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn unsubscribe(
-        &mut self,
-        topics: impl IntoIterator<Item = Topic>,
-        id: Option<RequestId>,
-    ) -> SDKResult<(), WSErrors> {
-        self.send(ClientMessage::Unsubscribe {
-            id,
-            params: topics.into_iter().map(|t| t.to_string()).collect(),
-        })
-        .await
-    }
-
-    /// List all active subscriptions.
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - Optional request ID for matching the server's response
-    ///
-    /// # Example
-    ///
-    /// ```no_run
     /// use bullet_rust_sdk::Client;
     /// use bullet_rust_sdk::types::RequestId;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let api = Client::mainnet().await?;
-    /// let mut ws = api.connect_ws().await?;
+    /// let mut ws = api.connect_ws().call().await?;
     ///
     /// ws.list_subscriptions(Some(RequestId::new(1))).await?;
     /// // Match response by request_id
@@ -446,7 +411,7 @@ impl WebsocketHandle {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let api = Client::mainnet().await?;
-    /// let mut ws = api.connect_ws().await?;
+    /// let mut ws = api.connect_ws().call().await?;
     ///
     /// let tx_bytes = "base64_encoded_transaction";
     /// ws.order_place(tx_bytes, Some(RequestId::new(1))).await?;
@@ -481,7 +446,7 @@ impl WebsocketHandle {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let api = Client::mainnet().await?;
-    /// let mut ws = api.connect_ws().await?;
+    /// let mut ws = api.connect_ws().call().await?;
     ///
     /// let tx_bytes = "base64_encoded_cancel_transaction";
     /// ws.order_cancel(tx_bytes, Some(RequestId::new(1))).await?;

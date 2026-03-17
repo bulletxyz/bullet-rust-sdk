@@ -6,7 +6,7 @@ use bullet_exchange_interface::transaction::{
 use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::generated::types::{SubmitTxRequest, SubmitTxResponse};
-use crate::types::{CallMessage, Transaction as SignedTransaction, UnsignedTransaction};
+use crate::types::{CallMessage, SignedTransaction, UnsignedTransaction};
 use crate::{Client, Keypair, SDKError, SDKResult};
 
 impl Client {

@@ -11,7 +11,7 @@
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! # let api = bullet_rust_sdk::Client::mainnet().await?;
-//! # let mut ws = api.connect_ws().await?;
+//! # let mut ws = api.connect_ws().call().await?;
 //! // Type-safe subscriptions
 //! ws.subscribe([
 //!     Topic::agg_trade("BTC-USD"),

@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("API_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
 
     println!("Connecting to {api_endpoint}...\n");
-    let api = Client::new(&api_endpoint, None).await?;
+    let api = Client::builder().url(&api_endpoint).build().await?;
 
     // Server health check
     println!("=== Health Check ===");

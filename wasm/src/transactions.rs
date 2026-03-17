@@ -65,12 +65,12 @@ include!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
 /// Passed directly to `Client.submitTransaction` or serialised to base64 via
 /// `toBase64()` for WebSocket submission — no redundant encode/decode at the
 /// JS boundary.
-#[wasm_bindgen(js_name = Transaction)]
+#[wasm_bindgen(js_name = SignedTransaction)]
 pub struct WasmTransaction {
     pub(crate) inner: Transaction,
 }
 
-#[wasm_bindgen(js_class = Transaction)]
+#[wasm_bindgen(js_class = SignedTransaction)]
 impl WasmTransaction {
     /// Borsh-serialise and base64-encode the transaction.
     ///

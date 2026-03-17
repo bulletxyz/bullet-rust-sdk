@@ -1,28 +1,26 @@
-//! Fluent transaction builder with compile-time state validation.
-//!
-//! This module provides a type-safe builder pattern for constructing and
-//! submitting transactions. The typestate pattern ensures at compile time
-//! that all required fields are set before a transaction can be sent.
+//! Fluent transaction builder for constructing and submitting transactions.
 //!
 //! # Example
 //!
 //! ```ignore
-//! use bullet_rust_sdk::{TransactionBuilder, Client, Keypair};
+//! use bullet_rust_sdk::{Transaction, Client, Keypair};
 //!
-//! let response = TransactionBuilder::new()
+//! // Build and send with explicit signer
+//! let response = Transaction::builder()
 //!     .call_message(call_msg)
 //!     .max_fee(10_000_000)
 //!     .signer(&keypair)
 //!     .send(&client)
 //!     .await?;
-//! ```
 //!
-//! # Building Without Sending
+//! // Or use client defaults (keypair, max_fee, etc. set on client)
+//! let response = Transaction::builder()
+//!     .call_message(call_msg)
+//!     .send(&client)
+//!     .await?;
 //!
-//! You can also build a signed transaction without sending it:
-//!
-//! ```ignore
-//! let signed = TransactionBuilder::new()
+//! // Or just build without sending
+//! let signed = Transaction::builder()
 //!     .call_message(call_msg)
 //!     .max_fee(10_000_000)
 //!     .signer(&keypair)
@@ -32,159 +30,73 @@
 //! client.send_transaction(&signed).await?;
 //! ```
 
-use std::marker::PhantomData;
-
+use bon::Builder;
 use bullet_exchange_interface::transaction::{
-    Amount, PriorityFeeBips, RuntimeCall, TxDetails, UniquenessData, Version0,
+    Amount, Gas, PriorityFeeBips, RuntimeCall, TxDetails, UniquenessData, Version0,
 };
 use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::generated::types::SubmitTxResponse;
-use crate::types::{CallMessage, Transaction as SignedTransaction};
+use crate::types::{CallMessage, SignedTransaction};
 use crate::{Client, Keypair, SDKError, SDKResult};
 
-// ============================================================================
-// Typestate Markers
-// ============================================================================
-
-/// Builder state: waiting for call message to be set.
-pub struct NeedsCallMessage;
-
-/// Builder state: waiting for max fee to be set.
-pub struct NeedsMaxFee;
-
-/// Builder state: waiting for signer to be set.
-pub struct NeedsSigner;
-
-/// Builder state: all required fields set, ready to build or send.
-pub struct Ready;
-
-// ============================================================================
-// TransactionBuilder
-// ============================================================================
-
-/// A fluent builder for constructing and submitting transactions.
+/// A builder for constructing and submitting transactions.
 ///
-/// Uses the typestate pattern to ensure all required fields are set at
-/// compile time. The builder progresses through states:
+/// Use `Transaction::builder()` to create a new builder, then chain
+/// the required fields and call `.build(&client)` or `.send(&client)`.
 ///
-/// `NeedsCallMessage` → `NeedsMaxFee` → `NeedsSigner` → `Ready`
+/// # Required Fields
 ///
-/// Only in the `Ready` state can you call `build()` or `send()`.
-pub struct TransactionBuilder<'a, State> {
-    call_message: Option<CallMessage>,
+/// - `call_message` - The action to execute (e.g., place order, withdraw)
+///
+/// # Optional Fields (fall back to client defaults if not set)
+///
+/// - `max_fee` - Maximum fee willing to pay (in base units)
+/// - `priority_fee_bips` - Priority fee in basis points
+/// - `gas_limit` - Optional gas limit
+/// - `signer` - Keypair to sign the transaction
+///
+/// # Example
+///
+/// ```ignore
+/// // With explicit values
+/// let response = Transaction::builder()
+///     .call_message(call_msg)
+///     .max_fee(10_000_000)
+///     .priority_fee_bips(100)
+///     .signer(&keypair)
+///     .send(&client)
+///     .await?;
+///
+/// // Using client defaults
+/// let response = Transaction::builder()
+///     .call_message(call_msg)
+///     .send(&client)
+///     .await?;
+/// ```
+#[derive(Builder)]
+#[builder(start_fn = builder, finish_fn = __build)]
+pub struct Transaction<'a> {
+    /// The action to be executed (e.g., place order, withdraw, etc.).
+    call_message: CallMessage,
+
+    /// Maximum fee (in base units) willing to pay for this transaction.
+    /// Falls back to client default if not set.
     max_fee: Option<u128>,
-    priority_fee_bips: u64,
+
+    /// Priority fee in basis points. Higher values may result in faster processing.
+    /// Falls back to client default if not set.
+    priority_fee_bips: Option<u64>,
+
+    /// Optional gas limit. Falls back to client default if not set.
+    gas_limit: Option<Gas>,
+
+    /// Keypair used to sign this transaction.
+    /// Falls back to client default if not set.
     signer: Option<&'a Keypair>,
-    _state: PhantomData<State>,
 }
 
-// ============================================================================
-// Initial State: NeedsCallMessage
-// ============================================================================
-
-impl TransactionBuilder<'static, NeedsCallMessage> {
-    /// Create a new transaction builder.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let builder = TransactionBuilder::new()
-    ///     .call_message(call_msg)
-    ///     .max_fee(10_000_000)
-    ///     .signer(&keypair);
-    /// ```
-    #[must_use]
-    pub fn new() -> Self {
-        TransactionBuilder {
-            call_message: None,
-            max_fee: None,
-            priority_fee_bips: 0,
-            signer: None,
-            _state: PhantomData,
-        }
-    }
-
-    /// Set the call message for this transaction.
-    ///
-    /// This is the action to be executed (e.g., place order, withdraw, etc.).
-    #[must_use]
-    pub fn call_message(self, msg: CallMessage) -> TransactionBuilder<'static, NeedsMaxFee> {
-        TransactionBuilder {
-            call_message: Some(msg),
-            max_fee: self.max_fee,
-            priority_fee_bips: self.priority_fee_bips,
-            signer: None,
-            _state: PhantomData,
-        }
-    }
-}
-
-impl Default for TransactionBuilder<'static, NeedsCallMessage> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// ============================================================================
-// State: NeedsMaxFee
-// ============================================================================
-
-impl TransactionBuilder<'static, NeedsMaxFee> {
-    /// Set the maximum fee (in native units) willing to pay for this transaction.
-    #[must_use]
-    pub fn max_fee(self, fee: u128) -> TransactionBuilder<'static, NeedsSigner> {
-        TransactionBuilder {
-            call_message: self.call_message,
-            max_fee: Some(fee),
-            priority_fee_bips: self.priority_fee_bips,
-            signer: None,
-            _state: PhantomData,
-        }
-    }
-}
-
-// ============================================================================
-// State: NeedsSigner
-// ============================================================================
-
-impl TransactionBuilder<'static, NeedsSigner> {
-    /// Set the priority fee in basis points (optional, defaults to 0).
-    ///
-    /// Higher priority fees may result in faster transaction processing.
-    #[must_use]
-    pub fn priority_fee_bips(mut self, bips: u64) -> Self {
-        self.priority_fee_bips = bips;
-        self
-    }
-
-    /// Set the keypair used to sign this transaction.
-    #[must_use]
-    pub fn signer(self, keypair: &Keypair) -> TransactionBuilder<'_, Ready> {
-        TransactionBuilder {
-            call_message: self.call_message,
-            max_fee: self.max_fee,
-            priority_fee_bips: self.priority_fee_bips,
-            signer: Some(keypair),
-            _state: PhantomData,
-        }
-    }
-}
-
-// ============================================================================
-// State: Ready
-// ============================================================================
-
-impl<'a> TransactionBuilder<'a, Ready> {
-    /// Set the priority fee in basis points (optional, defaults to 0).
-    ///
-    /// Higher priority fees may result in faster transaction processing.
-    #[must_use]
-    pub fn priority_fee_bips(mut self, bips: u64) -> Self {
-        self.priority_fee_bips = bips;
-        self
-    }
-
+impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
     /// Build the signed transaction without sending it.
     ///
     /// Use this if you want to inspect the transaction or send it later
@@ -192,54 +104,37 @@ impl<'a> TransactionBuilder<'a, Ready> {
     ///
     /// # Errors
     ///
-    /// Returns an error if signing fails or system time is unavailable.
-    pub fn build(self, client: &Client) -> SDKResult<SignedTransaction> {
-        let call_message = self.call_message.expect("call_message guaranteed by typestate");
-        let max_fee = self.max_fee.expect("max_fee guaranteed by typestate");
-        let signer = self.signer.expect("signer guaranteed by typestate");
+    /// Returns an error if:
+    /// - No signer is provided and client has no default keypair
+    /// - Signing fails
+    /// - System time is unavailable
+    pub fn build(self, client: &Client) -> SDKResult<SignedTransaction>
+    where
+        S: transaction_builder::IsComplete,
+    {
+        let tx = self.__build();
 
-        // Build unsigned transaction
-        let runtime_call = RuntimeCall::Exchange(call_message);
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| SDKError::SystemTimeError)?
-            .as_millis() as u64;
-        let uniqueness = UniquenessData::Generation(timestamp);
-        let details = TxDetails {
-            chain_id: client.chain_id(),
-            max_fee: Amount(max_fee),
-            gas_limit: None,
-            max_priority_fee_bips: PriorityFeeBips(self.priority_fee_bips),
-        };
+        // Fall back to client defaults for optional fields
+        let max_fee = tx.max_fee.unwrap_or_else(|| client.max_fee().0);
+        let priority_fee_bips = tx
+            .priority_fee_bips
+            .unwrap_or_else(|| client.max_priority_fee_bips().0);
+        let gas_limit = tx.gas_limit.or_else(|| client.gas_limit());
 
-        // Serialize and sign
-        let unsigned = bullet_exchange_interface::transaction::UnsignedTransaction {
-            runtime_call,
-            uniqueness,
-            details,
-        };
+        // Get signer from builder or fall back to client default
+        let signer = tx
+            .signer
+            .or_else(|| client.keypair())
+            .ok_or(SDKError::MissingKeypair)?;
 
-        let mut data =
-            borsh::to_vec(&unsigned).map_err(|e| SDKError::SerializationError(e.to_string()))?;
-        data.extend_from_slice(client.chain_hash());
-
-        let sig_bytes = signer.sign(&data);
-        let signature: [u8; 64] = sig_bytes
-            .try_into()
-            .map_err(|v: Vec<u8>| SDKError::InvalidSignatureLength(v.len()))?;
-
-        let pk_bytes = signer.public_key();
-        let pub_key: [u8; 32] = pk_bytes
-            .try_into()
-            .map_err(|v: Vec<u8>| SDKError::InvalidPublicKeyLength(v.len()))?;
-
-        Ok(SignedTransaction::V0(Version0 {
-            runtime_call: unsigned.runtime_call,
-            uniqueness: unsigned.uniqueness,
-            details: unsigned.details,
-            pub_key,
-            signature,
-        }))
+        build_signed_transaction(
+            tx.call_message,
+            max_fee,
+            priority_fee_bips,
+            gas_limit,
+            signer,
+            client,
+        )
     }
 
     /// Sign and submit the transaction to the network.
@@ -249,72 +144,120 @@ impl<'a> TransactionBuilder<'a, Ready> {
     ///
     /// # Errors
     ///
-    /// Returns an error if signing fails, system time is unavailable,
-    /// or the network request fails.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let response = TransactionBuilder::new()
-    ///     .call_message(call_msg)
-    ///     .max_fee(10_000_000)
-    ///     .signer(&keypair)
-    ///     .send(&client)
-    ///     .await?;
-    /// ```
-    pub async fn send(self, client: &Client) -> SDKResult<SubmitTxResponse> {
+    /// Returns an error if:
+    /// - No signer is provided and client has no default keypair
+    /// - Signing fails
+    /// - System time is unavailable
+    /// - The network request fails
+    pub async fn send(self, client: &Client) -> SDKResult<SubmitTxResponse>
+    where
+        S: transaction_builder::IsComplete,
+    {
         let signed = self.build(client)?;
         client.submit_transaction(&signed).await
     }
+}
+
+/// Internal function to build a signed transaction.
+fn build_signed_transaction(
+    call_message: CallMessage,
+    max_fee: u128,
+    priority_fee_bips: u64,
+    gas_limit: Option<Gas>,
+    signer: &Keypair,
+    client: &Client,
+) -> SDKResult<SignedTransaction> {
+    // Build unsigned transaction
+    let runtime_call = RuntimeCall::Exchange(call_message);
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| SDKError::SystemTimeError)?
+        .as_millis() as u64;
+    let uniqueness = UniquenessData::Generation(timestamp);
+    let details = TxDetails {
+        chain_id: client.chain_id(),
+        max_fee: Amount(max_fee),
+        gas_limit,
+        max_priority_fee_bips: PriorityFeeBips(priority_fee_bips),
+    };
+
+    // Serialize and sign
+    let unsigned = bullet_exchange_interface::transaction::UnsignedTransaction {
+        runtime_call,
+        uniqueness,
+        details,
+    };
+
+    let mut data =
+        borsh::to_vec(&unsigned).map_err(|e| SDKError::SerializationError(e.to_string()))?;
+    data.extend_from_slice(client.chain_hash());
+
+    let sig_bytes = signer.sign(&data);
+    let signature: [u8; 64] = sig_bytes
+        .try_into()
+        .map_err(|v: Vec<u8>| SDKError::InvalidSignatureLength(v.len()))?;
+
+    let pk_bytes = signer.public_key();
+    let pub_key: [u8; 32] = pk_bytes
+        .try_into()
+        .map_err(|v: Vec<u8>| SDKError::InvalidPublicKeyLength(v.len()))?;
+
+    Ok(SignedTransaction::V0(Version0 {
+        runtime_call: unsigned.runtime_call,
+        uniqueness: unsigned.uniqueness,
+        details: unsigned.details,
+        pub_key,
+        signature,
+    }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // Compile-time test: ensure the typestate transitions work correctly.
-    // This test doesn't run, it just needs to compile.
+    // Compile-time test: ensure the builder works correctly.
     #[allow(dead_code)]
-    fn typestate_compiles() {
+    fn builder_compiles() {
         use bullet_exchange_interface::message::PublicAction;
 
         let keypair = Keypair::generate();
         let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
 
-        // This should compile: correct order of builder methods
-        let _builder: TransactionBuilder<'_, Ready> = TransactionBuilder::new()
+        // This should compile: all required fields set
+        let _builder = Transaction::builder()
+            .call_message(call_msg)
+            .max_fee(10_000_000)
+            .signer(&keypair);
+    }
+
+    // Compile-time test: optional priority_fee_bips can be set
+    #[allow(dead_code)]
+    fn optional_fields_work() {
+        use bullet_exchange_interface::message::PublicAction;
+
+        let keypair = Keypair::generate();
+        let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
+
+        let _builder = Transaction::builder()
             .call_message(call_msg)
             .max_fee(10_000_000)
             .priority_fee_bips(100)
             .signer(&keypair);
     }
 
-    // Compile-time test: optional methods can be called in Ready state too
-    #[allow(dead_code)]
-    fn optional_methods_in_ready_state() {
-        use bullet_exchange_interface::message::PublicAction;
-
-        let keypair = Keypair::generate();
-        let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
-
-        let _builder: TransactionBuilder<'_, Ready> = TransactionBuilder::new()
-            .call_message(call_msg)
-            .max_fee(10_000_000)
-            .signer(&keypair)
-            .priority_fee_bips(100); // Can set after signer
-    }
-
     #[cfg(feature = "integration")]
     mod integration {
         use super::*;
-        use bullet_exchange_interface::message::PublicAction;
         use crate::MAINNET_URL;
+        use bullet_exchange_interface::message::PublicAction;
 
         #[tokio::test]
-        async fn test_builder_send() {
+        async fn test_builder_build() {
             let endpoint = std::env::var("BULLET_API_ENDPOINT").unwrap_or(MAINNET_URL.to_string());
 
-            let client = Client::new(&endpoint, None)
+            let client = Client::builder()
+                .url(&endpoint)
+                .build()
                 .await
                 .expect("could not connect");
             let keypair = Keypair::generate();
@@ -322,8 +265,8 @@ mod tests {
             let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
 
             // Test build() - should succeed (just builds, doesn't validate on-chain)
-            let signed = TransactionBuilder::new()
-                .call_message(call_msg.clone())
+            let signed = Transaction::builder()
+                .call_message(call_msg)
                 .max_fee(10_000_000)
                 .signer(&keypair)
                 .build(&client)
