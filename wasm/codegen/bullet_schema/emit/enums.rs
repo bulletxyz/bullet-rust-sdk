@@ -1,34 +1,40 @@
 //! Emit wasm-bindgen C-style enum wrappers with `into_domain()` conversion.
 
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote};
+
 use super::super::SchemaEnum;
 
-pub fn emit_enum(e: &SchemaEnum) -> String {
-    let type_name = &e.type_name;
-    let wrapper_name = format!("Wasm{type_name}");
+pub fn emit_enum(e: &SchemaEnum) -> TokenStream {
+    let type_name = format_ident!("{}", e.type_name);
+    let wrapper_name = format_ident!("Wasm{}", e.type_name);
+    let js_name = &e.type_name;
 
-    let mut out = String::new();
+    let variant_idents: Vec<_> = e.variants.iter().map(|v| format_ident!("{}", v)).collect();
+    let variant_indices: Vec<_> = (0..e.variants.len())
+        .map(|i| i as isize)
+        .collect::<Vec<_>>();
 
-    // C-style wasm_bindgen enum.
-    out.push_str(&format!("#[wasm_bindgen(js_name = {type_name})]\n"));
-    out.push_str("#[derive(Clone, Copy)]\n");
-    out.push_str(&format!("pub enum {wrapper_name} {{\n"));
-    for (i, variant) in e.variants.iter().enumerate() {
-        out.push_str(&format!("    {variant} = {i},\n"));
+    let match_arms: Vec<TokenStream> = variant_idents
+        .iter()
+        .map(|v| {
+            quote! { #wrapper_name::#v => #type_name::#v }
+        })
+        .collect();
+
+    quote! {
+        #[wasm_bindgen(js_name = #js_name)]
+        #[derive(Clone, Copy)]
+        pub enum #wrapper_name {
+            #(#variant_idents = #variant_indices,)*
+        }
+
+        impl #wrapper_name {
+            fn into_domain(self) -> #type_name {
+                match self {
+                    #(#match_arms,)*
+                }
+            }
+        }
     }
-    out.push_str("}\n\n");
-
-    // into_domain() conversion.
-    out.push_str(&format!("impl {wrapper_name} {{\n"));
-    out.push_str(&format!("    fn into_domain(self) -> {type_name} {{\n"));
-    out.push_str("        match self {\n");
-    for variant in &e.variants {
-        out.push_str(&format!(
-            "            {wrapper_name}::{variant} => {type_name}::{variant},\n"
-        ));
-    }
-    out.push_str("        }\n");
-    out.push_str("    }\n");
-    out.push_str("}\n");
-
-    out
 }

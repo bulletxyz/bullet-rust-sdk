@@ -27,4 +27,8 @@ getrandom = { version = "0.2", features = ["js"] }
 bullet-exchange-interface = { git = "https://github.com/bulletxyz/bullet-exchange-interface.git" }
 sov-universal-wallet = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", rev = "d22e4ba2b058a1483160f10e9e96b3c035476ee0", features = ["serde"] }
 heck = "0.5"
+quote = "1"
+proc-macro2 = "1"
+syn = "2"
+prettyplease = "0.2"
 

@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use sov_universal_wallet::schema::Link;
 use sov_universal_wallet::ty::Ty;
 
-use super::super::Types;
+use super::super::super::Types;
 use super::primitives;
 use super::ParamMapping;
 
@@ -41,6 +41,10 @@ fn map_vec_by_index(
         // Vec<NamedStruct> — accept js_sys::Array of wrapper objects.
         Ty::Struct(s) if !s.type_name.starts_with("__SovVirtualWallet_") => {
             if wrapper_indices.contains(&inner_idx) {
+                // This struct has a generated wrapper — accept a JS Array
+                // of wrapper objects. Each element is recovered from the
+                // JsValue via TryFromJsValue, then .inner extracts the
+                // domain type. JS usage: `[new NewOrderArgs(...), ...]`
                 let wrapper_name = format!("Wasm{}", s.type_name);
                 ParamMapping {
                     param_type: "js_sys::Array".into(),
@@ -50,6 +54,7 @@ fn map_vec_by_index(
                     is_optional: false,
                 }
             } else {
+                // No wrapper — fall back to JSON string.
                 json_fallback()
             }
         }

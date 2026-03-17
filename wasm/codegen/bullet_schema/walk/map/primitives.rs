@@ -1,6 +1,6 @@
 //! Mapping for immediate primitive types (bool, u8, u16, etc.).
 
-use super::super::Primitive;
+use super::super::super::Primitive;
 use super::ParamMapping;
 
 /// Map an immediate primitive to its wasm param type and conversion.

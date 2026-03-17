@@ -1,24 +1,31 @@
-//! Walk the Transaction schema to extract action groups, structs, and enums.
+//! Walk the Transaction schema and resolve all types for codegen.
+//!
+//! Extracts action groups, structs, and enums from the schema,
+//! then maps all fields to wasm-bindgen-compatible param types.
 
 mod actions;
 mod enums;
+pub(crate) mod map;
 mod structs;
 
 use std::collections::{HashSet, VecDeque};
 
 use bullet_exchange_interface::schema::Schema;
+use bullet_exchange_interface::transaction::Transaction;
 use sov_universal_wallet::schema::Link;
 
-use super::{FieldInfo, Primitive, SchemaInfo};
+use super::{
+    ActionGroup, FieldInfo, MappedField, Primitive, SchemaInfo, SchemaStruct, VariantInfo,
+};
 
-/// Walk the Transaction schema and extract everything needed for codegen.
-pub fn extract_schema_info(schema: &Schema) -> SchemaInfo {
+/// Walk the Transaction schema and produce fully resolved `SchemaInfo`.
+pub fn extract_schema_info() -> SchemaInfo {
+    let schema = Schema::of_single_type::<Transaction>().expect("failed to build schema");
     let types = schema.types();
 
-    let action_groups = actions::extract_action_groups(types);
-
-    // Collect all field type indices as starting points for struct/enum discovery.
-    let seeds: Vec<usize> = action_groups
+    // Phase 1: Extract raw action groups and discover structs/enums.
+    let raw_groups = actions::extract_action_groups(types);
+    let seeds: Vec<usize> = raw_groups
         .iter()
         .flat_map(|g| &g.variants)
         .flat_map(|v| &v.fields)
@@ -27,14 +34,67 @@ pub fn extract_schema_info(schema: &Schema) -> SchemaInfo {
 
     let mut visited = HashSet::new();
     let mut queue = VecDeque::new();
-    let structs = structs::discover_structs(&seeds, types, &mut visited, &mut queue);
+    let raw_structs = structs::discover_structs(&seeds, types, &mut visited, &mut queue);
     let enums = enums::discover_enums(&visited, types);
+
+    // Which structs and enums will have wasm-bindgen wrappers generated?
+    // The map phase needs to know this so it can decide per-field whether to
+    // accept a typed wrapper (e.g. `WasmNewOrderArgs`) or fall back to a
+    // JSON string. We build these sets once and pass them through.
+    let wrapper_indices = raw_structs.iter().map(|s| s.schema_index).collect();
+
+    let enum_indices = enums.iter().map(|e| e.schema_index).collect();
+
+    // Phase 3: Resolve all raw fields from the schema to fields mapped to the WASM bindgen types.
+    let action_groups = raw_groups
+        .into_iter()
+        .map(|g| ActionGroup {
+            call_message_variant: g.call_message_variant,
+            action_enum: g.action_enum,
+            variants: g
+                .variants
+                .into_iter()
+                .map(|v| VariantInfo {
+                    variant_name: v.variant_name,
+                    fields: resolve_fields(&v.fields, types, &wrapper_indices, &enum_indices),
+                })
+                .collect(),
+        })
+        .collect();
+
+    let structs = raw_structs
+        .into_iter()
+        .map(|s| SchemaStruct {
+            type_name: s.type_name,
+            schema_index: s.schema_index,
+            fields: resolve_fields(&s.fields, types, &wrapper_indices, &enum_indices),
+        })
+        .collect();
 
     SchemaInfo {
         action_groups,
         structs,
         enums,
     }
+}
+
+fn resolve_fields(
+    fields: &[FieldInfo],
+    types: &super::Types,
+    wrapper_indices: &HashSet<usize>,
+    enum_indices: &HashSet<usize>,
+) -> Vec<MappedField> {
+    let mappings = map::map_fields(fields, types, wrapper_indices, enum_indices);
+    fields
+        .iter()
+        .zip(mappings)
+        .map(|(f, m)| MappedField {
+            name: f.name.clone(),
+            param_type: m.param_type,
+            conversion: m.conversion,
+            is_optional: m.is_optional,
+        })
+        .collect()
 }
 
 // ── Shared helpers ───────────────────────────────────────────────────────────

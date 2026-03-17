@@ -5,8 +5,15 @@ use std::collections::{HashSet, VecDeque};
 use sov_universal_wallet::schema::Link;
 use sov_universal_wallet::ty::Ty;
 
-use super::super::{FieldInfo, SchemaStruct, Types};
+use super::super::{FieldInfo, Types};
 use super::field_info_from_link;
+
+/// Raw struct discovered from the schema, before field mapping.
+pub struct RawSchemaStruct {
+    pub type_name: String,
+    pub schema_index: usize,
+    pub fields: Vec<FieldInfo>,
+}
 
 /// Walk the type graph from the given starting indices to find all named structs.
 ///
@@ -17,8 +24,7 @@ pub fn discover_structs(
     types: &Types,
     visited: &mut HashSet<usize>,
     queue: &mut VecDeque<usize>,
-) -> Vec<SchemaStruct> {
-    // Seed the queue.
+) -> Vec<RawSchemaStruct> {
     for &idx in seed_indices {
         queue.push_back(idx);
     }
@@ -44,14 +50,13 @@ pub fn discover_structs(
                     .map(|f| field_info_from_link(&f.display_name, &f.value))
                     .collect();
 
-                // Enqueue child types for transitive discovery.
                 for field in &fields {
                     if let Some(child_idx) = field.schema_index {
                         queue.push_back(child_idx);
                     }
                 }
 
-                structs.push(SchemaStruct {
+                structs.push(RawSchemaStruct {
                     type_name: s.type_name.clone(),
                     schema_index: idx,
                     fields,

@@ -12,7 +12,8 @@ use std::collections::HashSet;
 use sov_universal_wallet::schema::Link;
 use sov_universal_wallet::ty::Ty;
 
-use super::{FieldInfo, SchemaEnum, SchemaStruct, Types};
+use super::super::{FieldInfo, SchemaEnum, Types};
+use super::structs::RawSchemaStruct;
 
 /// The resolved parameter type and conversion expression for a field.
 #[derive(Debug, Clone)]
@@ -24,16 +25,6 @@ pub struct ParamMapping {
     pub conversion: String,
     /// Whether this parameter is optional (affects ordering — must be trailing).
     pub is_optional: bool,
-}
-
-/// Build a set of schema indices that have wasm-bindgen struct wrappers.
-pub fn wrapped_struct_indices(schema_structs: &[SchemaStruct]) -> HashSet<usize> {
-    schema_structs.iter().map(|s| s.schema_index).collect()
-}
-
-/// Build a set of schema indices that have wasm-bindgen enum wrappers.
-pub fn wrapped_enum_indices(schema_enums: &[SchemaEnum]) -> HashSet<usize> {
-    schema_enums.iter().map(|e| e.schema_index).collect()
 }
 
 /// Resolve all field mappings. Returns a Vec parallel to the input fields.

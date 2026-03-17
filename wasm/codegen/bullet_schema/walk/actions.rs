@@ -3,11 +3,23 @@
 use sov_universal_wallet::schema::Link;
 use sov_universal_wallet::ty::Ty;
 
-use super::super::{ActionGroup, FieldInfo, Types, VariantInfo};
+use super::super::{FieldInfo, Types};
 use super::field_info_from_link;
 
+/// Raw action group before field mapping.
+pub struct RawActionGroup {
+    pub call_message_variant: String,
+    pub action_enum: String,
+    pub variants: Vec<RawVariantInfo>,
+}
+
+pub struct RawVariantInfo {
+    pub variant_name: String,
+    pub fields: Vec<FieldInfo>,
+}
+
 /// Find the `CallMessage` enum in the schema by name and extract all action groups.
-pub fn extract_action_groups(types: &Types) -> Vec<ActionGroup> {
+pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
     let call_message_enum = types
         .iter()
         .find_map(|ty| match ty {
@@ -56,7 +68,7 @@ pub fn extract_action_groups(types: &Types) -> Vec<ActionGroup> {
                 .map(|av| extract_variant(av, types))
                 .collect();
 
-            ActionGroup {
+            RawActionGroup {
                 call_message_variant: variant.name.clone(),
                 action_enum: action_enum.type_name.clone(),
                 variants,
@@ -70,7 +82,7 @@ fn extract_variant(
         sov_universal_wallet::schema::IndexLinking,
     >,
     types: &Types,
-) -> VariantInfo {
+) -> RawVariantInfo {
     let fields = match enum_variant.value.as_ref() {
         Some(Link::ByIndex(i)) => match &types[*i] {
             Ty::Struct(s) => s
@@ -87,7 +99,7 @@ fn extract_variant(
         None => vec![],
     };
 
-    VariantInfo {
+    RawVariantInfo {
         variant_name: enum_variant.name.clone(),
         fields,
     }
