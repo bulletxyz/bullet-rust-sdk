@@ -45,15 +45,7 @@ impl WasmTradingApi {
         Ok(String::from_utf8_lossy(&bytes).into_owned())
     }
 
-    /// Prometheus metrics. Returns the raw response body as a string.
-    pub async fn metrics(&self) -> WasmResult<String> {
-        use futures_util::TryStreamExt as _;
-        let bytes: Vec<u8> = self.inner.metrics().await?.into_inner().into_inner()
-            .map_ok(|b| b.to_vec())
-            .try_concat()
-            .await?;
-        Ok(String::from_utf8_lossy(&bytes).into_owned())
-    }
+    // metrics() removed — method no longer exists on upstream Client.
 
     // ── Market data ───────────────────────────────────────────────────────────
 

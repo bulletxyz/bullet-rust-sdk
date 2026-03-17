@@ -32,7 +32,7 @@ impl WasmBorrowLendPoolResponse {
 
     #[wasm_bindgen(getter, js_name = assetId)]
     pub fn asset_id(&self) -> i32 {
-        self.0.asset_id
+        self.0.asset_id.into()
     }
 
     #[wasm_bindgen(getter, js_name = availableAmount)]

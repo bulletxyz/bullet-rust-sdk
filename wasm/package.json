@@ -6,20 +6,37 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "devDependencies": {
-    "jest": "^29.0.0"
+    "@jest/globals": "^30.3.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.5.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.9.3"
   },
   "jest": {
     "testEnvironment": "node",
     "testMatch": [
-      "**/tests/**/*.test.js"
+      "**/tests/**/*.test.ts"
     ],
     "modulePathIgnorePatterns": [
       "<rootDir>/pkg/"
+    ],
+    "transform": {
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "useESM": true,
+          "tsconfig": "tsconfig.json"
+        }
+      ]
+    },
+    "extensionsToTreatAsEsm": [
+      ".ts"
     ]
   },
   "main": "./pkg/node/bullet_rust_sdk_wasm.js",
   "module": "./pkg/web/bullet_rust_sdk_wasm.js",
-  "types": "./pkg/web/bullet_rust_sdk_wasm.d.ts",
+  "types": "./pkg/node/bullet_rust_sdk_wasm.d.ts",
   "exports": {
     ".": {
       "node": {

@@ -23,3 +23,8 @@ bon.workspace        = true
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
 
+[build-dependencies]
+bullet-exchange-interface = { git = "https://github.com/bulletxyz/bullet-exchange-interface.git" }
+sov-universal-wallet = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", rev = "d22e4ba2b058a1483160f10e9e96b3c035476ee0", features = ["serde"] }
+heck = "0.5"
+

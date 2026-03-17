@@ -160,7 +160,7 @@ impl WasmBracket {
     // `#[schema(format = "uint32")]` and the codegen PR is merged.
     #[wasm_bindgen(getter)]
     pub fn bracket(&self) -> i32 {
-        self.0.bracket
+        self.0.bracket as i32
     }
 
     #[wasm_bindgen(getter)]
@@ -168,10 +168,9 @@ impl WasmBracket {
         self.0.cum
     }
 
-    // TODO: should be u32 - same codegen issue as bracket above.
     #[wasm_bindgen(getter, js_name = initialLeverage)]
     pub fn initial_leverage(&self) -> i32 {
-        self.0.initial_leverage
+        self.0.initial_leverage as i32
     }
 
     #[wasm_bindgen(getter, js_name = maintMarginRatio)]

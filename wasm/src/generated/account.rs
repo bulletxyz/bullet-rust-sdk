@@ -97,7 +97,7 @@ impl WasmAccountAsset {
 
     #[wasm_bindgen(getter, js_name = assetId)]
     pub fn asset_id(&self) -> i32 {
-        self.0.asset_id
+        self.0.asset_id.into()
     }
 
     #[wasm_bindgen(getter, js_name = updateTime)]
@@ -142,7 +142,7 @@ impl WasmAccountPosition {
 
     #[wasm_bindgen(getter, js_name = marketId)]
     pub fn market_id(&self) -> i32 {
-        self.0.market_id
+        self.0.market_id.into()
     }
 
     #[wasm_bindgen(getter, js_name = positionAmt)]

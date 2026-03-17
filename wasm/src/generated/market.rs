@@ -32,14 +32,12 @@ impl WasmAsset {
     // generated correctly as u16.
     #[wasm_bindgen(getter, js_name = assetId)]
     pub fn asset_id(&self) -> i32 {
-        self.0.asset_id
+        self.0.asset_id.into()
     }
 
-    // TODO: should be u8 - same codegen issue as asset_id above. Will be fixed
-    // once the Trading API PR adds `#[schema(format = "uint8")]`.
     #[wasm_bindgen(getter)]
     pub fn decimals(&self) -> i32 {
-        self.0.decimals
+        self.0.decimals.into()
     }
 
     #[wasm_bindgen(getter, js_name = marginAvailable)]
@@ -251,7 +249,7 @@ impl WasmSymbol {
 
     #[wasm_bindgen(getter, js_name = marketId)]
     pub fn market_id(&self) -> i32 {
-        self.0.market_id
+        self.0.market_id.into()
     }
 
     #[wasm_bindgen(getter)]
@@ -261,12 +259,12 @@ impl WasmSymbol {
 
     #[wasm_bindgen(getter, js_name = pricePrecision)]
     pub fn price_precision(&self) -> i32 {
-        self.0.price_precision
+        self.0.price_precision.into()
     }
 
     #[wasm_bindgen(getter, js_name = quantityPrecision)]
     pub fn quantity_precision(&self) -> i32 {
-        self.0.quantity_precision
+        self.0.quantity_precision.into()
     }
 
     #[wasm_bindgen(getter, js_name = contractType)]
