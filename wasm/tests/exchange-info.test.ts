@@ -19,6 +19,14 @@ test('exchangeInfo returns assets and symbols', async () => {
   const assets = info.assets;
   const symbols = info.symbols;
 
+  assets.forEach(x => {
+    console.log("asset:", {
+      asset: x.asset,
+      id: x.assetId,
+    })
+  })
+
+
   expect(Array.isArray(assets)).toBe(true);
   expect(assets.length).toBeGreaterThan(0);
 

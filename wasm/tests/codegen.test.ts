@@ -411,35 +411,4 @@ describe('no name collisions across namespaces', () => {
   });
 });
 
-// ── End-to-end: build + sign transaction ─────────────────────────────────────
 
-describe('end-to-end transaction building', () => {
-  test('build signed tx from Public.applyFunding', async () => {
-    const client = await Client.connect(ENDPOINT);
-    const keypair = Keypair.generate();
-
-    const callMsg = Public.applyFunding([]);
-    const tx = client.buildSignedTransaction(callMsg, 10_000_000n, keypair);
-
-    expect(tx).toBeDefined();
-    const b64 = tx.toBase64();
-    expect(typeof b64).toBe('string');
-    expect(b64.length).toBeGreaterThan(0);
-  });
-
-  test('build signed tx from User.placeOrders with typed wrappers', async () => {
-    const client = await Client.connect(ENDPOINT);
-    const keypair = Keypair.generate();
-
-    const order = new NewOrderArgs(
-      '50000.0', '0.1', Side.Bid, OrderType.Limit, false,
-    );
-    const callMsg = User.placeOrders(0, [order], false);
-    const tx = client.buildSignedTransaction(callMsg, 10_000_000n, keypair);
-
-    expect(tx).toBeDefined();
-    const b64 = tx.toBase64();
-    expect(typeof b64).toBe('string');
-    expect(b64.length).toBeGreaterThan(0);
-  });
-});

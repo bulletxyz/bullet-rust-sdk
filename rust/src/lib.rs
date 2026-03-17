@@ -1,5 +1,6 @@
 mod client;
 mod keypair;
+mod transaction_builder;
 mod transactions;
 
 /// Error types for the SDK.
@@ -9,6 +10,7 @@ pub mod errors;
 pub use client::{Client, MAINNET_URL};
 pub use errors::{SDKError, SDKResult, WSErrors};
 pub use keypair::Keypair;
+pub use transaction_builder::TransactionBuilder;
 // Re-export WebSocket close code for pattern matching
 pub use reqwest_websocket::CloseCode;
 pub use types::CallMessage;

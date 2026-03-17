@@ -104,6 +104,27 @@ impl Client {
         Ok(response.into_inner())
     }
 
+    /// Alias for `submit_transaction`.
+    ///
+    /// Submits a pre-signed transaction to the network. This is useful when
+    /// using the `TransactionBuilder` pattern:
+    ///
+    /// ```ignore
+    /// let signed = TransactionBuilder::new()
+    ///     .call_message(call_msg)
+    ///     .max_fee(10_000_000)
+    ///     .signer(&keypair)
+    ///     .build(&client)?;
+    ///
+    /// client.send_transaction(&signed).await?;
+    /// ```
+    pub async fn send_transaction(
+        &self,
+        signed: &SignedTransaction,
+    ) -> SDKResult<SubmitTxResponse> {
+        self.submit_transaction(signed).await
+    }
+
     /// Convenience method to sign and submit a transaction in one call.
     ///
     /// This is equivalent to calling `build_transaction`, `sign_transaction`,

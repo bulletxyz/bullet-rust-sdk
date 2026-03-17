@@ -114,4 +114,23 @@ impl WasmTradingApi {
         let resp = self.inner.submit_transaction(&tx.inner).await?;
         Ok(serde_json::to_string(&resp)?)
     }
+
+    /// Alias for `submitTransaction`.
+    ///
+    /// Submits a pre-signed transaction to the network. This is useful when
+    /// using the `TransactionBuilder` pattern:
+    ///
+    /// ```js
+    /// const tx = TransactionBuilder.new()
+    ///     .callMessage(callMsg)
+    ///     .maxFee(10_000_000n)
+    ///     .signer(keypair)
+    ///     .build(client);
+    ///
+    /// const response = await client.sendTransaction(tx);
+    /// ```
+    #[wasm_bindgen(js_name = sendTransaction)]
+    pub async fn send_transaction(&self, tx: &WasmTransaction) -> WasmResult<String> {
+        self.submit_transaction(tx).await
+    }
 }

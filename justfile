@@ -43,6 +43,13 @@ test:
 test-integration endpoint="https://tradingapi.bullet.xyz":
     BULLET_API_ENDPOINT={{ endpoint }} cargo nextest run --features integration
 
+# Run WASM Jest tests (requires build-wasm-node first)
+test-wasm:
+    cd wasm && npm test
+
+# Run all tests (Rust + WASM)
+test-all: test test-wasm
+
 # ── Lint ──────────────────────────────────────────────────────────────────────
 
 # Run clippy lints
