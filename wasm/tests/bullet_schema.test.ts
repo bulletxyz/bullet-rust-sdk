@@ -1,5 +1,7 @@
 /**
- * Tests for schema-driven codegen: namespace factories, struct wrappers, and enums.
+ * Tests for bullet_schema codegen: namespace factories, struct wrappers, and enums.
+ *
+ * These test the CallMessage factory codegen from `wasm/codegen/bullet_schema/`.
  *
  * Verifies:
  * 1. Namespace modules exist with expected methods

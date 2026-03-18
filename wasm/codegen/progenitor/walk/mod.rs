@@ -206,6 +206,9 @@ fn parse_field_type(ty: &Type) -> Option<FieldType> {
             match ident.as_str() {
                 "String" => Some(FieldType::String),
                 "bool" => Some(FieldType::Bool),
+                // wasm-bindgen only supports i32/f64 for numeric types.
+                // All ≤32-bit integers are widened to i32 via `as i32` in the emitter.
+                // 64-bit integers become f64 since JS numbers are IEEE 754 doubles.
                 "i8" | "i16" | "i32" | "u8" | "u16" | "u32" => Some(FieldType::I32),
                 "i64" | "u64" => Some(FieldType::I64),
                 "f32" | "f64" => Some(FieldType::F64),
