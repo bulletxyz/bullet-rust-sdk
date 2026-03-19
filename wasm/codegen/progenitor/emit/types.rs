@@ -6,7 +6,7 @@ use heck::ToLowerCamelCase;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use super::super::{EnumDetails, FieldDetails, StructDetails};
+use super::super::{EnumDetails, FieldDetails, FieldKind, StructDetails};
 use super::type_map;
 
 // ── SDK Path Helper ──────────────────────────────────────────────────────────
@@ -97,18 +97,30 @@ pub fn emit_struct(s: &StructDetails, enum_names: &HashSet<&str>) -> TokenStream
 
 /// Emit a single getter method for a struct field.
 fn emit_getter(f: &FieldDetails, enum_names: &HashSet<&str>) -> TokenStream {
-    let field = format_ident!("{}", f.name);
-    let method = format_ident!("{}", f.name);
+    // Determine method name, JS property name, and field accessor based on field kind.
+    let (method, js_name, field_accessor): (_, String, TokenStream) = match &f.kind {
+        FieldKind::Named(name) => {
+            let method = format_ident!("{}", name);
+            let js_name = f
+                .serde_rename
+                .clone()
+                .unwrap_or_else(|| name.to_lower_camel_case());
+            let accessor = quote! { #method };
+            (method, js_name, accessor)
+        }
+        FieldKind::Index(i) => {
+            let method = format_ident!("field_{}", i);
+            let js_name = format!("field{}", i);
+            let index = syn::Index::from(*i);
+            let accessor = quote! { #index };
+            (method, js_name, accessor)
+        }
+    };
 
-    // JS property name: use serde rename if present, otherwise camelCase the rust name.
-    let js_name = f
-        .serde_rename
-        .clone()
-        .unwrap_or_else(|| f.name.to_lower_camel_case());
+    let method_str = method.to_string();
+    let needs_js_attr = method_str != js_name;
 
-    let needs_js_attr = f.name != js_name;
-
-    let (ret_ty, body) = type_map::getter_mapping(&f.ty, &field, enum_names);
+    let (ret_ty, body) = type_map::getter_mapping(&f.ty, &field_accessor, enum_names);
 
     let attr = if needs_js_attr {
         quote! { #[wasm_bindgen(getter, js_name = #js_name)] }

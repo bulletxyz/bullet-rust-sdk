@@ -21,8 +21,8 @@ use syn::{
 };
 
 use super::{
-    CodeModel, EnumDetails, FieldDetails, ImplDetails, MethodDetails, ParamDetails, Primitive,
-    RustType, StructDetails, TypeInfo, VariantDetails,
+    CodeModel, EnumDetails, FieldDetails, FieldKind, ImplDetails, MethodDetails, ParamDetails,
+    Primitive, RustType, StructDetails, TypeInfo, VariantDetails,
 };
 
 // ── Entry Point ──────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ fn extract_struct(s: &ItemStruct, module_path: &[String]) -> Option<StructDetail
                     let ty = parse_rust_type(&f.ty)?;
                     let serde_rename = extract_serde_rename(&f.attrs);
                     Some(FieldDetails {
-                        name: field_name,
+                        kind: FieldKind::Named(field_name),
                         ty,
                         serde_rename,
                     })
@@ -115,12 +115,28 @@ fn extract_struct(s: &ItemStruct, module_path: &[String]) -> Option<StructDetail
                 derives,
             })
         }
-        syn::Fields::Unnamed(_) => {
-            // Tuple struct — treat as newtype with no exposed fields.
+        syn::Fields::Unnamed(unnamed) => {
+            let fields = unnamed
+                .unnamed
+                .iter()
+                .enumerate()
+                .filter_map(|(i, f)| {
+                    if !matches!(f.vis, syn::Visibility::Public(_)) {
+                        return None;
+                    }
+                    let ty = parse_rust_type(&f.ty)?;
+                    Some(FieldDetails {
+                        kind: FieldKind::Index(i),
+                        ty,
+                        serde_rename: None,
+                    })
+                })
+                .collect();
+
             Some(StructDetails {
                 name,
-                fields: vec![],
-                is_newtype: true,
+                fields,
+                is_newtype,
                 module_path: module_path.to_vec(),
                 derives,
             })
@@ -210,7 +226,7 @@ fn extract_enum(e: &ItemEnum, module_path: &[String]) -> Option<EnumDetails> {
                         let ty = parse_rust_type(&f.ty)?;
                         let serde_rename = extract_serde_rename(&f.attrs);
                         Some(FieldDetails {
-                            name: field_name,
+                            kind: FieldKind::Named(field_name),
                             ty,
                             serde_rename,
                         })
@@ -223,7 +239,7 @@ fn extract_enum(e: &ItemEnum, module_path: &[String]) -> Option<EnumDetails> {
                     .filter_map(|(i, f)| {
                         let ty = parse_rust_type(&f.ty)?;
                         Some(FieldDetails {
-                            name: format!("_{i}"),
+                            kind: FieldKind::Index(i),
                             ty,
                             serde_rename: None,
                         })
@@ -372,6 +388,11 @@ fn parse_type_path(tp: &syn::TypePath) -> Option<RustType> {
             let k_ty = parse_rust_type(k)?;
             let v_ty = parse_rust_type(v)?;
             Some(RustType::Map(Box::new(k_ty), Box::new(v_ty)))
+        }
+        // Cow<'_, T> → unwrap to T (e.g., Cow<'static, str> → String)
+        "Cow" => {
+            let inner = first_generic_arg(&seg.arguments)?;
+            parse_rust_type(inner)
         }
 
         // Everything else: Named with optional generic args

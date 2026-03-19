@@ -147,15 +147,24 @@ pub struct StructDetails {
     pub derives: Vec<String>,
 }
 
-/// A named field on a struct.
+/// A field on a struct (named or tuple).
 #[derive(Debug, Clone)]
 pub struct FieldDetails {
-    /// Rust field name, e.g. `available_balance`.
-    pub name: String,
+    /// Field identifier — named or positional index.
+    pub kind: FieldKind,
     /// The field type.
     pub ty: RustType,
     /// JSON name from `#[serde(rename = "...")]`, if present.
     pub serde_rename: Option<String>,
+}
+
+/// How a field is accessed — by name or by tuple index.
+#[derive(Debug, Clone)]
+pub enum FieldKind {
+    /// Named field, e.g. `balance` accessed as `.balance`.
+    Named(String),
+    /// Tuple struct field, e.g. index 0 accessed as `.0`.
+    Index(usize),
 }
 
 // ── Enum Details ─────────────────────────────────────────────────────────────

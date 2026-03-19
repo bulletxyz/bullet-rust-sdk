@@ -41,14 +41,14 @@ pub fn js_name(rust_name: &str) -> String {
 ///
 /// # Arguments
 /// - `ty`: The field's `RustType`
-/// - `field`: The field name as an identifier
+/// - `field`: The field accessor tokens (e.g., `field_name` or `0` for tuple structs)
 /// - `enums`: Set of enum names (to distinguish enum refs from struct refs)
 ///
 /// # Returns
 /// `(return_type, body)` tokens for the getter method.
 pub fn getter_mapping(
     ty: &RustType,
-    field: &Ident,
+    field: &TokenStream,
     enums: &HashSet<&str>,
 ) -> (TokenStream, TokenStream) {
     match ty {
@@ -108,7 +108,7 @@ pub fn getter_mapping(
 /// Map `Option<T>` to getter return type and body.
 fn option_getter(
     inner: &RustType,
-    field: &Ident,
+    field: &TokenStream,
     enums: &HashSet<&str>,
 ) -> (TokenStream, TokenStream) {
     let (inner_ret, _) = inner_return_type(inner, enums);
@@ -151,7 +151,7 @@ fn option_getter(
 /// Map `Vec<T>` to getter return type and body.
 fn vec_getter(
     inner: &RustType,
-    field: &Ident,
+    field: &TokenStream,
     enums: &HashSet<&str>,
 ) -> (TokenStream, TokenStream) {
     // Nested Vec<Vec<T>> and Vec<serde_json::Value> can't cross wasm-bindgen.
