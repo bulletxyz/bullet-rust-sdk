@@ -35,6 +35,79 @@ pub fn js_name(rust_name: &str) -> String {
     rust_name.to_string()
 }
 
+// ── Core Type Helpers ────────────────────────────────────────────────────────
+
+/// Map a `RustType` to its wasm-bindgen-compatible type tokens.
+///
+/// This is the single source of truth for Rust→WASM type mapping.
+/// wasm-bindgen only supports i32/f64 for numbers (JS numbers are IEEE 754 doubles),
+/// so ≤32-bit integers → i32 and 64-bit/floats → f64.
+fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
+    match ty {
+        RustType::String => quote! { String },
+        RustType::Bool => quote! { bool },
+        RustType::Primitive(
+            Primitive::I8
+            | Primitive::I16
+            | Primitive::I32
+            | Primitive::U8
+            | Primitive::U16
+            | Primitive::U32,
+        ) => quote! { i32 },
+        RustType::Primitive(Primitive::I64 | Primitive::U64 | Primitive::F32 | Primitive::F64) => {
+            quote! { f64 }
+        }
+        RustType::Map(_, _) => quote! { String },
+        RustType::Named { name, .. } if name == "Value" => quote! { String },
+        RustType::Named { name, .. } if enums.contains(name.as_str()) => quote! { String },
+        RustType::Named { name, .. } => {
+            let w = format_ident!("Wasm{}", name);
+            quote! { #w }
+        }
+        RustType::Option(inner) => {
+            let inner_ty = wasm_type(inner, enums);
+            quote! { Option<#inner_ty> }
+        }
+        RustType::Vec(inner) => {
+            let inner_ty = wasm_type(inner, enums);
+            quote! { Vec<#inner_ty> }
+        }
+        _ => quote! { String },
+    }
+}
+
+/// Convert a value expression from a Rust type to its WASM representation.
+///
+/// `expr` is the tokens for accessing the value (e.g., `self.0.field`, `v`).
+/// Returns tokens for the converted expression.
+fn value_conversion(ty: &RustType, expr: &TokenStream, enums: &HashSet<&str>) -> TokenStream {
+    match ty {
+        RustType::String => quote! { #expr.clone() },
+        RustType::Bool => quote! { #expr },
+        RustType::Primitive(
+            Primitive::I8
+            | Primitive::I16
+            | Primitive::I32
+            | Primitive::U8
+            | Primitive::U16
+            | Primitive::U32,
+        ) => quote! { #expr as i32 },
+        RustType::Primitive(Primitive::I64 | Primitive::U64 | Primitive::F32 | Primitive::F64) => {
+            quote! { #expr as f64 }
+        }
+        RustType::Map(_, _) => quote! { to_json(&#expr) },
+        RustType::Named { name, .. } if name == "Value" => quote! { to_json(&#expr) },
+        RustType::Named { name, .. } if enums.contains(name.as_str()) => {
+            quote! { format!("{:?}", #expr) }
+        }
+        RustType::Named { name, .. } => {
+            let w = format_ident!("Wasm{}", name);
+            quote! { #w(#expr.clone()) }
+        }
+        _ => quote! { to_json(&#expr) },
+    }
+}
+
 // ── Getter Mapping ───────────────────────────────────────────────────────────
 
 /// Map a struct field type to its WASM getter return type and body.
@@ -52,56 +125,14 @@ pub fn getter_mapping(
     enums: &HashSet<&str>,
 ) -> (TokenStream, TokenStream) {
     match ty {
-        // ── Primitives ───────────────────────────────────────────────────────
-        RustType::String => (quote! { String }, quote! { self.0.#field.clone() }),
-        RustType::Bool => (quote! { bool }, quote! { self.0.#field }),
-
-        // wasm-bindgen only supports i32/f64 for numbers.
-        // ≤32-bit integers → i32, 64-bit → f64 (JS numbers are IEEE 754 doubles).
-        RustType::Primitive(Primitive::I8 | Primitive::I16 | Primitive::I32) => {
-            (quote! { i32 }, quote! { self.0.#field as i32 })
-        }
-        RustType::Primitive(Primitive::U8 | Primitive::U16 | Primitive::U32) => {
-            (quote! { i32 }, quote! { self.0.#field as i32 })
-        }
-        RustType::Primitive(Primitive::I64 | Primitive::U64) => {
-            (quote! { f64 }, quote! { self.0.#field as f64 })
-        }
-        RustType::Primitive(Primitive::F32 | Primitive::F64) => {
-            (quote! { f64 }, quote! { self.0.#field as f64 })
-        }
-
-        // ── Option<T> ────────────────────────────────────────────────────────
         RustType::Option(inner) => option_getter(inner, field, enums),
-
-        // ── Vec<T> ───────────────────────────────────────────────────────────
         RustType::Vec(inner) => vec_getter(inner, field, enums),
-
-        // ── Map / JSON types ─────────────────────────────────────────────────
-        RustType::Map(_, _) => (quote! { String }, quote! { to_json(&self.0.#field) }),
-
-        // ── Named types ──────────────────────────────────────────────────────
-        RustType::Named { name, .. } => {
-            // serde_json::Value → JSON string
-            if name == "Value" {
-                return (quote! { String }, quote! { to_json(&self.0.#field) });
-            }
-
-            // Enums → Debug string representation
-            if enums.contains(name.as_str()) {
-                return (quote! { String }, quote! { format!("{:?}", self.0.#field) });
-            }
-
-            // Structs → wrapped in WasmXxx
-            let wrapper = format_ident!("Wasm{}", name);
-            (
-                quote! { #wrapper },
-                quote! { #wrapper(self.0.#field.clone()) },
-            )
+        _ => {
+            let ret = wasm_type(ty, enums);
+            let expr = quote! { self.0.#field };
+            let body = value_conversion(ty, &expr, enums);
+            (ret, body)
         }
-
-        // ── Fallback ─────────────────────────────────────────────────────────
-        _ => (quote! { String }, quote! { to_json(&self.0.#field) }),
     }
 }
 
@@ -111,38 +142,31 @@ fn option_getter(
     field: &TokenStream,
     enums: &HashSet<&str>,
 ) -> (TokenStream, TokenStream) {
-    let (inner_ret, _) = inner_return_type(inner, enums);
+    let inner_ret = wasm_type(inner, enums);
 
     let body = match inner {
-        RustType::String => quote! { self.0.#field.clone() },
+        // Copy types can pass through directly.
         RustType::Bool => quote! { self.0.#field },
-        RustType::Primitive(Primitive::I8 | Primitive::I16 | Primitive::I32) => {
-            quote! { self.0.#field.map(|v| v as i32) }
-        }
-        RustType::Primitive(Primitive::U8 | Primitive::U16 | Primitive::U32) => {
-            quote! { self.0.#field.map(|v| v as i32) }
-        }
-        RustType::Primitive(Primitive::I64 | Primitive::U64) => {
-            quote! { self.0.#field.map(|v| v as f64) }
-        }
         RustType::Primitive(Primitive::F32 | Primitive::F64) => quote! { self.0.#field },
-        RustType::Map(_, _) => quote! { self.0.#field.as_ref().map(|v| to_json(v)) },
-        RustType::Named { name, .. } if name == "Value" => {
-            quote! { self.0.#field.as_ref().map(|v| to_json(v)) }
-        }
-        RustType::Named { name, .. } if enums.contains(name.as_str()) => {
-            quote! { self.0.#field.as_ref().map(|v| format!("{:?}", v)) }
-        }
-        RustType::Named { name, .. } => {
-            let w = format_ident!("Wasm{}", name);
-            quote! { self.0.#field.clone().map(#w) }
-        }
-        RustType::Vec(inner_vec) => {
-            let map_fn = vec_map_fn(inner_vec.as_ref(), enums);
-            quote! { self.0.#field.as_ref().map(|v| v.iter().cloned().#map_fn.collect()) }
-        }
+        // String/clone types can clone through directly.
+        RustType::String => quote! { self.0.#field.clone() },
         RustType::Option(_) => quote! { self.0.#field.clone() },
-        _ => quote! { self.0.#field.as_ref().map(|v| to_json(v)) },
+        // Vec inside Option needs ref access.
+        RustType::Vec(inner_vec) => {
+            let conv = value_conversion(inner_vec, &quote! { v.clone() }, enums);
+            quote! { self.0.#field.as_ref().map(|v| v.iter().map(|v| #conv).collect()) }
+        }
+        // Everything else: map the inner value through conversion.
+        _ => {
+            let conv = value_conversion(inner, &quote! { v }, enums);
+            // Named structs/maps/Value need .as_ref() to avoid moving out of the Option.
+            let needs_ref = matches!(inner, RustType::Map(_, _) | RustType::Named { .. });
+            if needs_ref {
+                quote! { self.0.#field.as_ref().map(|v| #conv) }
+            } else {
+                quote! { self.0.#field.map(|v| #conv) }
+            }
+        }
     };
 
     (quote! { Option<#inner_ret> }, body)
@@ -154,84 +178,45 @@ fn vec_getter(
     field: &TokenStream,
     enums: &HashSet<&str>,
 ) -> (TokenStream, TokenStream) {
-    // Nested Vec<Vec<T>> and Vec<serde_json::Value> can't cross wasm-bindgen.
-    // Serialize to JSON string instead.
+    // Nested Vec<Vec<T>>, Vec<Map>, and Vec<serde_json::Value> can't cross
+    // wasm-bindgen boundaries. Serialize to JSON string instead.
     match inner {
-        RustType::Vec(_) => return (quote! { String }, quote! { to_json(&self.0.#field) }),
+        RustType::Vec(_) | RustType::Map(_, _) => {
+            return (quote! { String }, quote! { to_json(&self.0.#field) });
+        }
         RustType::Named { name, .. } if name == "Value" => {
             return (quote! { String }, quote! { to_json(&self.0.#field) });
         }
-        RustType::Map(_, _) => return (quote! { String }, quote! { to_json(&self.0.#field) }),
         _ => {}
     }
 
-    let (inner_ret, _) = inner_return_type(inner, enums);
-    let map_fn = vec_map_fn(inner, enums);
+    let inner_ret = wasm_type(inner, enums);
+    let conv = value_conversion(inner, &quote! { v }, enums);
 
     (
         quote! { Vec<#inner_ret> },
-        quote! { self.0.#field.iter().cloned().#map_fn.collect() },
+        quote! { self.0.#field.iter().cloned().map(|v| #conv).collect() },
     )
 }
 
-/// The mapping function for Vec iteration.
-fn vec_map_fn(inner: &RustType, enums: &HashSet<&str>) -> TokenStream {
-    match inner {
-        RustType::String | RustType::Bool => quote! { map(|v| v) },
-        RustType::Primitive(Primitive::I8 | Primitive::I16 | Primitive::I32) => {
-            quote! { map(|v| v as i32) }
-        }
-        RustType::Primitive(Primitive::U8 | Primitive::U16 | Primitive::U32) => {
-            quote! { map(|v| v as i32) }
-        }
-        RustType::Primitive(Primitive::I64 | Primitive::U64) => quote! { map(|v| v as f64) },
-        RustType::Primitive(Primitive::F32 | Primitive::F64) => quote! { map(|v| v) },
-        RustType::Map(_, _) => quote! { map(|v| to_json(&v)) },
-        RustType::Named { name, .. } if name == "Value" => quote! { map(|v| to_json(&v)) },
-        RustType::Named { name, .. } if enums.contains(name.as_str()) => {
-            quote! { map(|v| format!("{:?}", v)) }
-        }
-        RustType::Named { name, .. } => {
-            let w = format_ident!("Wasm{}", name);
-            quote! { map(#w) }
-        }
-        _ => quote! { map(|v| to_json(&v)) },
+// ── Parameter Mapping ────────────────────────────────────────────────────────
+
+/// Map a primitive to its wasm-bindgen parameter type.
+///
+/// Differs from getter mapping: params use `i64` for 64-bit integers (BigInt support)
+/// instead of `f64`.
+fn wasm_param_primitive(p: &Primitive) -> TokenStream {
+    match p {
+        Primitive::I8
+        | Primitive::I16
+        | Primitive::I32
+        | Primitive::U8
+        | Primitive::U16
+        | Primitive::U32 => quote! { i32 },
+        Primitive::I64 | Primitive::U64 => quote! { i64 },
+        Primitive::F32 | Primitive::F64 => quote! { f64 },
     }
 }
-
-/// The wasm-bindgen-compatible return type for an inner type (used in Option<T>/Vec<T>).
-fn inner_return_type(ty: &RustType, enums: &HashSet<&str>) -> (TokenStream, ()) {
-    let t = match ty {
-        RustType::String => quote! { String },
-        RustType::Bool => quote! { bool },
-        RustType::Primitive(Primitive::I8 | Primitive::I16 | Primitive::I32) => quote! { i32 },
-        RustType::Primitive(Primitive::U8 | Primitive::U16 | Primitive::U32) => quote! { i32 },
-        RustType::Primitive(Primitive::I64 | Primitive::U64) => quote! { f64 },
-        RustType::Primitive(Primitive::F32 | Primitive::F64) => quote! { f64 },
-        RustType::Map(_, _) => quote! { String },
-        RustType::Named { name, .. } if name == "Value" => quote! { String },
-        RustType::Named { name, .. } => {
-            if enums.contains(name.as_str()) {
-                quote! { String }
-            } else {
-                let w = format_ident!("Wasm{}", name);
-                quote! { #w }
-            }
-        }
-        RustType::Vec(inner) => {
-            let (inner_ret, _) = inner_return_type(inner, enums);
-            quote! { Vec<#inner_ret> }
-        }
-        RustType::Option(inner) => {
-            let (inner_ret, _) = inner_return_type(inner, enums);
-            quote! { Option<#inner_ret> }
-        }
-        _ => quote! { String },
-    };
-    (t, ())
-}
-
-// ── Parameter Mapping ────────────────────────────────────────────────────────
 
 /// Map a method parameter type to its WASM declaration type and call argument expression.
 ///
@@ -273,48 +258,20 @@ pub fn param_mapping(ty: &RustType, name: &Ident) -> (TokenStream, TokenStream) 
             (quote! { Option<String> }, quote! { #name.as_deref() })
         }
 
-        // Option<i32>
-        RustType::Option(inner)
-            if matches!(
-                inner.as_ref(),
-                RustType::Primitive(
-                    Primitive::I8
-                        | Primitive::I16
-                        | Primitive::I32
-                        | Primitive::U8
-                        | Primitive::U16
-                        | Primitive::U32
-                )
-            ) =>
-        {
-            (quote! { Option<i32> }, quote! { #name })
+        // Option<primitive> → Option<wasm_primitive>
+        RustType::Option(inner) if matches!(inner.as_ref(), RustType::Primitive(_)) => {
+            let RustType::Primitive(p) = inner.as_ref() else {
+                unreachable!()
+            };
+            let wasm_ty = wasm_param_primitive(p);
+            (quote! { Option<#wasm_ty> }, quote! { #name })
         }
 
-        // Option<i64>
-        RustType::Option(inner)
-            if matches!(
-                inner.as_ref(),
-                RustType::Primitive(Primitive::I64 | Primitive::U64)
-            ) =>
-        {
-            (quote! { Option<i64> }, quote! { #name })
+        // Primitives
+        RustType::Primitive(p) => {
+            let wasm_ty = wasm_param_primitive(p);
+            (quote! { #wasm_ty }, quote! { #name })
         }
-
-        // i8..i32, u8..u32 → i32
-        RustType::Primitive(
-            Primitive::I8
-            | Primitive::I16
-            | Primitive::I32
-            | Primitive::U8
-            | Primitive::U16
-            | Primitive::U32,
-        ) => (quote! { i32 }, quote! { #name }),
-
-        // i64, u64 → i64
-        RustType::Primitive(Primitive::I64 | Primitive::U64) => (quote! { i64 }, quote! { #name }),
-
-        // f32, f64 → f64
-        RustType::Primitive(Primitive::F32 | Primitive::F64) => (quote! { f64 }, quote! { #name }),
 
         // Fallback: pass as-is (shouldn't happen for well-formed progenitor output)
         _ => (quote! { JsValue }, quote! { #name }),
