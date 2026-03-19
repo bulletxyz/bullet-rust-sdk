@@ -39,43 +39,44 @@ pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
     let file = syn::parse_file(&source)
         .unwrap_or_else(|e| panic!("failed to parse progenitor codegen: {e}"));
 
-    let mut items = HashMap::new();
+    let mut code_map = HashMap::new();
 
     for item in &file.items {
-        match item {
-            // The `types` module contains all struct/enum definitions.
-            Item::Mod(module) if module_name(module) == "types" => {
-                if let Some((_, inner_items)) = &module.content {
-                    for inner in inner_items {
-                        match inner {
-                            Item::Struct(s) => {
-                                if let Some(details) = extract_struct(s) {
-                                    items.insert(details.name.clone(), TypeInfo::Struct(details));
-                                }
-                            }
-                            Item::Enum(e) => {
-                                if let Some(details) = extract_enum(e) {
-                                    items.insert(details.name.clone(), TypeInfo::Enum(details));
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            }
-            // `impl Client { ... }` contains all the REST methods.
-            Item::Impl(imp) => {
-                let target = impl_target_name(imp);
-                if !target.is_empty() {
-                    let details = extract_impl(imp, &target);
-                    items.insert(target, TypeInfo::Impl(details));
-                }
-            }
-            _ => {}
-        }
+        item_walk(item, &mut code_map)
     }
 
-    CodeModel { items }
+    CodeModel { items: code_map }
+}
+
+fn item_walk(item: &Item, code_map: &mut HashMap<String, TypeInfo>) {
+    match item {
+        // We dont want to reimplement traits.
+        Item::Impl(imp) if imp.trait_.is_none() => {
+            let target = impl_target_name(imp);
+            if !target.is_empty() {
+                let details = extract_impl(imp, &target);
+                code_map.insert(target, TypeInfo::Impl(details));
+            }
+        }
+        Item::Struct(s) => {
+            if let Some(details) = extract_struct(s) {
+                code_map.insert(details.name.clone(), TypeInfo::Struct(details));
+            }
+        }
+        Item::Enum(e) => {
+            if let Some(details) = extract_enum(e) {
+                code_map.insert(details.name.clone(), TypeInfo::Enum(details));
+            }
+        }
+        Item::Mod(module) => {
+            if let Some((_, inner_items)) = &module.content {
+                for inner in inner_items {
+                    item_walk(inner, code_map);
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 // ── Struct Extraction ────────────────────────────────────────────────────────
