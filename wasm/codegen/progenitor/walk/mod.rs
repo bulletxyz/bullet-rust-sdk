@@ -1,5 +1,18 @@
-//! Parse progenitor-generated Rust code with `syn` and extract type/method information.
+//! Parse progenitor-generated Rust code with `syn` and build a `CodeModel`.
+//!
+//! This module is intentionally generic — it knows about Rust syntax, not WASM
+//! or progenitor semantics. The one exception is `ResponseValue<T>`: we promote
+//! it to a `RustType` variant because it appears on every client method return.
+//! See the doc comment on `RustType::ResponseValue` for rationale.
+//!
+//! # Adding new type support
+//!
+//! 1. If it's a structural type that changes codegen shape (like `Option`, `Vec`),
+//!    add a variant to `RustType` and handle it in `parse_rust_type`.
+//! 2. Otherwise, it falls through to `Named { name, args }` automatically.
+//!    Handle it in `emit/type_map.rs` by matching on the name.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use syn::{
@@ -8,12 +21,14 @@ use syn::{
 };
 
 use super::{
-    EnumInfo, FieldInfo, FieldType, MethodInfo, ParamInfo, ParamType, ProgenitorInfo, ReturnKind,
-    StructInfo,
+    CodeModel, EnumDetails, FieldDetails, ImplDetails, MethodDetails, ParamDetails, Primitive,
+    RustType, StructDetails, TypeInfo, VariantDetails,
 };
 
-/// Parse the progenitor-generated codegen.rs and extract all relevant information.
-pub fn extract_progenitor_info(codegen_path: &Path) -> ProgenitorInfo {
+// ── Entry Point ──────────────────────────────────────────────────────────────
+
+/// Parse the progenitor-generated codegen.rs and build a `CodeModel`.
+pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
     let source = std::fs::read_to_string(codegen_path).unwrap_or_else(|e| {
         panic!(
             "failed to read progenitor codegen at {}: {e}",
@@ -24,25 +39,23 @@ pub fn extract_progenitor_info(codegen_path: &Path) -> ProgenitorInfo {
     let file = syn::parse_file(&source)
         .unwrap_or_else(|e| panic!("failed to parse progenitor codegen: {e}"));
 
-    let mut structs = Vec::new();
-    let mut enums = Vec::new();
-    let mut methods = Vec::new();
+    let mut items = HashMap::new();
 
     for item in &file.items {
         match item {
             // The `types` module contains all struct/enum definitions.
             Item::Mod(module) if module_name(module) == "types" => {
-                if let Some((_, items)) = &module.content {
-                    for inner in items {
+                if let Some((_, inner_items)) = &module.content {
+                    for inner in inner_items {
                         match inner {
                             Item::Struct(s) => {
-                                if let Some(info) = extract_struct(s) {
-                                    structs.push(info);
+                                if let Some(details) = extract_struct(s) {
+                                    items.insert(details.name.clone(), TypeInfo::Struct(details));
                                 }
                             }
                             Item::Enum(e) => {
-                                if let Some(info) = extract_enum(e) {
-                                    enums.push(info);
+                                if let Some(details) = extract_enum(e) {
+                                    items.insert(details.name.clone(), TypeInfo::Enum(details));
                                 }
                             }
                             _ => {}
@@ -52,61 +65,45 @@ pub fn extract_progenitor_info(codegen_path: &Path) -> ProgenitorInfo {
             }
             // `impl Client { ... }` contains all the REST methods.
             Item::Impl(imp) => {
-                if impl_target_name(imp) == "Client" {
-                    for item in &imp.items {
-                        if let ImplItem::Fn(method) = item {
-                            if let Some(info) = extract_method(method) {
-                                methods.push(info);
-                            }
-                        }
-                    }
+                let target = impl_target_name(imp);
+                if !target.is_empty() {
+                    let details = extract_impl(imp, &target);
+                    items.insert(target, TypeInfo::Impl(details));
                 }
             }
             _ => {}
         }
     }
 
-    ProgenitorInfo {
-        structs,
-        enums,
-        methods,
-    }
+    CodeModel { items }
 }
 
-// ── Struct extraction ────────────────────────────────────────────────────────
+// ── Struct Extraction ────────────────────────────────────────────────────────
 
-fn extract_struct(s: &ItemStruct) -> Option<StructInfo> {
+fn extract_struct(s: &ItemStruct) -> Option<StructDetails> {
     let name = s.ident.to_string();
 
     // Check for #[serde(transparent)] — marks newtype wrappers.
-    let is_newtype = s.attrs.iter().any(|attr| {
-        if !attr.path().is_ident("serde") {
-            return false;
-        }
-        let Ok(nested) = attr.parse_args::<syn::Meta>() else {
-            return false;
-        };
-        matches!(&nested, syn::Meta::Path(p) if p.is_ident("transparent"))
-    });
+    let is_newtype = has_serde_transparent(&s.attrs);
 
     match &s.fields {
         syn::Fields::Named(named) => {
-            let fields: Vec<FieldInfo> = named
+            let fields = named
                 .named
                 .iter()
                 .filter_map(|f| {
-                    let rust_name = f.ident.as_ref()?.to_string();
+                    let field_name = f.ident.as_ref()?.to_string();
+                    let ty = parse_rust_type(&f.ty)?;
                     let serde_rename = extract_serde_rename(&f.attrs);
-                    let ty = parse_field_type(&f.ty)?;
-                    Some(FieldInfo {
-                        rust_name,
-                        serde_rename,
+                    Some(FieldDetails {
+                        name: field_name,
                         ty,
+                        serde_rename,
                     })
                 })
                 .collect();
 
-            Some(StructInfo {
+            Some(StructDetails {
                 name,
                 fields,
                 is_newtype,
@@ -114,7 +111,7 @@ fn extract_struct(s: &ItemStruct) -> Option<StructInfo> {
         }
         syn::Fields::Unnamed(_) => {
             // Tuple struct — treat as newtype with no exposed fields.
-            Some(StructInfo {
+            Some(StructDetails {
                 name,
                 fields: vec![],
                 is_newtype: true,
@@ -124,13 +121,27 @@ fn extract_struct(s: &ItemStruct) -> Option<StructInfo> {
     }
 }
 
+fn has_serde_transparent(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        if !attr.path().is_ident("serde") {
+            return false;
+        }
+        let Ok(nested) = attr.parse_args::<syn::Meta>() else {
+            return false;
+        };
+        matches!(&nested, syn::Meta::Path(p) if p.is_ident("transparent"))
+    })
+}
+
 fn extract_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
     for attr in attrs {
         if !attr.path().is_ident("serde") {
             continue;
         }
         // Parse #[serde(rename = "camelCase")]
-        let nested: syn::MetaNameValue = attr.parse_args().ok()?;
+        let Ok(nested) = attr.parse_args::<syn::MetaNameValue>() else {
+            continue;
+        };
         if nested.path.is_ident("rename") {
             if let syn::Expr::Lit(lit) = &nested.value {
                 if let syn::Lit::Str(s) = &lit.lit {
@@ -142,231 +153,245 @@ fn extract_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
     None
 }
 
-// ── Enum extraction ──────────────────────────────────────────────────────────
+// ── Enum Extraction ──────────────────────────────────────────────────────────
 
-fn extract_enum(e: &ItemEnum) -> Option<EnumInfo> {
+fn extract_enum(e: &ItemEnum) -> Option<EnumDetails> {
     let name = e.ident.to_string();
 
-    // Only extract simple enums (all unit variants, used as string enums).
-    let all_unit = e.variants.iter().all(|v| v.fields.is_empty());
-    if !all_unit {
-        return None;
-    }
-
-    let variants: Vec<String> = e.variants.iter().map(|v| v.ident.to_string()).collect();
-
-    Some(EnumInfo { name, variants })
-}
-
-// ── Method extraction ────────────────────────────────────────────────────────
-
-fn extract_method(method: &syn::ImplItemFn) -> Option<MethodInfo> {
-    let sig = &method.sig;
-
-    // Only interested in public async methods.
-    if sig.asyncness.is_none() {
-        return None;
-    }
-
-    let name = sig.ident.to_string();
-    // Skip constructors.
-    if name == "new" || name == "new_with_client" || name == "api_version" {
-        return None;
-    }
-
-    let mut params = Vec::new();
-    for arg in &sig.inputs {
-        if let FnArg::Typed(pat_ty) = arg {
-            let param_name = match pat_ty.pat.as_ref() {
-                Pat::Ident(id) => id.ident.to_string(),
-                _ => continue,
+    let variants = e
+        .variants
+        .iter()
+        .map(|v| {
+            let variant_name = v.ident.to_string();
+            let fields = match &v.fields {
+                syn::Fields::Named(named) => named
+                    .named
+                    .iter()
+                    .filter_map(|f| {
+                        let field_name = f.ident.as_ref()?.to_string();
+                        let ty = parse_rust_type(&f.ty)?;
+                        let serde_rename = extract_serde_rename(&f.attrs);
+                        Some(FieldDetails {
+                            name: field_name,
+                            ty,
+                            serde_rename,
+                        })
+                    })
+                    .collect(),
+                syn::Fields::Unnamed(unnamed) => unnamed
+                    .unnamed
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, f)| {
+                        let ty = parse_rust_type(&f.ty)?;
+                        Some(FieldDetails {
+                            name: format!("_{i}"),
+                            ty,
+                            serde_rename: None,
+                        })
+                    })
+                    .collect(),
+                syn::Fields::Unit => vec![],
             };
-            let param_ty = parse_param_type(&pat_ty.ty)?;
-            params.push(ParamInfo {
-                name: param_name,
-                ty: param_ty,
-            });
-        }
-    }
+            VariantDetails {
+                name: variant_name,
+                fields,
+            }
+        })
+        .collect();
 
-    let ret = parse_return_type(&sig.output)?;
-
-    Some(MethodInfo { name, params, ret })
+    Some(EnumDetails { name, variants })
 }
 
-// ── Type parsing ─────────────────────────────────────────────────────────────
+// ── Impl Extraction ──────────────────────────────────────────────────────────
 
-/// Parse a struct field type into our FieldType model.
-fn parse_field_type(ty: &Type) -> Option<FieldType> {
-    match ty {
-        Type::Path(tp) => {
-            let seg = tp.path.segments.last()?;
-            let ident = seg.ident.to_string();
-
-            match ident.as_str() {
-                "String" => Some(FieldType::String),
-                "bool" => Some(FieldType::Bool),
-                // wasm-bindgen only supports i32/f64 for numeric types.
-                // All ≤32-bit integers are widened to i32 via `as i32` in the emitter.
-                // 64-bit integers become f64 since JS numbers are IEEE 754 doubles.
-                "i8" | "i16" | "i32" | "u8" | "u16" | "u32" => Some(FieldType::I32),
-                "i64" | "u64" => Some(FieldType::I64),
-                "f32" | "f64" => Some(FieldType::F64),
-                "Option" => {
-                    let inner = first_generic_arg(&seg.arguments)?;
-                    let inner_ty = parse_field_type(inner)?;
-                    Some(FieldType::Option(Box::new(inner_ty)))
-                }
-                "Vec" => {
-                    let inner = first_generic_arg(&seg.arguments)?;
-                    let inner_ty = parse_field_type(inner)?;
-                    Some(FieldType::Vec(Box::new(inner_ty)))
-                }
-                "Map" | "HashMap" => {
-                    // serde_json::Map or std::collections::HashMap — serialize to JSON
-                    Some(FieldType::JsonMap)
-                }
-                "Value" => {
-                    // serde_json::Value
-                    Some(FieldType::JsonValue)
-                }
-                other => {
-                    // Check for fully-qualified paths like `std::string::String`.
-                    if tp.path.segments.len() > 1 {
-                        let full = path_to_string(&tp.path);
-                        if full.ends_with("::String") || full == "std::string::String" {
-                            return Some(FieldType::String);
-                        }
-                        if full.contains("serde_json::Map") {
-                            return Some(FieldType::JsonMap);
-                        }
-                        if full.contains("serde_json::Value") {
-                            return Some(FieldType::JsonValue);
-                        }
-                    }
-                    // Assume it's a reference to another types module type.
-                    Some(FieldType::Ref(other.to_string()))
-                }
+fn extract_impl(imp: &ItemImpl, target: &str) -> ImplDetails {
+    let methods = imp
+        .items
+        .iter()
+        .filter_map(|item| {
+            if let ImplItem::Fn(method) = item {
+                extract_method(method)
+            } else {
+                None
             }
-        }
-        _ => None,
+        })
+        .collect();
+
+    ImplDetails {
+        target: target.to_string(),
+        methods,
     }
 }
 
-/// Parse a method parameter type.
-fn parse_param_type(ty: &Type) -> Option<ParamType> {
-    match ty {
-        Type::Reference(r) => {
-            // &str or &types::SomeType
-            match r.elem.as_ref() {
-                Type::Path(tp) => {
-                    let last = tp.path.segments.last()?;
-                    let ident = last.ident.to_string();
-                    if ident == "str" {
-                        Some(ParamType::Str)
-                    } else {
-                        // &types::SomeType — body param
-                        Some(ParamType::BodyRef(ident))
-                    }
-                }
-                _ => None,
+fn extract_method(method: &syn::ImplItemFn) -> Option<MethodDetails> {
+    let sig = &method.sig;
+    let name = sig.ident.to_string();
+    let is_async = sig.asyncness.is_some();
+
+    let params = sig
+        .inputs
+        .iter()
+        .filter_map(|arg| {
+            if let FnArg::Typed(pat_ty) = arg {
+                let param_name = match pat_ty.pat.as_ref() {
+                    Pat::Ident(id) => id.ident.to_string(),
+                    _ => return None,
+                };
+                let ty = parse_rust_type(&pat_ty.ty)?;
+                Some(ParamDetails {
+                    name: param_name,
+                    ty,
+                })
+            } else {
+                None // Skip &self
             }
-        }
-        Type::Path(tp) => {
-            let seg = tp.path.segments.last()?;
-            let ident = seg.ident.to_string();
-            match ident.as_str() {
-                "i32" => Some(ParamType::I32),
-                "i64" => Some(ParamType::I64),
-                "Option" => {
-                    let inner = first_generic_arg(&seg.arguments)?;
-                    match inner {
-                        Type::Reference(r) => {
-                            if let Type::Path(tp) = r.elem.as_ref() {
-                                let last = tp.path.segments.last()?;
-                                if last.ident == "str" {
-                                    return Some(ParamType::OptionStr);
-                                }
-                            }
-                            None
-                        }
-                        Type::Path(tp) => {
-                            let last = tp.path.segments.last()?;
-                            match last.ident.to_string().as_str() {
-                                "i32" => Some(ParamType::OptionI32),
-                                "i64" => Some(ParamType::OptionI64),
-                                _ => None,
-                            }
-                        }
-                        _ => None,
-                    }
-                }
-                _ => None,
-            }
-        }
-        _ => None,
-    }
+        })
+        .collect();
+
+    let return_type = parse_return_type(&sig.output);
+
+    Some(MethodDetails {
+        name,
+        is_async,
+        params,
+        return_type,
+    })
 }
 
-/// Parse the return type of a client method.
+// ── Type Parsing ─────────────────────────────────────────────────────────────
+
+/// Parse any `syn::Type` into our `RustType` IR.
 ///
-/// Progenitor methods return `Result<ResponseValue<T>, Error<()>>`.
-/// We extract `T` from `ResponseValue<T>`.
-fn parse_return_type(ret: &ReturnType) -> Option<ReturnKind> {
-    let Type::Path(tp) = return_inner_type(ret)? else {
-        return None;
+/// This is the core generic parser. It handles:
+/// - Primitives (bool, i32, String, etc.)
+/// - Structural types (Option, Vec, Map, tuples)
+/// - References (&T, &[T])
+/// - Named types with generics (falls through to `Named`)
+fn parse_rust_type(ty: &Type) -> Option<RustType> {
+    match ty {
+        Type::Path(tp) => parse_type_path(tp),
+        Type::Reference(r) => parse_reference(r),
+        Type::Tuple(t) => {
+            let inner: Vec<RustType> = t.elems.iter().filter_map(parse_rust_type).collect();
+            Some(RustType::Tuple(inner))
+        }
+        Type::Slice(s) => {
+            let inner = parse_rust_type(&s.elem)?;
+            Some(RustType::Slice(Box::new(inner)))
+        }
+        _ => None,
+    }
+}
+
+fn parse_type_path(tp: &syn::TypePath) -> Option<RustType> {
+    let seg = tp.path.segments.last()?;
+    let ident = seg.ident.to_string();
+
+    // Check for fully-qualified paths first
+    if tp.path.segments.len() > 1 {
+        let full = path_to_string(&tp.path);
+        if full.ends_with("::String") || full == "std::string::String" {
+            return Some(RustType::String);
+        }
+    }
+
+    match ident.as_str() {
+        // Primitives
+        "bool" => Some(RustType::Bool),
+        "String" => Some(RustType::String),
+        "str" => Some(RustType::String), // &str reference will wrap this
+        "i8" => Some(RustType::Primitive(Primitive::I8)),
+        "i16" => Some(RustType::Primitive(Primitive::I16)),
+        "i32" => Some(RustType::Primitive(Primitive::I32)),
+        "i64" => Some(RustType::Primitive(Primitive::I64)),
+        "u8" => Some(RustType::Primitive(Primitive::U8)),
+        "u16" => Some(RustType::Primitive(Primitive::U16)),
+        "u32" => Some(RustType::Primitive(Primitive::U32)),
+        "u64" => Some(RustType::Primitive(Primitive::U64)),
+        "f32" => Some(RustType::Primitive(Primitive::F32)),
+        "f64" => Some(RustType::Primitive(Primitive::F64)),
+
+        // Structural types
+        "Option" => {
+            let inner = first_generic_arg(&seg.arguments)?;
+            let inner_ty = parse_rust_type(inner)?;
+            Some(RustType::Option(Box::new(inner_ty)))
+        }
+        "Vec" => {
+            let inner = first_generic_arg(&seg.arguments)?;
+            let inner_ty = parse_rust_type(inner)?;
+            Some(RustType::Vec(Box::new(inner_ty)))
+        }
+        "Map" | "HashMap" => {
+            let (k, v) = first_two_generic_args(&seg.arguments)?;
+            let k_ty = parse_rust_type(k)?;
+            let v_ty = parse_rust_type(v)?;
+            Some(RustType::Map(Box::new(k_ty), Box::new(v_ty)))
+        }
+
+        // Everything else: Named with optional generic args
+        _ => {
+            let args = collect_generic_args(&seg.arguments);
+            Some(RustType::Named { name: ident, args })
+        }
+    }
+}
+
+fn parse_reference(r: &syn::TypeReference) -> Option<RustType> {
+    // &[T] — reference to slice
+    if let Type::Slice(s) = r.elem.as_ref() {
+        let inner = parse_rust_type(&s.elem)?;
+        return Some(RustType::Ref(Box::new(RustType::Slice(Box::new(inner)))));
+    }
+
+    // &T
+    let inner = parse_rust_type(&r.elem)?;
+    Some(RustType::Ref(Box::new(inner)))
+}
+
+/// Parse a method return type, unwrapping `Result<ResponseValue<T>, Error<_>>`.
+///
+/// This is the one progenitor-aware function in walk. We promote `ResponseValue`
+/// because it appears on every client method return. See `RustType::ResponseValue` docs.
+fn parse_return_type(ret: &ReturnType) -> Option<RustType> {
+    let ty = match ret {
+        ReturnType::Type(_, ty) => ty.as_ref(),
+        ReturnType::Default => return Some(RustType::Tuple(vec![])), // -> ()
     };
 
-    // Dig into Result<ResponseValue<T>, ...> → ResponseValue<T> → T
-    let result_seg = tp.path.segments.last()?;
-    if result_seg.ident != "Result" {
+    // Try to unwrap Result<ResponseValue<T>, Error<_>> → ResponseValue(T)
+    if let Some(response_value_inner) = try_unwrap_progenitor_return(ty) {
+        return Some(RustType::ResponseValue(Box::new(response_value_inner)));
+    }
+
+    // Fallback: parse as-is
+    parse_rust_type(ty)
+}
+
+/// Try to unwrap `Result<ResponseValue<T>, Error<_>>` and return `T`.
+fn try_unwrap_progenitor_return(ty: &Type) -> Option<RustType> {
+    let Type::Path(tp) = ty else { return None };
+    let seg = tp.path.segments.last()?;
+
+    // Must be Result<_, _>
+    if seg.ident != "Result" {
         return None;
     }
-    let rv_ty = first_generic_arg(&result_seg.arguments)?;
-    let Type::Path(rv_path) = rv_ty else {
+
+    let result_inner = first_generic_arg(&seg.arguments)?;
+    let Type::Path(rv_path) = result_inner else {
         return None;
     };
     let rv_seg = rv_path.path.segments.last()?;
+
+    // Must be ResponseValue<T>
     if rv_seg.ident != "ResponseValue" {
         return None;
     }
-    let inner_ty = first_generic_arg(&rv_seg.arguments)?;
 
-    classify_return_type(inner_ty)
-}
-
-fn classify_return_type(ty: &Type) -> Option<ReturnKind> {
-    match ty {
-        Type::Tuple(t) if t.elems.is_empty() => Some(ReturnKind::Unit),
-        Type::Path(tp) => {
-            let seg = tp.path.segments.last()?;
-            let ident = seg.ident.to_string();
-
-            match ident.as_str() {
-                "ByteStream" => Some(ReturnKind::Stream),
-                "Vec" => {
-                    let inner = first_generic_arg(&seg.arguments)?;
-                    if let Type::Path(inner_tp) = inner {
-                        let inner_name = inner_tp.path.segments.last()?.ident.to_string();
-                        Some(ReturnKind::Array(inner_name))
-                    } else {
-                        None
-                    }
-                }
-                "Map" => Some(ReturnKind::JsonMap),
-                _ => {
-                    // Check for types:: prefix
-                    let type_name = if tp.path.segments.len() > 1 {
-                        tp.path.segments.last()?.ident.to_string()
-                    } else {
-                        ident
-                    };
-                    Some(ReturnKind::Schema(type_name))
-                }
-            }
-        }
-        _ => None,
-    }
+    let inner = first_generic_arg(&rv_seg.arguments)?;
+    parse_rust_type(inner)
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -395,10 +420,36 @@ fn first_generic_arg(args: &PathArguments) -> Option<&Type> {
     None
 }
 
-fn return_inner_type(ret: &ReturnType) -> Option<&Type> {
-    match ret {
-        ReturnType::Type(_, ty) => Some(ty.as_ref()),
-        ReturnType::Default => None,
+fn first_two_generic_args(args: &PathArguments) -> Option<(&Type, &Type)> {
+    if let PathArguments::AngleBracketed(ab) = args {
+        let mut types = ab.args.iter().filter_map(|arg| {
+            if let GenericArgument::Type(ty) = arg {
+                Some(ty)
+            } else {
+                None
+            }
+        });
+        let first = types.next()?;
+        let second = types.next()?;
+        return Some((first, second));
+    }
+    None
+}
+
+fn collect_generic_args(args: &PathArguments) -> Vec<RustType> {
+    if let PathArguments::AngleBracketed(ab) = args {
+        ab.args
+            .iter()
+            .filter_map(|arg| {
+                if let GenericArgument::Type(ty) = arg {
+                    parse_rust_type(ty)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    } else {
+        vec![]
     }
 }
 

@@ -4,6 +4,8 @@ mod codegen;
 use std::fs;
 use std::path::Path;
 
+use codegen::progenitor::TypeInfo;
+
 fn main() {
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
 
@@ -27,17 +29,30 @@ fn main() {
     let codegen_path = std::env::var("DEP_BULLET_RUST_CODEGEN_CODEGEN_PATH")
         .expect("DEP_BULLET_RUST_CODEGEN_CODEGEN_PATH not set — is bullet-rust-sdk a dependency?");
 
-    let progenitor_info =
-        codegen::progenitor::walk::extract_progenitor_info(Path::new(&codegen_path));
-    let progenitor_code = codegen::progenitor::emit::emit_all(&progenitor_info);
+    let code_model = codegen::progenitor::walk::extract_code_model(Path::new(&codegen_path));
+    let progenitor_code = codegen::progenitor::emit::emit_all(&code_model);
 
     let progenitor_path = Path::new(&out_dir).join("progenitor_wrappers.rs");
     fs::write(&progenitor_path, &progenitor_code).expect("failed to write progenitor wrappers");
 
+    // Count items for the build summary.
+    let (mut structs, mut enums, mut methods) = (0, 0, 0);
+    for (name, item) in &code_model.items {
+        match item {
+            TypeInfo::Struct(_) => structs += 1,
+            TypeInfo::Enum(e) if e.variants.iter().all(|v| v.fields.is_empty()) => enums += 1,
+            TypeInfo::Enum(_) => {} // Skip non-unit enums
+            TypeInfo::Impl(_) if name == "Client" => {
+                if let TypeInfo::Impl(imp) = item {
+                    methods = imp.methods.iter().filter(|m| m.is_async).count();
+                }
+            }
+            TypeInfo::Impl(_) => {}
+        }
+    }
+
     println!(
         "cargo::warning=Generated {} progenitor type wrappers, {} enums, {} client methods",
-        progenitor_info.structs.len(),
-        progenitor_info.enums.len(),
-        progenitor_info.methods.len(),
+        structs, enums, methods,
     );
 }
