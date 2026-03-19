@@ -141,6 +141,10 @@ pub struct StructDetails {
     pub fields: Vec<FieldDetails>,
     /// Whether this is a newtype wrapper (single unnamed field, `#[serde(transparent)]`).
     pub is_newtype: bool,
+    /// Module path relative to the codegen root, e.g. `["types", "error"]` for `types::error::ConversionError`.
+    pub module_path: Vec<String>,
+    /// Derive macros on this struct (e.g., `["Serialize", "Deserialize", "Clone"]`).
+    pub derives: Vec<String>,
 }
 
 /// A named field on a struct.
@@ -163,6 +167,10 @@ pub struct EnumDetails {
     pub name: String,
     /// Variants.
     pub variants: Vec<VariantDetails>,
+    /// Module path relative to the codegen root, e.g. `["types"]` for `types::TxStatus`.
+    pub module_path: Vec<String>,
+    /// Derive macros on this enum (e.g., `["Serialize", "Deserialize", "Clone"]`).
+    pub derives: Vec<String>,
 }
 
 /// An enum variant.
@@ -184,6 +192,8 @@ pub struct ImplDetails {
     pub target: String,
     /// Methods in this impl.
     pub methods: Vec<MethodDetails>,
+    /// Module path relative to the codegen root.
+    pub module_path: Vec<String>,
 }
 
 /// A method in an impl block.

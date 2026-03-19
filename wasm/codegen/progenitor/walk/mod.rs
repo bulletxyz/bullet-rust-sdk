@@ -16,8 +16,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use syn::{
-    FnArg, GenericArgument, ImplItem, Item, ItemEnum, ItemImpl, ItemMod, ItemStruct, Pat,
-    PathArguments, ReturnType, Type,
+    FnArg, GenericArgument, ImplItem, Item, ItemEnum, ItemImpl, ItemStruct, Pat, PathArguments,
+    ReturnType, Type,
 };
 
 use super::{
@@ -42,36 +42,38 @@ pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
     let mut code_map = HashMap::new();
 
     for item in &file.items {
-        item_walk(item, &mut code_map)
+        item_walk(item, &[], &mut code_map)
     }
 
     CodeModel { items: code_map }
 }
 
-fn item_walk(item: &Item, code_map: &mut HashMap<String, TypeInfo>) {
+fn item_walk(item: &Item, module_path: &[String], code_map: &mut HashMap<String, TypeInfo>) {
     match item {
         // We dont want to reimplement traits.
         Item::Impl(imp) if imp.trait_.is_none() => {
             let target = impl_target_name(imp);
             if !target.is_empty() {
-                let details = extract_impl(imp, &target);
+                let details = extract_impl(imp, &target, module_path);
                 code_map.insert(target, TypeInfo::Impl(details));
             }
         }
         Item::Struct(s) => {
-            if let Some(details) = extract_struct(s) {
+            if let Some(details) = extract_struct(s, module_path) {
                 code_map.insert(details.name.clone(), TypeInfo::Struct(details));
             }
         }
         Item::Enum(e) => {
-            if let Some(details) = extract_enum(e) {
+            if let Some(details) = extract_enum(e, module_path) {
                 code_map.insert(details.name.clone(), TypeInfo::Enum(details));
             }
         }
         Item::Mod(module) => {
             if let Some((_, inner_items)) = &module.content {
+                let mut child_path = module_path.to_vec();
+                child_path.push(module.ident.to_string());
                 for inner in inner_items {
-                    item_walk(inner, code_map);
+                    item_walk(inner, &child_path, code_map);
                 }
             }
         }
@@ -81,11 +83,12 @@ fn item_walk(item: &Item, code_map: &mut HashMap<String, TypeInfo>) {
 
 // ── Struct Extraction ────────────────────────────────────────────────────────
 
-fn extract_struct(s: &ItemStruct) -> Option<StructDetails> {
+fn extract_struct(s: &ItemStruct, module_path: &[String]) -> Option<StructDetails> {
     let name = s.ident.to_string();
 
     // Check for #[serde(transparent)] — marks newtype wrappers.
     let is_newtype = has_serde_transparent(&s.attrs);
+    let derives = extract_derives(&s.attrs);
 
     match &s.fields {
         syn::Fields::Named(named) => {
@@ -108,6 +111,8 @@ fn extract_struct(s: &ItemStruct) -> Option<StructDetails> {
                 name,
                 fields,
                 is_newtype,
+                module_path: module_path.to_vec(),
+                derives,
             })
         }
         syn::Fields::Unnamed(_) => {
@@ -116,6 +121,8 @@ fn extract_struct(s: &ItemStruct) -> Option<StructDetails> {
                 name,
                 fields: vec![],
                 is_newtype: true,
+                module_path: module_path.to_vec(),
+                derives,
             })
         }
         syn::Fields::Unit => None,
@@ -132,6 +139,35 @@ fn has_serde_transparent(attrs: &[syn::Attribute]) -> bool {
         };
         matches!(&nested, syn::Meta::Path(p) if p.is_ident("transparent"))
     })
+}
+
+/// Extract derive macro names from attributes.
+///
+/// Parses `#[derive(Serialize, Deserialize, Clone)]` → `["Serialize", "Deserialize", "Clone"]`.
+/// Also handles paths like `serde::Serialize` or `::serde::Serialize` → `["serde::Serialize"]`.
+fn extract_derives(attrs: &[syn::Attribute]) -> Vec<String> {
+    let mut derives = Vec::new();
+    for attr in attrs {
+        if !attr.path().is_ident("derive") {
+            continue;
+        }
+        if let Ok(meta) = attr.meta.require_list() {
+            meta.parse_nested_meta(|nested| {
+                // Collect the full path (e.g., `serde::Serialize` or just `Clone`)
+                let path_str = nested
+                    .path
+                    .segments
+                    .iter()
+                    .map(|seg| seg.ident.to_string())
+                    .collect::<Vec<_>>()
+                    .join("::");
+                derives.push(path_str);
+                Ok(())
+            })
+            .ok();
+        }
+    }
+    derives
 }
 
 fn extract_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
@@ -156,8 +192,9 @@ fn extract_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
 
 // ── Enum Extraction ──────────────────────────────────────────────────────────
 
-fn extract_enum(e: &ItemEnum) -> Option<EnumDetails> {
+fn extract_enum(e: &ItemEnum, module_path: &[String]) -> Option<EnumDetails> {
     let name = e.ident.to_string();
+    let derives = extract_derives(&e.attrs);
 
     let variants = e
         .variants
@@ -201,12 +238,17 @@ fn extract_enum(e: &ItemEnum) -> Option<EnumDetails> {
         })
         .collect();
 
-    Some(EnumDetails { name, variants })
+    Some(EnumDetails {
+        name,
+        variants,
+        module_path: module_path.to_vec(),
+        derives,
+    })
 }
 
 // ── Impl Extraction ──────────────────────────────────────────────────────────
 
-fn extract_impl(imp: &ItemImpl, target: &str) -> ImplDetails {
+fn extract_impl(imp: &ItemImpl, target: &str, module_path: &[String]) -> ImplDetails {
     let methods = imp
         .items
         .iter()
@@ -222,6 +264,7 @@ fn extract_impl(imp: &ItemImpl, target: &str) -> ImplDetails {
     ImplDetails {
         target: target.to_string(),
         methods,
+        module_path: module_path.to_vec(),
     }
 }
 
@@ -396,10 +439,6 @@ fn try_unwrap_progenitor_return(ty: &Type) -> Option<RustType> {
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
-
-fn module_name(m: &ItemMod) -> String {
-    m.ident.to_string()
-}
 
 fn impl_target_name(imp: &ItemImpl) -> String {
     if let Type::Path(tp) = imp.self_ty.as_ref() {

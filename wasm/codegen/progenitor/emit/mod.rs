@@ -57,7 +57,6 @@ pub fn emit_all(model: &CodeModel) -> String {
         //
         // Wasm-bindgen wrappers for progenitor-generated REST API types and client methods.
 
-        use bullet_rust_sdk::codegen::types as sdk;
         use wasm_bindgen::prelude::*;
 
         fn to_json<T: serde::Serialize>(v: &T) -> String {
