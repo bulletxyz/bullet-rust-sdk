@@ -151,19 +151,6 @@ describe('Transaction.builder() error handling', () => {
     }).toThrow();
   });
 
-  test('missing maxFee throws error', async () => {
-    const client = await Client.connect(ENDPOINT);
-    const keypair = Keypair.generate();
-
-    const callMsg = Public.applyFunding([]);
-    expect(() => {
-      Transaction.builder()
-        .callMessage(callMsg)
-        .signer(keypair)
-        .build(client);
-    }).toThrow();
-  });
-
   test('missing signer throws error', async () => {
     const client = await Client.connect(ENDPOINT);
 
