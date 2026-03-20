@@ -35,6 +35,7 @@ pub fn extract_struct(s: &ItemStruct, module_path: &[String]) -> Option<StructDe
                 is_newtype,
                 module_path: module_path.to_vec(),
                 derives,
+                methods: Vec::new(),
             })
         }
         syn::Fields::Unnamed(unnamed) => {
@@ -61,6 +62,7 @@ pub fn extract_struct(s: &ItemStruct, module_path: &[String]) -> Option<StructDe
                 is_newtype,
                 module_path: module_path.to_vec(),
                 derives,
+                methods: Vec::new(),
             })
         }
         syn::Fields::Unit => None,
