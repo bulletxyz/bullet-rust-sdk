@@ -39,13 +39,14 @@ fn main() {
     let (mut structs, mut enums, mut methods) = (0, 0, 0);
     for (name, item) in &code_model.items {
         match item {
+            TypeInfo::Struct(s) if name == "Client" => {
+                methods = s.methods.iter().filter(|m| m.is_async).count();
+            }
             TypeInfo::Struct(_) => structs += 1,
             TypeInfo::Enum(e) if e.variants.iter().all(|v| v.fields.is_empty()) => enums += 1,
             TypeInfo::Enum(_) => {} // Skip non-unit enums
-            TypeInfo::Impl(_) if name == "Client" => {
-                if let TypeInfo::Impl(imp) = item {
-                    methods = imp.methods.iter().filter(|m| m.is_async).count();
-                }
+            TypeInfo::Impl(imp) if name == "Client" => {
+                methods = imp.methods.iter().filter(|m| m.is_async).count();
             }
             TypeInfo::Impl(_) => {}
         }

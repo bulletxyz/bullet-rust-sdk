@@ -6,19 +6,18 @@ use heck::ToLowerCamelCase;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use super::super::{ImplDetails, MethodDetails};
+use super::super::MethodDetails;
 use super::type_map;
 
 /// Methods to skip when generating WASM bindings.
 const SKIP_METHODS: &[&str] = &["new", "new_with_client", "api_version"];
 
 /// Emit the full `impl WasmTradingApi` block.
-pub fn emit_client_impl(imp: &ImplDetails, _enum_names: &HashSet<&str>) -> TokenStream {
-    let method_tokens: Vec<TokenStream> = imp
-        .methods
+pub fn emit_client_impl(methods: &[&MethodDetails], _enum_names: &HashSet<&str>) -> TokenStream {
+    let method_tokens: Vec<TokenStream> = methods
         .iter()
         .filter(|m| m.is_async && !SKIP_METHODS.contains(&m.name.as_str()))
-        .map(emit_method)
+        .map(|m| emit_method(m))
         .collect();
 
     quote! {
