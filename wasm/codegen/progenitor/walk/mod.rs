@@ -54,7 +54,16 @@ fn item_walk(item: &Item, module_path: &[String], code_map: &mut HashMap<String,
             let target = impl_target_name(imp);
             if !target.is_empty() {
                 let details = extract_impl(imp, &target, module_path);
-                code_map.insert(target, TypeInfo::Impl(details));
+                // Merge methods into an existing struct/enum rather than overwriting.
+                // Progenitor generates inherent impls (e.g. `impl EnumName { fn as_str() }`)
+                // that would otherwise replace the Struct/Enum entry in the HashMap.
+                match code_map.get_mut(&target) {
+                    Some(TypeInfo::Struct(s)) => s.methods.extend(details.methods),
+                    Some(TypeInfo::Enum(e)) => e.methods.extend(details.methods),
+                    _ => {
+                        code_map.insert(target, TypeInfo::Impl(details));
+                    }
+                }
             }
         }
         Item::Struct(s) => {

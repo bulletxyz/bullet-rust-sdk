@@ -145,6 +145,8 @@ pub struct StructDetails {
     pub module_path: Vec<String>,
     /// Derive macros on this struct (e.g., `["Serialize", "Deserialize", "Clone"]`).
     pub derives: Vec<String>,
+    /// Methods from inherent `impl` blocks (e.g. progenitor-generated accessors).
+    pub methods: Vec<MethodDetails>,
 }
 
 /// A field on a struct (named or tuple).
@@ -180,6 +182,8 @@ pub struct EnumDetails {
     pub module_path: Vec<String>,
     /// Derive macros on this enum (e.g., `["Serialize", "Deserialize", "Clone"]`).
     pub derives: Vec<String>,
+    /// Methods from inherent `impl` blocks (e.g. `as_str()` for string enums).
+    pub methods: Vec<MethodDetails>,
 }
 
 /// An enum variant.

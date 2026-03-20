@@ -54,5 +54,6 @@ pub fn extract_enum(e: &ItemEnum, module_path: &[String]) -> Option<EnumDetails>
         variants,
         module_path: module_path.to_vec(),
         derives,
+        methods: Vec::new(),
     })
 }
