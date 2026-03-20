@@ -147,7 +147,8 @@ fn option_getter(
     let body = match inner {
         // Copy types can pass through directly.
         RustType::Bool => quote! { self.0.#field },
-        RustType::Primitive(Primitive::F32 | Primitive::F64) => quote! { self.0.#field },
+        RustType::Primitive(Primitive::F64) => quote! { self.0.#field },
+        RustType::Primitive(Primitive::F32) => quote! { self.0.#field.map(|v| v as f64) },
         // String/clone types can clone through directly.
         RustType::String => quote! { self.0.#field.clone() },
         RustType::Option(_) => quote! { self.0.#field.clone() },
