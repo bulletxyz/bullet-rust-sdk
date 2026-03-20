@@ -98,7 +98,7 @@ fn value_conversion(ty: &RustType, expr: &TokenStream, enums: &HashSet<&str>) ->
         RustType::Map(_, _) => quote! { to_json(&#expr) },
         RustType::Named { name, .. } if name == "Value" => quote! { to_json(&#expr) },
         RustType::Named { name, .. } if enums.contains(name.as_str()) => {
-            quote! { format!("{:?}", #expr) }
+            quote! { #expr.to_string() }
         }
         RustType::Named { name, .. } => {
             let w = format_ident!("Wasm{}", name);
