@@ -13,6 +13,7 @@ bullet-ws-interface = { git = "https://github.com/bulletxyz/bullet-ws-interface.
 
 progenitor-client = "0.13"
 reqwest = { version = "0.13", features = ["blocking"] }
+rust_decimal = { version = "1", features = ["serde-with-str"] }
 serde = "1.0.216"
 serde_json = { version = "1.0.133", features = ["preserve_order"] }
 futures = "0.3"
@@ -47,6 +48,7 @@ progenitor = "0.13"
 serde_json = "1.0"
 reqwest = { version = "0.13", features = ["blocking"] }
 openapiv3 = "2"
+schemars = "0.8"
 syn = "2.0"
 prettyplease = "0.2"
 clap = { version = "4", features = ["derive"] }
