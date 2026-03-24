@@ -29,7 +29,9 @@ fn sdk_qualified_path(module_path: &[String], name: &str) -> TokenStream {
 
 /// Check if derives contain Serialize.
 fn has_serialize(derives: &[String]) -> bool {
-    derives.iter().any(|d| d.contains("Serialize"))
+    derives
+        .iter()
+        .any(|d| d == "Serialize" || d.ends_with("::Serialize"))
 }
 
 // ── Struct emission ──────────────────────────────────────────────────────────
