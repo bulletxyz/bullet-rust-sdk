@@ -40,8 +40,8 @@ pub fn js_name(rust_name: &str) -> String {
 /// Map a `RustType` to its wasm-bindgen-compatible type tokens.
 ///
 /// This is the single source of truth for Rust→WASM type mapping.
-/// wasm-bindgen only supports i32/f64 for numbers (JS numbers are IEEE 754 doubles),
-/// so ≤32-bit integers → i32 and 64-bit/floats → f64.
+/// wasm-bindgen maps: ≤32-bit integers → i32, floats → f64,
+/// and 64-bit integers → i64/u64 (BigInt in JS) to avoid mantissa precision loss.
 fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
     match ty {
         RustType::String => quote! { String },
@@ -54,9 +54,9 @@ fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
             | Primitive::U16
             | Primitive::U32,
         ) => quote! { i32 },
-        RustType::Primitive(Primitive::I64 | Primitive::U64 | Primitive::F32 | Primitive::F64) => {
-            quote! { f64 }
-        }
+        RustType::Primitive(Primitive::I64) => quote! { i64 },
+        RustType::Primitive(Primitive::U64) => quote! { u64 },
+        RustType::Primitive(Primitive::F32 | Primitive::F64) => quote! { f64 },
         RustType::Map(_, _) => quote! { String },
         RustType::Named { name, .. } if name == "Value" => quote! { String },
         RustType::Named { name, .. } if enums.contains(name.as_str()) => quote! { String },
@@ -92,7 +92,8 @@ fn value_conversion(ty: &RustType, expr: &TokenStream, enums: &HashSet<&str>) ->
             | Primitive::U16
             | Primitive::U32,
         ) => quote! { #expr as i32 },
-        RustType::Primitive(Primitive::I64 | Primitive::U64 | Primitive::F32 | Primitive::F64) => {
+        RustType::Primitive(Primitive::I64 | Primitive::U64) => quote! { #expr },
+        RustType::Primitive(Primitive::F32 | Primitive::F64) => {
             quote! { #expr as f64 }
         }
         RustType::Map(_, _) => quote! { to_json(&#expr) },
@@ -147,7 +148,9 @@ fn option_getter(
     let body = match inner {
         // Copy types can pass through directly.
         RustType::Bool => quote! { self.0.#field },
-        RustType::Primitive(Primitive::F64) => quote! { self.0.#field },
+        RustType::Primitive(Primitive::F64 | Primitive::I64 | Primitive::U64) => {
+            quote! { self.0.#field }
+        }
         RustType::Primitive(Primitive::F32) => quote! { self.0.#field.map(|v| v as f64) },
         // String/clone types can clone through directly.
         RustType::String => quote! { self.0.#field.clone() },
