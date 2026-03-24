@@ -133,6 +133,42 @@ describe('Decimal arithmetic', () => {
     expect(sum.toString()).toBe('0.3');
     expect(sum.eq(new Decimal('0.3'))).toBe(true);
   });
+
+  test('checkedAdd returns undefined on overflow', () => {
+    const a = new Decimal('1.5');
+    const b = new Decimal('2.5');
+    const result = a.checkedAdd(b);
+    expect(result).toBeDefined();
+    expect(result!.toString()).toBe('4.0');
+  });
+
+  test('checkedSub', () => {
+    const result = new Decimal('5').checkedSub(new Decimal('3'));
+    expect(result).toBeDefined();
+    expect(result!.toString()).toBe('2');
+  });
+
+  test('checkedMul', () => {
+    const result = new Decimal('3').checkedMul(new Decimal('4'));
+    expect(result).toBeDefined();
+    expect(result!.toString()).toBe('12');
+  });
+
+  test('checkedDiv returns undefined for zero', () => {
+    const result = new Decimal('1').checkedDiv(Decimal.zero());
+    expect(result).toBeUndefined();
+  });
+
+  test('checkedDiv returns value for valid division', () => {
+    const result = new Decimal('10').checkedDiv(new Decimal('4'));
+    expect(result).toBeDefined();
+    expect(result!.eq(new Decimal('2.5'))).toBe(true);
+  });
+
+  test('checkedRem returns undefined for zero', () => {
+    const result = new Decimal('1').checkedRem(Decimal.zero());
+    expect(result).toBeUndefined();
+  });
 });
 
 // ── Rounding ────────────────────────────────────────────────────────────────
@@ -162,6 +198,24 @@ describe('Decimal rounding', () => {
     expect(new Decimal('1.23').scale()).toBe(2);
     expect(new Decimal('42').scale()).toBe(0);
     expect(new Decimal('1.23000').scale()).toBe(5);
+  });
+
+  test('trunc truncates without rounding', () => {
+    expect(new Decimal('1.239').trunc(2).toString()).toBe('1.23');
+    expect(new Decimal('1.999').trunc(0).toString()).toBe('1');
+    expect(new Decimal('-1.239').trunc(2).toString()).toBe('-1.23');
+  });
+
+  test('fract returns fractional part', () => {
+    expect(new Decimal('1.23').fract().toString()).toBe('0.23');
+    expect(new Decimal('42').fract().toString()).toBe('0');
+    expect(new Decimal('-3.7').fract().toString()).toBe('-0.7');
+  });
+
+  test('normalize strips trailing zeros', () => {
+    expect(new Decimal('1.2300').normalize().toString()).toBe('1.23');
+    expect(new Decimal('100').normalize().toString()).toBe('100');
+    expect(new Decimal('0.0010').normalize().toString()).toBe('0.001');
   });
 });
 
@@ -218,6 +272,13 @@ describe('Decimal predicates', () => {
     expect(Decimal.zero().isPositive()).toBe(false);
     expect(Decimal.zero().isNegative()).toBe(false);
   });
+
+  test('isInteger', () => {
+    expect(new Decimal('42').isInteger()).toBe(true);
+    expect(new Decimal('42.0').isInteger()).toBe(true);
+    expect(new Decimal('42.5').isInteger()).toBe(false);
+    expect(Decimal.zero().isInteger()).toBe(true);
+  });
 });
 
 // ── Conversion ──────────────────────────────────────────────────────────────
@@ -235,6 +296,20 @@ describe('Decimal conversion', () => {
   test('toString matches toJSON', () => {
     const d = new Decimal('99.99');
     expect(d.toString()).toBe(d.toJSON());
+  });
+
+  test('mantissa returns BigInt', () => {
+    const d = new Decimal('1.23');
+    expect(d.mantissa()).toBe(123n);
+
+    const large = new Decimal('999999999999.999999');
+    expect(typeof large.mantissa()).toBe('bigint');
+  });
+
+  test('fromScientific parses scientific notation', () => {
+    expect(Decimal.fromScientific('1.5e3').toString()).toBe('1500');
+    expect(Decimal.fromScientific('2.5e-2').toString()).toBe('0.025');
+    expect(() => Decimal.fromScientific('not_sci')).toThrow();
   });
 });
 

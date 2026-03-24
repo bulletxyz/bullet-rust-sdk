@@ -50,6 +50,14 @@ impl WasmDecimal {
         WasmDecimal(Decimal::ONE)
     }
 
+    /// Parse scientific notation (e.g. `"1.5e3"` → `1500`).
+    #[wasm_bindgen(js_name = fromScientific)]
+    pub fn from_scientific(value: &str) -> Result<WasmDecimal, String> {
+        Decimal::from_scientific(value)
+            .map(WasmDecimal)
+            .map_err(|e| e.to_string())
+    }
+
     // ── Arithmetic ───────────────────────────────────────────────────────
 
     pub fn add(&self, other: &WasmDecimal) -> WasmDecimal {
@@ -86,6 +94,36 @@ impl WasmDecimal {
         WasmDecimal(self.0.abs())
     }
 
+    /// Checked addition. Returns `None` on overflow instead of panicking.
+    #[wasm_bindgen(js_name = checkedAdd)]
+    pub fn checked_add(&self, other: &WasmDecimal) -> Option<WasmDecimal> {
+        self.0.checked_add(other.0).map(WasmDecimal)
+    }
+
+    /// Checked subtraction. Returns `None` on overflow.
+    #[wasm_bindgen(js_name = checkedSub)]
+    pub fn checked_sub(&self, other: &WasmDecimal) -> Option<WasmDecimal> {
+        self.0.checked_sub(other.0).map(WasmDecimal)
+    }
+
+    /// Checked multiplication. Returns `None` on overflow.
+    #[wasm_bindgen(js_name = checkedMul)]
+    pub fn checked_mul(&self, other: &WasmDecimal) -> Option<WasmDecimal> {
+        self.0.checked_mul(other.0).map(WasmDecimal)
+    }
+
+    /// Checked division. Returns `None` on overflow or division by zero.
+    #[wasm_bindgen(js_name = checkedDiv)]
+    pub fn checked_div(&self, other: &WasmDecimal) -> Option<WasmDecimal> {
+        self.0.checked_div(other.0).map(WasmDecimal)
+    }
+
+    /// Checked remainder. Returns `None` on overflow or division by zero.
+    #[wasm_bindgen(js_name = checkedRem)]
+    pub fn checked_rem(&self, other: &WasmDecimal) -> Option<WasmDecimal> {
+        self.0.checked_rem(other.0).map(WasmDecimal)
+    }
+
     // ── Rounding ─────────────────────────────────────────────────────────
 
     /// Round to `dp` decimal places (half-up).
@@ -101,6 +139,21 @@ impl WasmDecimal {
     /// Round up (away from zero) to `dp` decimal places.
     pub fn ceil(&self, dp: u32) -> WasmDecimal {
         WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::AwayFromZero))
+    }
+
+    /// Truncate to `dp` decimal places without rounding.
+    pub fn trunc(&self, dp: u32) -> WasmDecimal {
+        WasmDecimal(self.0.trunc_with_scale(dp))
+    }
+
+    /// Returns the fractional portion (e.g. `1.23` → `0.23`).
+    pub fn fract(&self) -> WasmDecimal {
+        WasmDecimal(self.0.fract())
+    }
+
+    /// Strip trailing zeros (e.g. `1.2300` → `1.23`).
+    pub fn normalize(&self) -> WasmDecimal {
+        WasmDecimal(self.0.normalize())
     }
 
     // ── Comparison ───────────────────────────────────────────────────────
@@ -159,6 +212,12 @@ impl WasmDecimal {
         self.0.is_sign_negative() && !self.0.is_zero()
     }
 
+    /// Returns `true` if the value has no fractional part.
+    #[wasm_bindgen(js_name = isInteger)]
+    pub fn is_integer(&self) -> bool {
+        self.0.is_integer()
+    }
+
     // ── Conversion ───────────────────────────────────────────────────────
 
     /// String representation (e.g. `"1.23"`).
@@ -182,5 +241,10 @@ impl WasmDecimal {
     /// Number of decimal places.
     pub fn scale(&self) -> u32 {
         self.0.scale()
+    }
+
+    /// Returns the raw mantissa as a BigInt.
+    pub fn mantissa(&self) -> i128 {
+        self.0.mantissa()
     }
 }
