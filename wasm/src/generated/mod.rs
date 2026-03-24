@@ -5,6 +5,7 @@
 
 #[allow(clippy::unnecessary_cast, clippy::map_identity)]
 mod inner {
+    use crate::utils::decimal::WasmDecimal;
     include!(concat!(env!("OUT_DIR"), "/progenitor_wrappers.rs"));
 }
 
