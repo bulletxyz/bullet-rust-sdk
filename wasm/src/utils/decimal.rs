@@ -93,14 +93,14 @@ impl WasmDecimal {
         WasmDecimal(self.0.round_dp(dp))
     }
 
-    /// Round down (toward zero) to `dp` decimal places.
+    /// Round down (toward negative infinity) to `dp` decimal places.
     pub fn floor(&self, dp: u32) -> WasmDecimal {
-        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::ToZero))
+        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::ToNegativeInfinity))
     }
 
-    /// Round up (away from zero) to `dp` decimal places.
+    /// Round up (toward positive infinity) to `dp` decimal places.
     pub fn ceil(&self, dp: u32) -> WasmDecimal {
-        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::AwayFromZero))
+        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::ToPositiveInfinity))
     }
 
     // ── Comparison ───────────────────────────────────────────────────────
