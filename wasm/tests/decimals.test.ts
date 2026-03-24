@@ -179,14 +179,14 @@ describe('Decimal rounding', () => {
     expect(new Decimal('1.234').round(2).toString()).toBe('1.23');
   });
 
-  test('floor (toward zero)', () => {
+  test('floor (toward negative infinity)', () => {
     expect(new Decimal('1.239').floor(2).toString()).toBe('1.23');
-    expect(new Decimal('-1.239').floor(2).toString()).toBe('-1.23');
+    expect(new Decimal('-1.239').floor(2).toString()).toBe('-1.24');
   });
 
-  test('ceil (away from zero)', () => {
+  test('ceil (toward positive infinity)', () => {
     expect(new Decimal('1.231').ceil(2).toString()).toBe('1.24');
-    expect(new Decimal('-1.231').ceil(2).toString()).toBe('-1.24');
+    expect(new Decimal('-1.231').ceil(2).toString()).toBe('-1.23');
   });
 
   test('round to 0 decimal places', () => {
