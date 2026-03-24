@@ -1,17 +1,12 @@
 /**
- * Tests for numeric serialization/deserialization across the JS ↔ WASM boundary.
+ * Tests for Decimal type support across the JS ↔ WASM boundary.
  *
- * wasm-bindgen maps Rust numeric types to JS as follows:
- *   - i8..u32  → i32 (JS number)
- *   - i64/u64  → f64 (getters return JS number) or i64 (params accept BigInt)
- *   - f32/f64  → f64 (JS number)
- *
- * These tests verify that:
- * 1. Integer values passed as constructor params arrive correctly in getters
- * 2. Large 64-bit values survive the round-trip through f64 (within precision limits)
- * 3. BigInt params are accepted and values are retrievable via toJSON()
- * 4. Optional numeric fields handle undefined/null correctly
- * 5. Numeric getter values from live API responses match their toJSON() counterparts
+ * Verifies that:
+ * 1. WasmDecimal arithmetic (add, sub, mul, div) produces correct results
+ * 2. Rounding, comparison, and predicate methods work correctly
+ * 3. API responses return Decimal wrappers for decimal-formatted fields
+ * 4. Decimal values from API responses can be used in arithmetic
+ * 5. Decimal ↔ string/number conversions preserve precision
  */
 
 import { jest } from '@jest/globals';
@@ -19,135 +14,233 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const sdk = require('../pkg/node/bullet_rust_sdk_wasm.js') as typeof import('../pkg/node/bullet_rust_sdk_wasm.js');
 
-const {
-  Client,
-  // Struct wrappers with numeric constructor params
-  NewOrderArgs, CancelOrderArgs, NewTwapOrderArgs,
-  OraclePriceUpdateArgs, MarkPriceUpdateArgs,
-  UpdateVaultConfigArgs,
-  UpdatePerpMarketArgs,
-  // Enums needed for constructors
-  Side, OrderType,
-} = sdk;
+const { Client, Decimal } = sdk;
 
 const ENDPOINT =
   process.env.BULLET_API_ENDPOINT ?? 'https://tradingapi.bullet.xyz';
 
 jest.setTimeout(30_000);
 
-// ── i32 params (≤32-bit integers) ───────────────────────────────────────────
+// ── Decimal construction ────────────────────────────────────────────────────
 
-describe('i32 numeric params (number → WASM → number)', () => {
-  test('OraclePriceUpdateArgs preserves asset_id', () => {
-    for (const id of [0, 1, 42, 255, 65535]) {
-      const args = new OraclePriceUpdateArgs(id, '50000.0');
-      expect(args).toBeDefined();
-    }
+describe('Decimal construction', () => {
+  test('from string', () => {
+    const d = new Decimal('1.23456');
+    expect(d.toString()).toBe('1.23456');
   });
 
-  test('MarkPriceUpdateArgs preserves market_id', () => {
-    for (const id of [0, 1, 100]) {
-      const args = new MarkPriceUpdateArgs(id, '50000.0', '0.001');
-      expect(args).toBeDefined();
-    }
+  test('from integer string', () => {
+    const d = new Decimal('42');
+    expect(d.toString()).toBe('42');
   });
 
-  test('boundary i32 values are accepted', () => {
-    // u16 max (common for market_id / asset_id)
-    const u16Max = new OraclePriceUpdateArgs(65535, '1.0');
-    expect(u16Max).toBeDefined();
-
-    // Zero
-    const zero = new OraclePriceUpdateArgs(0, '1.0');
-    expect(zero).toBeDefined();
-  });
-});
-
-// ── BigInt params (64-bit integers) ─────────────────────────────────────────
-
-describe('bigint params (BigInt → WASM → number/BigInt)', () => {
-  test('CancelOrderArgs accepts BigInt order_id', () => {
-    const args = new CancelOrderArgs(123n);
-    expect(args).toBeDefined();
+  test('from negative string', () => {
+    const d = new Decimal('-99.5');
+    expect(d.toString()).toBe('-99.5');
   });
 
-  test('CancelOrderArgs accepts BigInt client_order_id', () => {
-    const args = new CancelOrderArgs(undefined, 456n);
-    expect(args).toBeDefined();
+  test('from zero', () => {
+    const d = new Decimal('0');
+    expect(d.isZero()).toBe(true);
   });
 
-  test('CancelOrderArgs accepts large BigInt values', () => {
-    // Values within u64 range
-    const large = new CancelOrderArgs(9007199254740991n); // Number.MAX_SAFE_INTEGER as BigInt
-    expect(large).toBeDefined();
-
-    const veryLarge = new CancelOrderArgs(18446744073709551615n); // u64::MAX
-    expect(veryLarge).toBeDefined();
+  test('invalid string throws', () => {
+    expect(() => new Decimal('not_a_number')).toThrow();
   });
 
-  test('NewOrderArgs accepts optional BigInt client_order_id', () => {
-    // Without client_order_id
-    const without = new NewOrderArgs('50000.0', '0.1', Side.Bid, OrderType.Limit, false);
-    expect(without).toBeDefined();
-
-    // With client_order_id
-    const withId = new NewOrderArgs('50000.0', '0.1', Side.Bid, OrderType.Limit, false, 42n);
-    expect(withId).toBeDefined();
+  test('Decimal.zero() and Decimal.one()', () => {
+    expect(Decimal.zero().isZero()).toBe(true);
+    expect(Decimal.one().toString()).toBe('1');
   });
 
-  test('NewTwapOrderArgs accepts BigInt duration', () => {
-    const twap = new NewTwapOrderArgs(Side.Bid, '100.0', false, 3600n);
-    expect(twap).toBeDefined();
+  test('fromI64', () => {
+    const d = Decimal.fromI64(BigInt(12345));
+    expect(d.toString()).toBe('12345');
+  });
 
-    // Large duration
-    const longTwap = new NewTwapOrderArgs(Side.Ask, '50.0', true, 86400n);
-    expect(longTwap).toBeDefined();
+  test('fromF64', () => {
+    const d = Decimal.fromF64(3.14);
+    expect(d.toNumber()).toBeCloseTo(3.14);
   });
 });
 
-// ── Optional numeric fields ─────────────────────────────────────────────────
+// ── Arithmetic ──────────────────────────────────────────────────────────────
 
-describe('optional numeric fields', () => {
-  test('CancelOrderArgs with both fields undefined', () => {
-    // At least one should be provided in practice, but the constructor accepts it
-    const args = new CancelOrderArgs();
-    expect(args).toBeDefined();
+describe('Decimal arithmetic', () => {
+  test('add', () => {
+    const a = new Decimal('1.1');
+    const b = new Decimal('2.2');
+    expect(a.add(b).toString()).toBe('3.3');
   });
 
-  test('CancelOrderArgs with null fields', () => {
-    const args = new CancelOrderArgs(null, null);
-    expect(args).toBeDefined();
+  test('sub', () => {
+    const a = new Decimal('5.5');
+    const b = new Decimal('2.3');
+    expect(a.sub(b).toString()).toBe('3.2');
   });
 
-  test('UpdateVaultConfigArgs with optional numeric params', () => {
-    // All params provided
-    const full = new UpdateVaultConfigArgs('1000.0', 24, 10);
-    expect(full).toBeDefined();
-
-    // Optional params as null
-    const partial = new UpdateVaultConfigArgs('1000.0', null, null);
-    expect(partial).toBeDefined();
+  test('mul', () => {
+    const a = new Decimal('3.0');
+    const b = new Decimal('2.5');
+    expect(a.mul(b).toString()).toBe('7.50');
   });
 
-  test('UpdatePerpMarketArgs with optional numeric params', () => {
-    // Only required market_id, rest optional
-    const args = new UpdatePerpMarketArgs(0);
-    expect(args).toBeDefined();
+  test('div', () => {
+    const a = new Decimal('10');
+    const b = new Decimal('4');
+    expect(a.div(b).eq(new Decimal('2.5'))).toBe(true);
+  });
 
-    // With optional numeric fields at the end (max_orders_per_side, max_orders_per_user, max_trigger_orders_per_user)
-    // Intervening string params must be null/undefined
-    const withOpts = new UpdatePerpMarketArgs(
-      0,
-      null, null, null, null, null, null, null, null, null,
-      100, 50, 20,
-    );
-    expect(withOpts).toBeDefined();
+  test('div by zero throws', () => {
+    const a = new Decimal('1');
+    const b = Decimal.zero();
+    expect(() => a.div(b)).toThrow('division by zero');
+  });
+
+  test('rem', () => {
+    const a = new Decimal('10');
+    const b = new Decimal('3');
+    expect(a.rem(b).toString()).toBe('1');
+  });
+
+  test('neg', () => {
+    const a = new Decimal('5.5');
+    expect(a.neg().toString()).toBe('-5.5');
+    expect(a.neg().neg().toString()).toBe('5.5');
+  });
+
+  test('abs', () => {
+    const neg = new Decimal('-42.5');
+    const pos = new Decimal('42.5');
+    expect(neg.abs().toString()).toBe('42.5');
+    expect(pos.abs().toString()).toBe('42.5');
+  });
+
+  test('chained operations', () => {
+    // (10 + 5) * 2 - 3 = 27
+    const result = new Decimal('10')
+      .add(new Decimal('5'))
+      .mul(new Decimal('2'))
+      .sub(new Decimal('3'));
+    expect(result.toString()).toBe('27');
+  });
+
+  test('precision is preserved (no floating point drift)', () => {
+    // Classic floating point failure: 0.1 + 0.2 !== 0.3 in IEEE 754
+    const a = new Decimal('0.1');
+    const b = new Decimal('0.2');
+    const sum = a.add(b);
+    expect(sum.toString()).toBe('0.3');
+    expect(sum.eq(new Decimal('0.3'))).toBe(true);
   });
 });
 
-// ── Live API: numeric getter round-trips ────────────────────────────────────
+// ── Rounding ────────────────────────────────────────────────────────────────
 
-describe('numeric getter values match toJSON() round-trip', () => {
+describe('Decimal rounding', () => {
+  test('round half-up', () => {
+    expect(new Decimal('1.235').round(2).toString()).toBe('1.24');
+    expect(new Decimal('1.234').round(2).toString()).toBe('1.23');
+  });
+
+  test('floor (toward zero)', () => {
+    expect(new Decimal('1.239').floor(2).toString()).toBe('1.23');
+    expect(new Decimal('-1.239').floor(2).toString()).toBe('-1.23');
+  });
+
+  test('ceil (away from zero)', () => {
+    expect(new Decimal('1.231').ceil(2).toString()).toBe('1.24');
+    expect(new Decimal('-1.231').ceil(2).toString()).toBe('-1.24');
+  });
+
+  test('round to 0 decimal places', () => {
+    expect(new Decimal('3.7').round(0).toString()).toBe('4');
+    expect(new Decimal('3.2').round(0).toString()).toBe('3');
+  });
+
+  test('scale returns decimal places', () => {
+    expect(new Decimal('1.23').scale()).toBe(2);
+    expect(new Decimal('42').scale()).toBe(0);
+    expect(new Decimal('1.23000').scale()).toBe(5);
+  });
+});
+
+// ── Comparison ──────────────────────────────────────────────────────────────
+
+describe('Decimal comparison', () => {
+  const a = new Decimal('1.5');
+  const b = new Decimal('2.5');
+  const c = new Decimal('1.5');
+
+  test('eq', () => {
+    expect(a.eq(c)).toBe(true);
+    expect(a.eq(b)).toBe(false);
+  });
+
+  test('gt / gte', () => {
+    expect(b.gt(a)).toBe(true);
+    expect(a.gt(b)).toBe(false);
+    expect(a.gte(c)).toBe(true);
+  });
+
+  test('lt / lte', () => {
+    expect(a.lt(b)).toBe(true);
+    expect(b.lt(a)).toBe(false);
+    expect(a.lte(c)).toBe(true);
+  });
+
+  test('cmp', () => {
+    expect(a.cmp(b)).toBe(-1);
+    expect(b.cmp(a)).toBe(1);
+    expect(a.cmp(c)).toBe(0);
+  });
+
+  test('min / max', () => {
+    expect(a.min(b).toString()).toBe('1.5');
+    expect(a.max(b).toString()).toBe('2.5');
+  });
+});
+
+// ── Predicates ──────────────────────────────────────────────────────────────
+
+describe('Decimal predicates', () => {
+  test('isZero', () => {
+    expect(Decimal.zero().isZero()).toBe(true);
+    expect(new Decimal('0.0').isZero()).toBe(true);
+    expect(new Decimal('1').isZero()).toBe(false);
+  });
+
+  test('isPositive / isNegative', () => {
+    expect(new Decimal('5').isPositive()).toBe(true);
+    expect(new Decimal('5').isNegative()).toBe(false);
+    expect(new Decimal('-5').isPositive()).toBe(false);
+    expect(new Decimal('-5').isNegative()).toBe(true);
+    expect(Decimal.zero().isPositive()).toBe(false);
+    expect(Decimal.zero().isNegative()).toBe(false);
+  });
+});
+
+// ── Conversion ──────────────────────────────────────────────────────────────
+
+describe('Decimal conversion', () => {
+  test('toNumber converts to f64', () => {
+    expect(new Decimal('3.14').toNumber()).toBeCloseTo(3.14);
+  });
+
+  test('toJSON returns string', () => {
+    const d = new Decimal('123.456');
+    expect(d.toJSON()).toBe('123.456');
+  });
+
+  test('toString matches toJSON', () => {
+    const d = new Decimal('99.99');
+    expect(d.toString()).toBe(d.toJSON());
+  });
+});
+
+// ── Live API: Decimal getters ───────────────────────────────────────────────
+
+describe('API responses return Decimal wrappers', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let client: any;
 
@@ -155,191 +248,88 @@ describe('numeric getter values match toJSON() round-trip', () => {
     client = await Client.connect(ENDPOINT);
   });
 
-  test('TimeResponse.serverTime is a positive integer that matches JSON', async () => {
-    const resp = await client.time();
-    const serverTime = resp.serverTime;
+  test('PriceTicker.price is a Decimal', async () => {
+    const tickers = await client.tickerPrice();
+    expect(tickers.length).toBeGreaterThan(0);
 
-    expect(typeof serverTime).toBe('number');
-    expect(Number.isFinite(serverTime)).toBe(true);
-    expect(serverTime).toBeGreaterThan(0);
-    // Should be an integer (millisecond timestamp)
-    expect(Number.isInteger(serverTime)).toBe(true);
+    const t = tickers[0];
+    const price = t.price;
 
-    // Getter must match the toJSON() value
-    const parsed = JSON.parse(resp.toJSON());
-    expect(serverTime).toBe(parsed.serverTime);
+    // Should be a Decimal wrapper, not a plain string or number
+    expect(typeof price.toString()).toBe('string');
+    expect(typeof price.toNumber()).toBe('number');
+    expect(Number.isFinite(price.toNumber())).toBe(true);
+    expect(price.toNumber()).toBeGreaterThan(0);
+
+    // Decimal arithmetic should work on it
+    const doubled = price.add(price);
+    expect(doubled.eq(price.mul(new Decimal('2')))).toBe(true);
   });
 
-  test('Asset numeric getters match JSON', async () => {
-    const info = await client.exchangeInfo();
-    const assets = info.assets;
-    expect(assets.length).toBeGreaterThan(0);
+  test('PriceTicker arithmetic: sum of all prices', async () => {
+    const tickers = await client.tickerPrice();
+    expect(tickers.length).toBeGreaterThan(0);
 
-    for (const asset of assets) {
-      const assetId = asset.assetId;
-      const decimals = asset.decimals;
-
-      expect(typeof assetId).toBe('number');
-      expect(typeof decimals).toBe('number');
-      expect(Number.isInteger(assetId)).toBe(true);
-      expect(Number.isInteger(decimals)).toBe(true);
-      expect(assetId).toBeGreaterThanOrEqual(0);
-      expect(decimals).toBeGreaterThanOrEqual(0);
-
-      // Round-trip through JSON
-      const parsed = JSON.parse(asset.toJSON());
-      expect(assetId).toBe(parsed.assetId);
-      expect(decimals).toBe(parsed.decimals);
+    // Sum all prices using Decimal arithmetic
+    let sum = Decimal.zero();
+    for (const t of tickers) {
+      sum = sum.add(t.price);
     }
+
+    // Sum should be positive
+    expect(sum.gt(Decimal.zero())).toBe(true);
+
+    // Average price
+    const count = new Decimal(tickers.length.toString());
+    const avg = sum.div(count);
+    expect(avg.gt(Decimal.zero())).toBe(true);
   });
 
-  test('TradingSymbol numeric getters match JSON', async () => {
-    const info = await client.exchangeInfo();
-    const symbols = info.symbols;
-    expect(symbols.length).toBeGreaterThan(0);
-
-    const sym = symbols[0];
-    const numericGetters: [string, string][] = [
-      ['marketId', 'marketId'],
-      ['pricePrecision', 'pricePrecision'],
-      ['quantityPrecision', 'quantityPrecision'],
-      ['baseAssetPrecision', 'baseAssetPrecision'],
-      ['quotePrecision', 'quotePrecision'],
-      ['settlePlan', 'settlePlan'],
-      ['deliveryDate', 'deliveryDate'],
-      ['onboardDate', 'onboardDate'],
-    ];
-
-    const parsed = JSON.parse(sym.toJSON());
-
-    for (const [getter, jsonKey] of numericGetters) {
-      const value = (sym as Record<string, unknown>)[getter];
-      expect(typeof value).toBe('number');
-      expect(Number.isFinite(value as number)).toBe(true);
-      // Getter value should match the JSON representation
-      expect(value).toBe(parsed[jsonKey]);
-    }
-  });
-
-  test('RollupConstants numeric getters match JSON', async () => {
-    const c = await client.constants();
-    const parsed = JSON.parse(c.toJSON());
-
-    expect(typeof c.chainId).toBe('number');
-    expect(typeof c.hyperlaneDomain).toBe('number');
-    expect(Number.isFinite(c.chainId)).toBe(true);
-    expect(Number.isFinite(c.hyperlaneDomain)).toBe(true);
-
-    expect(c.chainId).toBe(parsed.chain_id);
-    expect(c.hyperlaneDomain).toBe(parsed.hyperlane_domain);
-  });
-
-  test('RateLimit numeric getters match JSON', async () => {
-    const info = await client.exchangeInfo();
-    const limits = info.rateLimits;
-    if (limits.length === 0) return;
-
-    const rl = limits[0];
-    const parsed = JSON.parse(rl.toJSON());
-
-    expect(typeof rl.intervalNum).toBe('number');
-    expect(typeof rl.limit).toBe('number');
-    expect(Number.isInteger(rl.intervalNum)).toBe(true);
-    expect(Number.isInteger(rl.limit)).toBe(true);
-
-    expect(rl.intervalNum).toBe(parsed.intervalNum);
-    expect(rl.limit).toBe(parsed.limit);
-  });
-
-  test('Bracket numeric getters match JSON', async () => {
-    const brackets = await client.leverageBracket();
-    if (brackets.length === 0) return;
-
-    const lb = brackets[0];
-    if (lb.brackets.length === 0) return;
-
-    const b = lb.brackets[0];
-    const parsed = JSON.parse(b.toJSON());
-
-    const numericGetters: [string, string][] = [
-      ['bracket', 'bracket'],
-      ['initialLeverage', 'initialLeverage'],
-      ['notionalCap', 'notionalCap'],
-      ['notionalFloor', 'notionalFloor'],
-      ['maintMarginRatio', 'maintMarginRatio'],
-      ['cum', 'cum'],
-    ];
-
-    for (const [getter, jsonKey] of numericGetters) {
-      const value = (b as Record<string, unknown>)[getter];
-      expect(typeof value).toBe('number');
-      expect(Number.isFinite(value as number)).toBe(true);
-      expect(value).toBe(parsed[jsonKey]);
-    }
-  });
-
-  test('OrderBook timestamp getters are valid numbers matching JSON', async () => {
+  test('Trade price * qty = quoteQty', async () => {
     const tickers = await client.tickerPrice();
     const symbol = tickers[0]?.symbol;
     if (!symbol) return;
 
-    const ob = await client.orderBook(undefined, symbol);
-    const parsed = JSON.parse(ob.toJSON());
+    const trades = await client.recentTrades(undefined, symbol);
+    if (trades.length === 0) return;
 
-    // E and T are i64 timestamps
-    expect(typeof ob.E).toBe('number');
-    expect(typeof ob.T).toBe('number');
-    expect(typeof ob.lastUpdateId).toBe('number');
+    const trade = trades[0];
+    const computed = trade.price.mul(trade.qty);
+    const reported = trade.quoteQty;
 
-    expect(Number.isFinite(ob.E)).toBe(true);
-    expect(Number.isFinite(ob.T)).toBe(true);
-    expect(Number.isFinite(ob.lastUpdateId)).toBe(true);
-
-    expect(ob.E).toBe(parsed.E);
-    expect(ob.T).toBe(parsed.T);
-    expect(ob.lastUpdateId).toBe(parsed.lastUpdateId);
+    // Should match exactly or very closely
+    const diff = computed.sub(reported).abs();
+    const tolerance = reported.abs().mul(new Decimal('0.0001'));
+    expect(diff.lte(tolerance)).toBe(true);
   });
 
-  test('PriceTicker.time getter matches JSON', async () => {
+  test('BorrowLendPool decimal fields are Decimals with arithmetic', async () => {
+    const pools = await client.borrowLendPools();
+    if (pools.length === 0) return;
+
+    const p = pools[0];
+
+    // These fields should be Decimals
+    const available = p.availableAmount;
+    const borrowed = p.borrowedAmount;
+
+    expect(typeof available.toString()).toBe('string');
+    expect(typeof borrowed.toString()).toBe('string');
+
+    // Both should be non-negative
+    expect(available.gte(Decimal.zero())).toBe(true);
+    expect(borrowed.gte(Decimal.zero())).toBe(true);
+  });
+
+  test('Decimal toJSON round-trips through JSON.parse', async () => {
     const tickers = await client.tickerPrice();
     expect(tickers.length).toBeGreaterThan(0);
 
     const t = tickers[0];
     const parsed = JSON.parse(t.toJSON());
 
-    expect(typeof t.time).toBe('number');
-    expect(Number.isFinite(t.time)).toBe(true);
-    expect(t.time).toBeGreaterThan(0);
-    expect(t.time).toBe(parsed.time);
-  });
-
-  test('BorrowLendPoolResponse numeric getters match JSON', async () => {
-    const pools = await client.borrowLendPools();
-    if (pools.length === 0) return;
-
-    const p = pools[0];
-    const parsed = JSON.parse(p.toJSON());
-
-    expect(typeof p.assetId).toBe('number');
-    expect(typeof p.interestFeeTenthBps).toBe('number');
-    expect(typeof p.lastUpdateTimestamp).toBe('number');
-
-    expect(p.assetId).toBe(parsed.assetId);
-    expect(p.interestFeeTenthBps).toBe(parsed.interestFeeTenthBps);
-    expect(p.lastUpdateTimestamp).toBe(parsed.lastUpdateTimestamp);
-  });
-
-  test('optional numeric getter LeverageBracket.notionalCoef', async () => {
-    const brackets = await client.leverageBracket();
-    if (brackets.length === 0) return;
-
-    for (const lb of brackets) {
-      const coef = lb.notionalCoef;
-      // Should be either undefined or a finite number
-      if (coef !== undefined && coef !== null) {
-        expect(typeof coef).toBe('number');
-        expect(Number.isFinite(coef)).toBe(true);
-      }
-    }
+    // The price in JSON should be a string matching the Decimal's toString
+    const priceFromJson = new Decimal(parsed.price);
+    expect(priceFromJson.eq(t.price)).toBe(true);
   });
 });

@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 const sdk = require('../pkg/node/bullet_rust_sdk_wasm.js') as typeof import('../pkg/node/bullet_rust_sdk_wasm.js');
 
 const {
-  Client,
+  Client, Decimal,
   // Enums
   TxResult, TxStatus, HealthState,
   // Type wrappers — we only check they're exported; instances come from API calls
@@ -195,7 +195,7 @@ describe('struct getters via live API', () => {
 
     const t = tickers[0];
     expect(typeof t.symbol).toBe('string');
-    expect(typeof t.price).toBe('string');
+    expect(t.price).toBeInstanceOf(Decimal);
     expect(typeof t.time).toBe('number');
     expect(t.time).toBeGreaterThan(0);
   });
@@ -311,9 +311,9 @@ describe('struct getters via live API', () => {
     if (trades.length > 0) {
       const t = trades[0];
       expect(typeof t.id).toBe('number');
-      expect(typeof t.price).toBe('string');
-      expect(typeof t.qty).toBe('string');
-      expect(typeof t.quoteQty).toBe('string');
+      expect(t.price).toBeInstanceOf(Decimal);
+      expect(t.qty).toBeInstanceOf(Decimal);
+      expect(t.quoteQty).toBeInstanceOf(Decimal);
       expect(typeof t.time).toBe('number');
       expect(typeof t.isBuyerMaker).toBe('boolean');
     }
@@ -346,16 +346,16 @@ describe('struct getters via live API', () => {
       expect(typeof p.asset).toBe('string');
       expect(typeof p.assetId).toBe('number');
       expect(typeof p.isActive).toBe('boolean');
-      expect(typeof p.borrowedAmount).toBe('string');
-      expect(typeof p.availableAmount).toBe('string');
+      expect(p.borrowedAmount).toBeInstanceOf(Decimal);
+      expect(p.availableAmount).toBeInstanceOf(Decimal);
 
       // Nested RateParams struct
       const rp = p.rateParams;
       expect(rp).toBeDefined();
-      expect(typeof rp.minBorrowRate).toBe('string');
-      expect(typeof rp.maxBorrowRate).toBe('string');
-      expect(typeof rp.optimalBorrowRate).toBe('string');
-      expect(typeof rp.optimalUtilisationRate).toBe('string');
+      expect(rp.minBorrowRate).toBeInstanceOf(Decimal);
+      expect(rp.maxBorrowRate).toBeInstanceOf(Decimal);
+      expect(rp.optimalBorrowRate).toBeInstanceOf(Decimal);
+      expect(rp.optimalUtilisationRate).toBeInstanceOf(Decimal);
     }
   });
 });
