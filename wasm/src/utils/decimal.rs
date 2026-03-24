@@ -32,6 +32,7 @@ impl WasmDecimal {
     }
 
     /// Create a decimal from a JS number (f64). May lose precision.
+    /// To prevent precision loss, use the string constructor instead: `new Decimal("3.14")`.
     #[wasm_bindgen(js_name = fromF64)]
     pub fn from_f64(value: f64) -> Result<WasmDecimal, String> {
         Decimal::from_f64(value)
