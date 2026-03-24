@@ -1,7 +1,7 @@
-mod r#enum;
-mod r#impl;
-mod r#struct;
+mod enum_extraction;
+mod impl_extraction;
+mod struct_extraction;
 
-pub use r#enum::extract_enum;
-pub use r#impl::extract_impl;
-pub use r#struct::extract_struct;
+pub use enum_extraction::extract_enum;
+pub use impl_extraction::extract_impl;
+pub use struct_extraction::extract_struct;
