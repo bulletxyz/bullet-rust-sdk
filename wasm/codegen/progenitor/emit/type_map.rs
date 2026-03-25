@@ -37,26 +37,32 @@ pub fn js_name(rust_name: &str) -> String {
 
 // ── Core Type Helpers ────────────────────────────────────────────────────────
 
+/// Map a `Primitive` to its Rust type tokens.
+/// wasm-bindgen handles all JS conversions automatically.
+fn primitive_type(p: &Primitive) -> TokenStream {
+    match p {
+        Primitive::I8 => quote! { i8 },
+        Primitive::I16 => quote! { i16 },
+        Primitive::I32 => quote! { i32 },
+        Primitive::U8 => quote! { u8 },
+        Primitive::U16 => quote! { u16 },
+        Primitive::U32 => quote! { u32 },
+        Primitive::I64 => quote! { i64 },
+        Primitive::U64 => quote! { u64 },
+        Primitive::F32 => quote! { f32 },
+        Primitive::F64 => quote! { f64 },
+    }
+}
+
 /// Map a `RustType` to its wasm-bindgen-compatible type tokens.
 ///
 /// This is the single source of truth for Rust→WASM type mapping.
-/// wasm-bindgen maps: ≤32-bit integers → i32, floats → f64,
-/// and 64-bit integers → i64/u64 (BigInt in JS) to avoid mantissa precision loss.
+/// Primitives pass through directly — wasm-bindgen handles JS conversion automatically.
 fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
     match ty {
         RustType::String => quote! { String },
         RustType::Bool => quote! { bool },
-        RustType::Primitive(
-            Primitive::I8
-            | Primitive::I16
-            | Primitive::I32
-            | Primitive::U8
-            | Primitive::U16
-            | Primitive::U32,
-        ) => quote! { i32 },
-        RustType::Primitive(Primitive::I64) => quote! { i64 },
-        RustType::Primitive(Primitive::U64) => quote! { u64 },
-        RustType::Primitive(Primitive::F32 | Primitive::F64) => quote! { f64 },
+        RustType::Primitive(p) => primitive_type(p),
         RustType::Map(_, _) => quote! { String },
         RustType::Named { name, .. } if name == "Value" => quote! { String },
         RustType::Named { name, .. } if enums.contains(name.as_str()) => quote! { String },
@@ -83,19 +89,7 @@ fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
 fn value_conversion(ty: &RustType, expr: &TokenStream, enums: &HashSet<&str>) -> TokenStream {
     match ty {
         RustType::String => quote! { #expr.clone() },
-        RustType::Bool => quote! { #expr },
-        RustType::Primitive(
-            Primitive::I8
-            | Primitive::I16
-            | Primitive::I32
-            | Primitive::U8
-            | Primitive::U16
-            | Primitive::U32,
-        ) => quote! { #expr as i32 },
-        RustType::Primitive(Primitive::I64 | Primitive::U64) => quote! { #expr },
-        RustType::Primitive(Primitive::F32 | Primitive::F64) => {
-            quote! { #expr as f64 }
-        }
+        RustType::Bool | RustType::Primitive(_) => quote! { #expr },
         RustType::Map(_, _) => quote! { to_json(&#expr) },
         RustType::Named { name, .. } if name == "Value" => quote! { to_json(&#expr) },
         RustType::Named { name, .. } if enums.contains(name.as_str()) => {
@@ -146,12 +140,8 @@ fn option_getter(
     let inner_ret = wasm_type(inner, enums);
 
     let body = match inner {
-        // Copy types can pass through directly.
-        RustType::Bool => quote! { self.0.#field },
-        RustType::Primitive(Primitive::F64 | Primitive::I64 | Primitive::U64) => {
-            quote! { self.0.#field }
-        }
-        RustType::Primitive(Primitive::F32) => quote! { self.0.#field.map(|v| v as f64) },
+        // Copy types pass through directly.
+        RustType::Bool | RustType::Primitive(_) => quote! { self.0.#field },
         // String/clone types can clone through directly.
         RustType::String => quote! { self.0.#field.clone() },
         RustType::Option(_) => quote! { self.0.#field.clone() },
@@ -205,22 +195,6 @@ fn vec_getter(
 
 // ── Parameter Mapping ────────────────────────────────────────────────────────
 
-/// Map a primitive to its wasm-bindgen parameter type.
-///
-/// Differs from getter mapping: params use `i64` for 64-bit integers (BigInt support)
-/// instead of `f64`.
-fn wasm_param_primitive(p: &Primitive) -> TokenStream {
-    match p {
-        Primitive::I8
-        | Primitive::I16
-        | Primitive::I32
-        | Primitive::U8
-        | Primitive::U16
-        | Primitive::U32 => quote! { i32 },
-        Primitive::I64 | Primitive::U64 => quote! { i64 },
-        Primitive::F32 | Primitive::F64 => quote! { f64 },
-    }
-}
 
 /// Map a method parameter type to its WASM declaration type and call argument expression.
 ///
@@ -267,13 +241,13 @@ pub fn param_mapping(ty: &RustType, name: &Ident) -> (TokenStream, TokenStream) 
             let RustType::Primitive(p) = inner.as_ref() else {
                 unreachable!()
             };
-            let wasm_ty = wasm_param_primitive(p);
+            let wasm_ty = primitive_type(p);
             (quote! { Option<#wasm_ty> }, quote! { #name })
         }
 
         // Primitives
         RustType::Primitive(p) => {
-            let wasm_ty = wasm_param_primitive(p);
+            let wasm_ty = primitive_type(p);
             (quote! { #wasm_ty }, quote! { #name })
         }
 
