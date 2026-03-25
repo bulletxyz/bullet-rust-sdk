@@ -34,29 +34,6 @@ fn has_serialize(derives: &[String]) -> bool {
         .any(|d| d == "Serialize" || d.ends_with("::Serialize"))
 }
 
-// ── SDK Path Helper ──────────────────────────────────────────────────────────
-
-/// Build a fully-qualified SDK path from a module path.
-///
-/// Module paths are relative to the progenitor codegen root (e.g., `["types", "error"]`).
-/// We emit `bullet_rust_sdk::codegen::<module_path>::<name>`.
-fn sdk_qualified_path(module_path: &[String], name: &str) -> TokenStream {
-    let name_ident = format_ident!("{}", name);
-
-    // Build the full path by chaining segments with ::
-    let mut tokens = quote! { bullet_rust_sdk::codegen };
-    for seg in module_path {
-        let seg_ident = format_ident!("{}", seg);
-        tokens = quote! { #tokens::#seg_ident };
-    }
-    quote! { #tokens::#name_ident }
-}
-
-/// Check if derives contain Serialize.
-fn has_serialize(derives: &[String]) -> bool {
-    derives.iter().any(|d| d.contains("Serialize"))
-}
-
 // ── Struct emission ──────────────────────────────────────────────────────────
 
 /// Emit a wrapper struct with getters for a progenitor type.
