@@ -41,6 +41,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("codegen.rs");
     std::fs::write(&out_path, &content)?;
+
+    // Expose the codegen path to downstream crates via `links` metadata.
+    // Downstream build scripts receive this as DEP_BULLET_RUST_CODEGEN_CODEGEN_PATH.
+    println!("cargo:codegen_path={}", out_path.display());
     Ok(())
 }
 

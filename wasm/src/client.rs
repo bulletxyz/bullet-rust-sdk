@@ -1,9 +1,39 @@
 use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
-use bullet_rust_sdk::Client;
+use bullet_rust_sdk::{Client, Network};
 use wasm_bindgen::prelude::*;
 
 use crate::errors::WasmResult;
 use crate::keypair::WasmKeypair;
+
+/// Known network constants for connecting to Bullet environments.
+///
+/// Use these with `Client.builder().network(Network.Testnet)`,
+/// or pass any custom URL string directly.
+///
+/// # Example
+///
+/// ```js
+/// // Known network
+/// const client = await Client.builder().network(Network.Testnet).build();
+///
+/// // Custom URL
+/// const client = await Client.builder().network("https://custom.example.com").build();
+/// ```
+#[wasm_bindgen(js_name = Network)]
+pub struct WasmNetwork;
+
+#[wasm_bindgen(js_class = Network)]
+impl WasmNetwork {
+    #[wasm_bindgen(getter, js_name = Mainnet)]
+    pub fn mainnet() -> String {
+        "mainnet".to_string()
+    }
+
+    #[wasm_bindgen(getter, js_name = Testnet)]
+    pub fn testnet() -> String {
+        "testnet".to_string()
+    }
+}
 
 /// Full Bullet trading API client (REST + WebSocket).
 ///
@@ -18,7 +48,7 @@ use crate::keypair::WasmKeypair;
 ///
 /// // With defaults for transactions
 /// const client = await Client.builder()
-///     .url("https://tradingapi.bullet.xyz")
+///     .network(Network.Testnet)
 ///     .keypair(myKeypair)
 ///     .maxFee(10_000_000n)
 ///     .build();
@@ -38,7 +68,7 @@ impl WasmTradingApi {
     ///
     /// ```js
     /// const client = await Client.builder()
-    ///     .url("https://tradingapi.bullet.xyz")
+    ///     .network(Network.Testnet)
     ///     .keypair(myKeypair)
     ///     .maxFee(10_000_000n)
     ///     .build();
@@ -54,12 +84,15 @@ impl WasmTradingApi {
         })
     }
 
-    /// Connect to a custom REST endpoint URL.
+    /// Connect to a network by name or custom URL.
     ///
     /// For more options, use `Client.builder()` instead.
-    pub async fn connect(url: &str) -> WasmResult<WasmTradingApi> {
+    pub async fn connect(network: &str) -> WasmResult<WasmTradingApi> {
         Ok(WasmTradingApi {
-            inner: Client::builder().url(url).build().await?,
+            inner: Client::builder()
+                .network(Network::from(network))
+                .build()
+                .await?,
         })
     }
 
@@ -120,7 +153,7 @@ impl WasmTradingApi {
 ///
 /// ```js
 /// const client = await Client.builder()
-///     .url("https://tradingapi.bullet.xyz")
+///     .network(Network.Testnet)
 ///     .keypair(myKeypair)
 ///     .maxFee(10_000_000n)
 ///     .maxPriorityFeeBips(100n)
@@ -128,7 +161,7 @@ impl WasmTradingApi {
 /// ```
 #[wasm_bindgen(js_name = ClientBuilder)]
 pub struct WasmClientBuilder {
-    url: Option<String>,
+    network: Option<String>,
     keypair: Option<WasmKeypair>,
     max_fee: Option<u64>,
     max_priority_fee_bips: Option<u64>,
@@ -138,7 +171,7 @@ pub struct WasmClientBuilder {
 impl WasmClientBuilder {
     fn new() -> Self {
         WasmClientBuilder {
-            url: None,
+            network: None,
             keypair: None,
             max_fee: None,
             max_priority_fee_bips: None,
@@ -149,9 +182,12 @@ impl WasmClientBuilder {
 
 #[wasm_bindgen(js_class = ClientBuilder)]
 impl WasmClientBuilder {
-    /// Set the API endpoint URL (required).
-    pub fn url(mut self, url: &str) -> WasmClientBuilder {
-        self.url = Some(url.to_string());
+    /// Set the network to connect to (required).
+    ///
+    /// Accepts a known network name (`Network.Mainnet`, `Network.Testnet`)
+    /// or a custom URL string.
+    pub fn network(mut self, network: &str) -> WasmClientBuilder {
+        self.network = Some(network.to_string());
         self
     }
 
@@ -185,7 +221,7 @@ impl WasmClientBuilder {
 
     /// Build the client and connect to the API.
     pub async fn build(self) -> WasmResult<WasmTradingApi> {
-        let url = self.url.ok_or("url is required")?;
+        let network: Network = self.network.ok_or("network is required")?.as_str().into();
 
         let keypair = self.keypair.map(|k| k.inner);
         let max_fee = self.max_fee.map(|f| Amount(f as u128));
@@ -193,7 +229,7 @@ impl WasmClientBuilder {
         let gas_limit = self.gas_limit.map(Gas);
 
         let inner = Client::builder()
-            .url(&url)
+            .network(network)
             .maybe_keypair(keypair)
             .maybe_max_fee(max_fee)
             .maybe_max_priority_fee_bips(max_priority_fee_bips)

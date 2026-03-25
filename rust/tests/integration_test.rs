@@ -1,6 +1,6 @@
 #![cfg(feature = "integration")]
 
-use bullet_rust_sdk::{Client, MAINNET_URL};
+use bullet_rust_sdk::{Client, Network};
 
 /// Test fixture that provides a configured client and handles cleanup
 ///
@@ -15,12 +15,16 @@ struct TestFixture {
 impl TestFixture {
     /// Create a new test fixture with setup
     async fn new(test_name: &'static str) -> Self {
-        let endpoint = std::env::var("BULLET_API_ENDPOINT").unwrap_or(MAINNET_URL.to_string());
+        let network = std::env::var("BULLET_API_ENDPOINT")
+            .map(|e| Network::from(e.as_str()))
+            .unwrap_or(Network::Mainnet);
 
         println!("=== Setting up test: {test_name} ===");
-        println!("Testing against API endpoint: {endpoint}");
+        println!("Testing against API endpoint: {}", network.url());
 
-        let client = Client::new(&endpoint, None)
+        let client = Client::builder()
+            .network(network)
+            .build()
             .await
             .expect("could not connect");
 
