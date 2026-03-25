@@ -33,7 +33,6 @@ impl WasmNetwork {
     pub fn testnet() -> String {
         "testnet".to_string()
     }
-
 }
 
 /// Full Bullet trading API client (REST + WebSocket).
@@ -185,7 +184,7 @@ impl WasmClientBuilder {
 impl WasmClientBuilder {
     /// Set the network to connect to (required).
     ///
-    /// Accepts a known network name (`Network.Mainnet`, `Network.Testnet`, `Network.Staging`)
+    /// Accepts a known network name (`Network.Mainnet`, `Network.Testnet`)
     /// or a custom URL string.
     pub fn network(mut self, network: &str) -> WasmClientBuilder {
         self.network = Some(network.to_string());
@@ -222,11 +221,7 @@ impl WasmClientBuilder {
 
     /// Build the client and connect to the API.
     pub async fn build(self) -> WasmResult<WasmTradingApi> {
-        let network: Network = self
-            .network
-            .ok_or("network is required")?
-            .as_str()
-            .into();
+        let network: Network = self.network.ok_or("network is required")?.as_str().into();
 
         let keypair = self.keypair.map(|k| k.inner);
         let max_fee = self.max_fee.map(|f| Amount(f as u128));
