@@ -2,6 +2,8 @@ use rust_decimal::prelude::*;
 use rust_decimal::Decimal;
 use wasm_bindgen::prelude::*;
 
+use crate::errors::WasmResult;
+
 /// WASM wrapper for `rust_decimal::Decimal`.
 ///
 /// Provides arbitrary-precision decimal arithmetic for JS. All arithmetic
@@ -19,10 +21,8 @@ impl WasmDecimal {
 
     /// Parse a decimal from a string (e.g. `"1.23456"`).
     #[wasm_bindgen(constructor)]
-    pub fn new(value: &str) -> Result<WasmDecimal, String> {
-        Decimal::from_str(value)
-            .map(WasmDecimal)
-            .map_err(|e| e.to_string())
+    pub fn new(value: &str) -> WasmResult<WasmDecimal> {
+        Ok(Decimal::from_str(value).map(WasmDecimal)?)
     }
 
     /// Create a decimal from an integer.
@@ -34,10 +34,10 @@ impl WasmDecimal {
     /// Create a decimal from a JS number (f64). May lose precision.
     /// To prevent precision loss, use the string constructor instead: `new Decimal("3.14")`.
     #[wasm_bindgen(js_name = fromF64)]
-    pub fn from_f64(value: f64) -> Result<WasmDecimal, String> {
+    pub fn from_f64(value: f64) -> WasmResult<WasmDecimal> {
         Decimal::from_f64(value)
             .map(WasmDecimal)
-            .ok_or_else(|| format!("cannot convert {value} to Decimal"))
+            .ok_or_else(|| format!("cannot convert {value} to Decimal").into())
     }
 
     /// The constant `0`.
@@ -52,10 +52,8 @@ impl WasmDecimal {
 
     /// Parse scientific notation (e.g. `"1.5e3"` → `1500`).
     #[wasm_bindgen(js_name = fromScientific)]
-    pub fn from_scientific(value: &str) -> Result<WasmDecimal, String> {
-        Decimal::from_scientific(value)
-            .map(WasmDecimal)
-            .map_err(|e| e.to_string())
+    pub fn from_scientific(value: &str) -> WasmResult<WasmDecimal> {
+        Ok(Decimal::from_scientific(value).map(WasmDecimal)?)
     }
 
     // ── Arithmetic ───────────────────────────────────────────────────────
@@ -72,16 +70,16 @@ impl WasmDecimal {
         WasmDecimal(self.0 * other.0)
     }
 
-    pub fn div(&self, other: &WasmDecimal) -> Result<WasmDecimal, String> {
+    pub fn div(&self, other: &WasmDecimal) -> WasmResult<WasmDecimal> {
         if other.0.is_zero() {
-            return Err("division by zero".to_string());
+            return Err("division by zero".into());
         }
         Ok(WasmDecimal(self.0 / other.0))
     }
 
-    pub fn rem(&self, other: &WasmDecimal) -> Result<WasmDecimal, String> {
+    pub fn rem(&self, other: &WasmDecimal) -> WasmResult<WasmDecimal> {
         if other.0.is_zero() {
-            return Err("division by zero".to_string());
+            return Err("division by zero".into());
         }
         Ok(WasmDecimal(self.0 % other.0))
     }

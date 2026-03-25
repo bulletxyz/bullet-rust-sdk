@@ -33,6 +33,10 @@ When adding, editing, or deleting any of the following in the Rust crate, the co
 | `ws/client.rs`             | `ws/client.rs`                   |
 | `ws/topics.rs`             | `ws/topics.rs`                   |
 
+### WASM Error Handling
+
+All fallible functions in the WASM crate **must** return `WasmResult<T>` (defined in `wasm/src/errors.rs`), never `Result<T, String>` or `Result<T, JsValue>`. `WasmError` has a blanket `From<E: Display>` impl so `?` works automatically with any error type.
+
 ### WASM Naming Conventions
 
 - Rust `snake_case` methods become `camelCase` in WASM (via `#[wasm_bindgen(js_name = ...)]`)
@@ -46,7 +50,7 @@ The Rust SDK uses `bon` for builders which creates type-state patterns. In WASM,
 ```rust
 // WASM builder pattern
 let inner = Client::builder()
-    .url(&url)
+    .network(network)
     .maybe_keypair(keypair)
     .maybe_max_fee(max_fee)
     .build()
