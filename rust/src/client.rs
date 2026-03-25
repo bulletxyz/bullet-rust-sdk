@@ -45,16 +45,69 @@ pub struct Client {
     gas_limit: Option<Gas>,
 }
 
-pub const MAINNET_URL: &str = "https://tradingapi.bullet.xyz";
+/// Known network environments.
+///
+/// Use with the Client builder to connect to a known network by name,
+/// or provide a custom URL.
+///
+/// # Example
+///
+/// ```ignore
+/// use bullet_rust_sdk::{Client, Network};
+///
+/// // Known network
+/// let client = Client::builder().network(Network::Testnet).build().await?;
+///
+/// // Custom URL (auto-converts via From<&str>)
+/// let client = Client::builder().network("https://custom.example.com").build().await?;
+/// ```
+#[derive(Debug, Clone)]
+pub enum Network {
+    Mainnet,
+    Testnet,
+    Staging,
+    Custom(String),
+}
+
+impl Network {
+    /// Get the REST API URL for this network.
+    pub fn url(&self) -> &str {
+        match self {
+            Network::Mainnet => "https://tradingapi.bullet.xyz",
+            Network::Testnet => "https://tradingapi.testnet.bullet.xyz",
+            Network::Staging => "https://tradingapi.staging.bullet.xyz",
+            Network::Custom(url) => url,
+        }
+    }
+}
+
+impl From<&str> for Network {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "mainnet" => Network::Mainnet,
+            "testnet" => Network::Testnet,
+            "staging" => Network::Staging,
+            _ => Network::Custom(s.to_string()),
+        }
+    }
+}
+
+impl From<String> for Network {
+    fn from(s: String) -> Self {
+        Network::from(s.as_str())
+    }
+}
+
 pub const MAX_FEE: &'static Amount = &Amount(10000000000_u128);
 pub const MAX_PRIORITY_FEE_BIPS: &'static PriorityFeeBips = &PriorityFeeBips(0);
 
 #[bon]
 impl Client {
-    /// Create a new Client from a URL.
+    /// Create a new Client connected to a network.
     #[builder]
     pub async fn new(
-        url: &str,
+        #[builder(into)]
+        network: Network,
         reqwest_client: Option<reqwest::Client>,
         max_priority_fee_bips: Option<PriorityFeeBips>,
         max_fee: Option<Amount>,
@@ -64,6 +117,7 @@ impl Client {
         use bullet_exchange_interface::schema::{trim, Schema, SchemaFile};
         use bullet_exchange_interface::transaction::Transaction;
 
+        let url = network.url();
         let parsed = Url::parse(url).map_err(|_| SDKError::InvalidNetworkUrl)?;
 
         let (rest_url, ws_url) = match parsed.scheme() {
@@ -152,7 +206,7 @@ impl Client {
     /// # }
     /// ```
     pub async fn mainnet() -> SDKResult<Self> {
-        Self::builder().url(MAINNET_URL).build().await
+        Self::builder().network(Network::Mainnet).build().await
     }
 
     /// Get a reference to the underlying generated client.

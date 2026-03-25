@@ -7,7 +7,7 @@ mod transactions;
 pub mod errors;
 
 // Re-export main types at crate root for ergonomic imports
-pub use client::{Client, MAINNET_URL};
+pub use client::{Client, Network};
 pub use errors::{SDKError, SDKResult, WSErrors};
 pub use keypair::Keypair;
 pub use transaction_builder::Transaction;

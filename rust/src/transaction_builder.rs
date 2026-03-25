@@ -248,15 +248,17 @@ mod tests {
     #[cfg(feature = "integration")]
     mod integration {
         use super::*;
-        use crate::MAINNET_URL;
+        use crate::Network;
         use bullet_exchange_interface::message::PublicAction;
 
         #[tokio::test]
         async fn test_builder_build() {
-            let endpoint = std::env::var("BULLET_API_ENDPOINT").unwrap_or(MAINNET_URL.to_string());
+            let network = std::env::var("BULLET_API_ENDPOINT")
+                .map(|e| Network::from(e.as_str()))
+                .unwrap_or(Network::Mainnet);
 
             let client = Client::builder()
-                .url(&endpoint)
+                .network(network)
                 .build()
                 .await
                 .expect("could not connect");

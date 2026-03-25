@@ -154,13 +154,17 @@ mod tests {
         use bullet_exchange_interface::message::PublicAction;
 
         use crate::types::CallMessage;
-        use crate::{Client, Keypair, MAINNET_URL};
+        use crate::{Client, Keypair, Network};
 
         #[tokio::test]
         async fn test_sign_apply_funding() {
-            let endpoint = std::env::var("BULLET_API_ENDPOINT").unwrap_or(MAINNET_URL.to_string());
+            let network = std::env::var("BULLET_API_ENDPOINT")
+                .map(|e| Network::from(e.as_str()))
+                .unwrap_or(Network::Mainnet);
 
-            let client = Client::new(&endpoint, None)
+            let client = Client::builder()
+                .network(network)
+                .build()
                 .await
                 .expect("could not connect");
             let keypair = Keypair::generate();
