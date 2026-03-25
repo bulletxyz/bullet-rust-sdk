@@ -24,7 +24,7 @@
 pub mod emit;
 pub mod walk;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 // ── Code Model ───────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ use std::collections::HashMap;
 pub struct CodeModel {
     /// All types and impls, keyed by name.
     /// e.g. "Account" → Struct(...), "TxResult" → Enum(...), "Client" → Impl(...)
-    pub items: HashMap<String, TypeInfo>,
+    pub items: BTreeMap<String, TypeInfo>,
 }
 
 /// A top-level item in the code model.

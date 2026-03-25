@@ -15,7 +15,7 @@
 mod extractions;
 mod utils;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use syn::Item;
@@ -38,7 +38,7 @@ pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
     let file = syn::parse_file(&source)
         .unwrap_or_else(|e| panic!("failed to parse progenitor codegen: {e}"));
 
-    let mut code_map = HashMap::new();
+    let mut code_map = BTreeMap::new();
 
     for item in &file.items {
         item_walk(item, &[], &mut code_map)
@@ -47,7 +47,7 @@ pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
     CodeModel { items: code_map }
 }
 
-fn item_walk(item: &Item, module_path: &[String], code_map: &mut HashMap<String, TypeInfo>) {
+fn item_walk(item: &Item, module_path: &[String], code_map: &mut BTreeMap<String, TypeInfo>) {
     match item {
         // We dont want to reimplement traits.
         Item::Impl(imp) if imp.trait_.is_none() => {
