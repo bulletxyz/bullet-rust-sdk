@@ -71,17 +71,17 @@ impl WasmDecimal {
     }
 
     pub fn div(&self, other: &WasmDecimal) -> WasmResult<WasmDecimal> {
-        if other.0.is_zero() {
-            return Err("division by zero".into());
-        }
-        Ok(WasmDecimal(self.0 / other.0))
+        self.0
+            .checked_div(other.0)
+            .map(WasmDecimal)
+            .ok_or_else(|| "division failed (zero or overflow)".into())
     }
 
     pub fn rem(&self, other: &WasmDecimal) -> WasmResult<WasmDecimal> {
-        if other.0.is_zero() {
-            return Err("division by zero".into());
-        }
-        Ok(WasmDecimal(self.0 % other.0))
+        self.0
+            .checked_rem(other.0)
+            .map(WasmDecimal)
+            .ok_or_else(|| "remainder failed (zero or overflow)".into())
     }
 
     pub fn neg(&self) -> WasmDecimal {
