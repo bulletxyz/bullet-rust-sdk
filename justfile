@@ -78,6 +78,29 @@ example-rest:
 example-ws:
     cargo run -p bullet-rust-sdk --example websocket
 
+# Run the Node.js WASM example
+example-node: build-wasm
+    cd examples/node && npm install && npm start
+
+# Run the Deno WASM example
+example-deno: build-wasm
+    cd examples/deno && deno task start
+
+# Run the web WASM example (Next.js + Turbopack)
+example-web: build-wasm
+    cd examples/web && npm install && npm run dev
+
+# Run Node.js WASM example tests
+test-example-node: build-wasm
+    cd examples/node && npm install && npm test
+
+# Run Deno WASM example tests
+test-example-deno: build-wasm
+    cd examples/deno && deno task test
+
+# Run all example tests (Node + Deno)
+test-examples: test-example-node test-example-deno
+
 # ── OpenAPI spec ──────────────────────────────────────────────────────────────
 
 # Fetch and cache the latest OpenAPI spec from mainnet
