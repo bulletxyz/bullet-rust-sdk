@@ -1,3 +1,4 @@
+use schemars::schema::{InstanceType, SchemaObject};
 use serde_json::Value;
 use std::env;
 use std::path::PathBuf;
@@ -22,7 +23,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fix_tuple_schemas(&mut spec);
 
     // Generate client code using progenitor
-    let mut generator = progenitor::Generator::default();
+    let mut settings = progenitor::GenerationSettings::default();
+    settings.with_conversion(
+        SchemaObject {
+            instance_type: Some(InstanceType::String.into()),
+            format: Some("decimal".to_string()),
+            ..Default::default()
+        },
+        "rust_decimal::Decimal",
+        [
+            progenitor::TypeImpl::Display,
+            progenitor::TypeImpl::FromStr,
+        ]
+        .into_iter(),
+    );
+    let mut generator = progenitor::Generator::new(&settings);
 
     // Only keep 200 responses to simplify generated code
     filter_responses(&mut spec);
