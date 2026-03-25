@@ -68,12 +68,19 @@ fn item_walk(item: &Item, module_path: &[String], code_map: &mut BTreeMap<String
             }
         }
         Item::Struct(s) => {
-            if let Some(details) = extract_struct(s, module_path) {
+            if let Some(mut details) = extract_struct(s, module_path) {
+                // Preserve methods from any impl block that was processed first.
+                if let Some(TypeInfo::Impl(existing)) = code_map.remove(&details.name) {
+                    details.methods.extend(existing.methods);
+                }
                 code_map.insert(details.name.clone(), TypeInfo::Struct(details));
             }
         }
         Item::Enum(e) => {
-            if let Some(details) = extract_enum(e, module_path) {
+            if let Some(mut details) = extract_enum(e, module_path) {
+                if let Some(TypeInfo::Impl(existing)) = code_map.remove(&details.name) {
+                    details.methods.extend(existing.methods);
+                }
                 code_map.insert(details.name.clone(), TypeInfo::Enum(details));
             }
         }
