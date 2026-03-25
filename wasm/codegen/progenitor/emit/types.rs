@@ -144,7 +144,7 @@ fn emit_getter(f: &FieldDetails, enum_names: &HashSet<&str>) -> TokenStream {
 pub fn emit_enum(e: &EnumDetails) -> TokenStream {
     let sdk_type = sdk_qualified_path(&e.module_path, &e.name);
     let wrapper = format_ident!("Wasm{}", e.name);
-    let js_name = &e.name;
+    let js_name = type_map::js_name(&e.name);
 
     let variants: Vec<_> = e
         .variants
