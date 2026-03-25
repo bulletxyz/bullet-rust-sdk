@@ -249,16 +249,19 @@ pub fn extract_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
         if !attr.path().is_ident("serde") {
             continue;
         }
-        // Parse #[serde(rename = "camelCase")]
-        let Ok(nested) = attr.parse_args::<syn::MetaNameValue>() else {
-            continue;
-        };
-        if nested.path.is_ident("rename") {
-            if let syn::Expr::Lit(lit) = &nested.value {
-                if let syn::Lit::Str(s) = &lit.lit {
-                    return Some(s.value());
-                }
+        // Parse #[serde(rename = "camelCase")] — handles combined attributes like
+        // #[serde(default, rename = "E", skip_serializing_if = "...")]
+        let mut rename = None;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("rename") {
+                let value = meta.value()?;
+                let s: syn::LitStr = value.parse()?;
+                rename = Some(s.value());
             }
+            Ok(())
+        });
+        if rename.is_some() {
+            return rename;
         }
     }
     None
