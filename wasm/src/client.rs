@@ -34,10 +34,6 @@ impl WasmNetwork {
         "testnet".to_string()
     }
 
-    #[wasm_bindgen(getter, js_name = Staging)]
-    pub fn staging() -> String {
-        "staging".to_string()
-    }
 }
 
 /// Full Bullet trading API client (REST + WebSocket).

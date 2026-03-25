@@ -65,7 +65,6 @@ pub struct Client {
 pub enum Network {
     Mainnet,
     Testnet,
-    Staging,
     Custom(String),
 }
 
@@ -75,7 +74,6 @@ impl Network {
         match self {
             Network::Mainnet => "https://tradingapi.bullet.xyz",
             Network::Testnet => "https://tradingapi.testnet.bullet.xyz",
-            Network::Staging => "https://tradingapi.staging.bullet.xyz",
             Network::Custom(url) => url,
         }
     }
@@ -86,7 +84,6 @@ impl From<&str> for Network {
         match s.to_lowercase().as_str() {
             "mainnet" => Network::Mainnet,
             "testnet" => Network::Testnet,
-            "staging" => Network::Staging,
             _ => Network::Custom(s.to_string()),
         }
     }
