@@ -185,12 +185,19 @@ fn vec_getter(
     }
 
     let inner_ret = wasm_type(inner, enums);
-    let conv = value_conversion(inner, &quote! { v }, enums);
 
-    (
-        quote! { Vec<#inner_ret> },
-        quote! { self.0.#field.iter().cloned().map(|v| #conv).collect() },
-    )
+    // Copy/Clone types that .cloned() already handles don't need a map step.
+    let body = match inner {
+        RustType::Bool | RustType::Primitive(_) | RustType::String => {
+            quote! { self.0.#field.iter().cloned().collect() }
+        }
+        _ => {
+            let conv = value_conversion(inner, &quote! { v }, enums);
+            quote! { self.0.#field.iter().cloned().map(|v| #conv).collect() }
+        }
+    };
+
+    (quote! { Vec<#inner_ret> }, body)
 }
 
 // ── Parameter Mapping ────────────────────────────────────────────────────────

@@ -60,7 +60,8 @@ fn item_walk(item: &Item, module_path: &[String], code_map: &mut HashMap<String,
                 match code_map.get_mut(&target) {
                     Some(TypeInfo::Struct(s)) => s.methods.extend(details.methods),
                     Some(TypeInfo::Enum(e)) => e.methods.extend(details.methods),
-                    _ => {
+                    Some(TypeInfo::Impl(i)) => i.methods.extend(details.methods),
+                    None => {
                         code_map.insert(target, TypeInfo::Impl(details));
                     }
                 }
