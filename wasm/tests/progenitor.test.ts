@@ -133,8 +133,8 @@ describe('struct getters via live API', () => {
   test('time returns TimeResponse with serverTime getter', async () => {
     const resp = await client.time();
     expect(resp).toBeDefined();
-    expect(typeof resp.serverTime).toBe('number');
-    expect(resp.serverTime).toBeGreaterThan(0);
+    expect(typeof resp.serverTime).toBe('bigint');
+    expect(resp.serverTime).toBeGreaterThan(0n);
     // toJSON round-trips
     const parsed = JSON.parse(resp.toJSON());
     expect(parsed.serverTime).toBeDefined();
@@ -196,8 +196,8 @@ describe('struct getters via live API', () => {
     const t = tickers[0];
     expect(typeof t.symbol).toBe('string');
     expect(t.price).toBeInstanceOf(Decimal);
-    expect(typeof t.time).toBe('number');
-    expect(t.time).toBeGreaterThan(0);
+    expect(typeof t.time).toBe('bigint');
+    expect(t.time).toBeGreaterThan(0n);
   });
 
   test('fundingRate returns FundingRate with getters', async () => {
@@ -206,7 +206,7 @@ describe('struct getters via live API', () => {
       expect(fr).toBeDefined();
       expect(typeof fr.symbol).toBe('string');
       expect(typeof fr.fundingRate).toBe('string');
-      expect(typeof fr.fundingTime).toBe('number');
+      expect(typeof fr.fundingTime).toBe('bigint');
       expect(typeof fr.markPrice).toBe('string');
     } catch {
       // API may return an array instead of a single object — skip gracefully.
@@ -221,10 +221,10 @@ describe('struct getters via live API', () => {
     // progenitor alphabetizes params: (limit, symbol)
     const ob = await client.orderBook(undefined, symbol);
     expect(ob).toBeDefined();
-    // E and T are i64 timestamps → number
-    expect(typeof ob.E).toBe('number');
-    expect(typeof ob.T).toBe('number');
-    expect(typeof ob.lastUpdateId).toBe('number');
+    // E and T are i64 timestamps → bigint
+    expect(typeof ob.E).toBe('bigint');
+    expect(typeof ob.T).toBe('bigint');
+    expect(typeof ob.lastUpdateId).toBe('bigint');
     // bids/asks are Vec<Vec<String>> → serialized as JSON string
     const json = ob.toJSON();
     const parsed = JSON.parse(json);
@@ -235,11 +235,11 @@ describe('struct getters via live API', () => {
   test('constants returns RollupConstants with getters', async () => {
     const c = await client.constants();
     expect(c).toBeDefined();
-    expect(typeof c.chainId).toBe('number');
+    expect(typeof c.chainId).toBe('bigint');
     expect(typeof c.chainName).toBe('string');
     expect(typeof c.addressPrefix).toBe('string');
     expect(typeof c.gasTokenId).toBe('string');
-    expect(typeof c.hyperlaneDomain).toBe('number');
+    expect(typeof c.hyperlaneDomain).toBe('bigint');
   });
 
   test('insuranceBalance returns InsuranceBalance[] with nested assets', async () => {
@@ -256,7 +256,7 @@ describe('struct getters via live API', () => {
           const a = b.assets[0];
           expect(typeof a.asset).toBe('string');
           expect(typeof a.marginBalance).toBe('string');
-          expect(typeof a.updateTime).toBe('number');
+          expect(typeof a.updateTime).toBe('bigint');
         }
       }
     } catch {
@@ -289,12 +289,12 @@ describe('struct getters via live API', () => {
       expect(typeof t.lowPrice).toBe('string');
       expect(typeof t.volume).toBe('string');
       expect(typeof t.quoteVolume).toBe('string');
-      expect(typeof t.openTime).toBe('number');
-      expect(typeof t.closeTime).toBe('number');
+      expect(typeof t.openTime).toBe('bigint');
+      expect(typeof t.closeTime).toBe('bigint');
       expect(typeof t.priceChange).toBe('string');
       expect(typeof t.priceChangePercent).toBe('string');
       expect(typeof t.weightedAvgPrice).toBe('string');
-      expect(typeof t.count).toBe('number');
+      expect(typeof t.count).toBe('bigint');
     } catch {
       // Endpoint may return 501 Not Implemented — skip gracefully.
     }
@@ -310,11 +310,11 @@ describe('struct getters via live API', () => {
     expect(Array.isArray(trades)).toBe(true);
     if (trades.length > 0) {
       const t = trades[0];
-      expect(typeof t.id).toBe('number');
+      expect(typeof t.id).toBe('bigint');
       expect(t.price).toBeInstanceOf(Decimal);
       expect(t.qty).toBeInstanceOf(Decimal);
       expect(t.quoteQty).toBeInstanceOf(Decimal);
-      expect(typeof t.time).toBe('number');
+      expect(typeof t.time).toBe('bigint');
       expect(typeof t.isBuyerMaker).toBe('boolean');
     }
   });
