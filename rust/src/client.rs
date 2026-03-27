@@ -104,8 +104,7 @@ impl Client {
     /// Create a new Client connected to a network.
     #[builder]
     pub async fn new(
-        #[builder(into)]
-        network: Network,
+        #[builder(into)] network: Network,
         reqwest_client: Option<reqwest::Client>,
         max_priority_fee_bips: Option<PriorityFeeBips>,
         max_fee: Option<Amount>,
@@ -123,7 +122,7 @@ impl Client {
         /// caught at connect time and may cause runtime serialization failures.
         user_actions: Option<Vec<UserActionDiscriminants>>,
     ) -> SDKResult<Self> {
-        use bullet_exchange_interface::schema::{trim, Schema, SchemaFile};
+        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim};
         use bullet_exchange_interface::transaction::Transaction;
 
         let url = network.url();
@@ -143,10 +142,7 @@ impl Client {
         // We always build a dedicated HTTP/1.1 client for WS, regardless of whether
         // the caller supplied a custom reqwest client for REST.
         #[cfg(not(target_arch = "wasm32"))]
-        let ws_client = reqwest::Client::builder()
-            .http1_only()
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+        let ws_client = reqwest::Client::builder().http1_only().build()?;
         #[cfg(target_arch = "wasm32")]
         let ws_client = reqwest::Client::new();
 
