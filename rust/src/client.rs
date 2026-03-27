@@ -32,6 +32,7 @@ pub struct Client {
     rest_url: String,
     ws_url: String,
     generated_client: GeneratedClient,
+    pub(crate) ws_client: reqwest::Client,
     chain_id: u64,
     chain_hash: [u8; 32],
 
@@ -138,6 +139,17 @@ impl Client {
             None => GeneratedClient::new(&rest_url),
         };
 
+        // WebSocket requires HTTP/1.1 (HTTP/2 does not support the Upgrade mechanism).
+        // We always build a dedicated HTTP/1.1 client for WS, regardless of whether
+        // the caller supplied a custom reqwest client for REST.
+        #[cfg(not(target_arch = "wasm32"))]
+        let ws_client = reqwest::Client::builder()
+            .http1_only()
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+        #[cfg(target_arch = "wasm32")]
+        let ws_client = reqwest::Client::new();
+
         // fetch schema
         let schema_obj = generated_client.schema().await?;
 
@@ -181,6 +193,7 @@ impl Client {
             rest_url,
             ws_url,
             generated_client,
+            ws_client,
             chain_id,
             chain_hash,
             gas_limit,
