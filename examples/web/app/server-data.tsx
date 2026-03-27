@@ -11,9 +11,6 @@
 
 import { Client } from "@bulletxyz/sdk-wasm";
 
-// Force dynamic rendering so we always get fresh data
-export const dynamic = "force-dynamic";
-
 const ENDPOINT =
   process.env.BULLET_API_ENDPOINT ?? "https://tradingapi.bullet.xyz";
 

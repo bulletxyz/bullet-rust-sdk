@@ -2,6 +2,9 @@ import { Suspense } from "react";
 import { ExchangeInfo } from "./server-data";
 import { ClientDemoLoader } from "./client-loader";
 
+// Force dynamic rendering so we always get fresh data
+export const dynamic = "force-dynamic";
+
 /**
  * Server Component — fetches exchange data at request time using the
  * WASM SDK on the Node.js runtime (SSR). The client component loads

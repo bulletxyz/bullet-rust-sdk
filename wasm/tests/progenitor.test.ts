@@ -12,7 +12,6 @@
 
 import { jest } from '@jest/globals';
 
-import * as sdk from '../pkg/node';
 import {
   Client, Decimal,
   // Enums
