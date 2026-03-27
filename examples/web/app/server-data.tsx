@@ -1,10 +1,15 @@
 /**
- * Server Component — uses the WASM SDK (Node.js target) during SSR.
+ * Server Component — uses the WASM SDK during SSR.
  *
  * This demonstrates that the SDK works seamlessly on the server:
  * market data is fetched at request time and streamed to the client
  * as pre-rendered HTML.
+ *
+ * Next.js resolves the "node" export condition on the server, which
+ * points to the auto-init wrapper — no manual setup needed.
  */
+
+import { Client } from "@bulletxyz/sdk-wasm";
 
 // Force dynamic rendering so we always get fresh data
 export const dynamic = "force-dynamic";
@@ -13,13 +18,7 @@ const ENDPOINT =
   process.env.BULLET_API_ENDPOINT ?? "https://tradingapi.bullet.xyz";
 
 export async function ExchangeInfo() {
-  // On the server, Next.js resolves the "node" export condition
-  // which gives us the synchronous CJS wasm-pack build.
-  const { createRequire } = await import("module");
-  const require = createRequire(import.meta.url);
-  const sdk = require("@bulletxyz/sdk-wasm");
-
-  const client = await sdk.Client.connect(ENDPOINT);
+  const client = await Client.connect(ENDPOINT);
   const info = await client.exchangeInfo();
 
   const symbols: { symbol: string; marketId: number }[] = info.symbols.map(

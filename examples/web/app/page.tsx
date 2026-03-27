@@ -1,11 +1,11 @@
 import { Suspense } from "react";
 import { ExchangeInfo } from "./server-data";
-import { ClientDemo } from "./client-demo";
+import { ClientDemoLoader } from "./client-loader";
 
 /**
  * Server Component — fetches exchange data at request time using the
- * WASM SDK on the Node.js runtime (SSR). No WASM init needed server-side
- * because the Node.js wasm-pack target loads synchronously.
+ * WASM SDK on the Node.js runtime (SSR). The client component loads
+ * WASM in the browser for transaction signing.
  */
 export default function Home() {
   return (
@@ -27,7 +27,7 @@ export default function Home() {
         <p style={{ color: "#666" }}>
           Transaction building runs in the browser via the web WASM target.
         </p>
-        <ClientDemo />
+        <ClientDemoLoader />
       </section>
     </main>
   );

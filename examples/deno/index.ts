@@ -20,11 +20,10 @@ import init, {
   Transaction,
 } from "@bulletxyz/sdk-wasm";
 
+await init();
+
 const ENDPOINT =
   Deno.env.get("BULLET_API_ENDPOINT") ?? "https://tradingapi.bullet.xyz";
-
-// Deno uses the web target which requires explicit WASM init
-await init();
 
 // Connect to the exchange
 console.log(`Connecting to ${ENDPOINT}…`);

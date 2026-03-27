@@ -2,8 +2,7 @@
   "name": "bullet-sdk-examples",
   "private": true,
   "workspaces": [
-    "node",
-    "web"
+    "node"
   ],
   "scripts": {
     "build": "turbo run build",

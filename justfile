@@ -18,20 +18,25 @@ build:
 build-release:
     cargo build --release
 
-# Build the WASM package for browser environments
-build-wasm-web:
-    wasm-pack build wasm --target web --out-dir pkg/web
-
-# Build the WASM package for Node.js environments
-build-wasm-node:
-    wasm-pack build wasm --target nodejs --out-dir pkg/node
-
-# Build the WASM package for both web and Node.js
-build-wasm: build-wasm-web build-wasm-node
+# Build the WASM package (web target + Node.js wrapper)
+build-wasm:
+    wasm-pack build wasm --target web --out-dir pkg
+    # Remove wasm-pack generated package.json and .gitignore that interfere with npm install --install-links
+    rm -f wasm/pkg/.gitignore wasm/pkg/package.json
+    # Generate Node.js auto-init wrapper (uses web target's initSync)
+    printf '%s\n' \
+        'import { readFileSync } from "node:fs";' \
+        'import { initSync } from "./bullet_rust_sdk_wasm.js";' \
+        'const wasm = readFileSync(new URL("./bullet_rust_sdk_wasm_bg.wasm", import.meta.url));' \
+        'initSync({ module: wasm });' \
+        'export * from "./bullet_rust_sdk_wasm.js";' \
+        > wasm/pkg/node.js
+    # Generate type re-exports
+    echo 'export * from "./bullet_rust_sdk_wasm.js";' > wasm/pkg/node.d.ts
 
 # Remove generated WASM build artifacts
 clean-wasm:
-    rm -rf wasm/pkg/web wasm/pkg/node
+    rm -rf wasm/pkg
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 
@@ -86,9 +91,9 @@ example-node: build-wasm
 example-deno: build-wasm
     cd examples/deno && deno task start
 
-# Run the web WASM example (Next.js + Turbopack)
+# Run the web WASM example (Next.js)
 example-web: build-wasm
-    cd examples/web && npm install && npm run dev
+    cd examples/web && npm install --install-links && npm run dev
 
 # Run Node.js WASM example tests
 test-example-node: build-wasm

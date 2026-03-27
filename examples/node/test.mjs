@@ -7,10 +7,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createRequire } from "module";
-
-const require = createRequire(import.meta.url);
-const sdk = require("@bulletxyz/sdk-wasm");
+import * as sdk from "@bulletxyz/sdk-wasm";
 
 const ENDPOINT =
   process.env.BULLET_API_ENDPOINT ?? "https://tradingapi.bullet.xyz";

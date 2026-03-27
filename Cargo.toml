@@ -4,3 +4,9 @@ resolver = "2"
 
 [workspace.dependencies]
 bon = "3.9.0"
+
+# Optimize WASM binary size
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

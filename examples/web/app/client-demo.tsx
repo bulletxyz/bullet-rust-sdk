@@ -1,6 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import init, {
+  Client,
+  Keypair,
+  User,
+  NewOrderArgs,
+  Side,
+  OrderType,
+  Transaction,
+} from "@bulletxyz/sdk-wasm";
 
 interface TxResult {
   publicKey: string;
@@ -8,11 +17,13 @@ interface TxResult {
 }
 
 /**
- * Client Component — loads the WASM SDK in the browser (web target)
- * and demonstrates transaction building entirely client-side.
+ * Client Component — runs the WASM SDK in the browser.
  *
+ * Demonstrates transaction building entirely client-side.
  * This is the pattern for operations that need a private key (signing),
  * which should never happen on the server.
+ *
+ * The web target requires an explicit init() call to load the WASM binary.
  */
 export function ClientDemo() {
   const [txResult, setTxResult] = useState<TxResult | null>(null);
@@ -22,27 +33,25 @@ export function ClientDemo() {
   useEffect(() => {
     (async () => {
       try {
-        // Dynamic import — loads the web WASM target in the browser
-        const sdk = await import("@bulletxyz/sdk-wasm");
-        await (sdk as any).default(); // init WASM
+        await init();
 
-        const client = await sdk.Client.connect(
+        const client = await Client.connect(
           "https://tradingapi.bullet.xyz",
         );
 
         // Build a demo limit order
-        const order = new sdk.NewOrderArgs(
+        const order = new NewOrderArgs(
           "50000.0",
           "0.01",
-          sdk.Side.Bid,
-          sdk.OrderType.Limit,
+          Side.Bid,
+          OrderType.Limit,
           false,
         );
-        const callMsg = sdk.User.placeOrders(0, [order], false);
+        const callMsg = User.placeOrders(0, [order], false);
 
         // Sign with a throwaway keypair (in a real app, use the user's key)
-        const kp = sdk.Keypair.generate();
-        const tx = sdk.Transaction.builder()
+        const kp = Keypair.generate();
+        const tx = Transaction.builder()
           .callMessage(callMsg)
           .maxFee(10_000_000n)
           .signer(kp)
@@ -54,6 +63,7 @@ export function ClientDemo() {
         });
       } catch (err: any) {
         setError(err.message ?? String(err));
+        throw err;
       } finally {
         setLoading(false);
       }

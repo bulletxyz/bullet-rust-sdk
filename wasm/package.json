@@ -34,22 +34,19 @@
       ".ts"
     ]
   },
-  "main": "./pkg/node/bullet_rust_sdk_wasm.js",
-  "module": "./pkg/web/bullet_rust_sdk_wasm.js",
-  "types": "./pkg/node/bullet_rust_sdk_wasm.d.ts",
+  "main": "./pkg/bullet_rust_sdk_wasm.js",
+  "module": "./pkg/bullet_rust_sdk_wasm.js",
+  "types": "./pkg/bullet_rust_sdk_wasm.d.ts",
   "exports": {
     ".": {
-      "node": {
-        "import": "./pkg/node/bullet_rust_sdk_wasm.js",
-        "require": "./pkg/node/bullet_rust_sdk_wasm.js"
-      },
-      "browser": "./pkg/web/bullet_rust_sdk_wasm.js",
-      "default": "./pkg/web/bullet_rust_sdk_wasm.js"
+      "node": "./pkg/node.js",
+      "default": "./pkg/bullet_rust_sdk_wasm.js"
     }
   },
   "files": [
-    "pkg/node/",
-    "pkg/web/"
+    "pkg/"
   ],
-  "sideEffects": false
+  "sideEffects": [
+    "./pkg/node.js"
+  ]
 }

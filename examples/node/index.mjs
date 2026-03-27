@@ -10,10 +10,7 @@
  * Set BULLET_API_ENDPOINT to override the default mainnet endpoint.
  */
 
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-
-const {
+import {
   Client,
   Keypair,
   User,
@@ -21,7 +18,7 @@ const {
   Side,
   OrderType,
   Transaction,
-} = require("@bulletxyz/sdk-wasm");
+} from "@bulletxyz/sdk-wasm";
 
 const ENDPOINT =
   process.env.BULLET_API_ENDPOINT ?? "https://tradingapi.bullet.xyz";

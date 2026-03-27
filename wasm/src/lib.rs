@@ -1,3 +1,10 @@
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen(start)]
+fn start() {
+    console_error_panic_hook::set_once();
+}
+
 pub mod client;
 pub mod errors;
 pub mod generated;

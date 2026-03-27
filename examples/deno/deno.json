@@ -4,6 +4,6 @@
     "test": "deno test --allow-net --allow-read --allow-env test.ts"
   },
   "imports": {
-    "@bulletxyz/sdk-wasm": "../../wasm/pkg/web/bullet_rust_sdk_wasm.js"
+    "@bulletxyz/sdk-wasm": "../../wasm/pkg/bullet_rust_sdk_wasm.js"
   }
 }

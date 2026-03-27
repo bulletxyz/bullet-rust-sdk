@@ -16,11 +16,10 @@ import init, {
   Transaction,
 } from "@bulletxyz/sdk-wasm";
 
+await init();
+
 const ENDPOINT =
   Deno.env.get("BULLET_API_ENDPOINT") ?? "https://tradingapi.bullet.xyz";
-
-// Init WASM once before all tests
-await init();
 
 Deno.test("REST API — connects and fetches exchange info", async () => {
   const client = await Client.connect(ENDPOINT);
