@@ -16,7 +16,17 @@ import * as sdk from '../pkg/node';
 import {
   Client, Decimal,
   // Enums
-  TxResult, TxStatus, HealthState
+  TxResult, TxStatus, HealthState,
+  // Type wrappers
+  Account, AccountAsset, AccountPosition,
+  Asset, Balance,
+  BinanceOrder, Bracket, LeverageBracket,
+  BorrowLendPoolResponse, InsuranceAsset, InsuranceBalance,
+  ChainInfo, ModuleRef, RateLimit, RateParams, RollupConstants,
+  ExchangeInfo, FundingRate, OrderBook,
+  PingResponse, PriceTicker, TradingSymbol, Ticker24hr, TimeResponse, Trade,
+  LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
+  ReadinessStatus,
 } from '../pkg/node';
 
 const ENDPOINT =
@@ -74,8 +84,20 @@ describe('progenitor type wrappers are exported', () => {
     'ReadinessStatus',
   ];
 
+  const exportedClasses: Record<string, unknown> = {
+    Account, AccountAsset, AccountPosition,
+    Asset, Balance,
+    BinanceOrder, Bracket, LeverageBracket,
+    BorrowLendPoolResponse, InsuranceAsset, InsuranceBalance,
+    ChainInfo, ModuleRef, RateLimit, RateParams, RollupConstants,
+    ExchangeInfo, FundingRate, OrderBook,
+    PingResponse, PriceTicker, TradingSymbol, Ticker24hr, TimeResponse, Trade,
+    LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
+    ReadinessStatus,
+  };
+
   test.each(expectedClasses)('%s is exported as a constructor', (name) => {
-    const Ctor = (sdk as Record<string, unknown>)[name];
+    const Ctor = exportedClasses[name];
     expect(Ctor).toBeDefined();
     expect(typeof Ctor).toBe('function');
   });
