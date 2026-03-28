@@ -39,8 +39,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let mut generator = progenitor::Generator::new(&settings);
 
-    // Inject typed error responses so progenitor generates Error<types::ApiErrorResponse>
-    inject_error_responses(&mut spec);
+    // Ensure error responses are defined so progenitor generates Error<types::ApiErrorResponse>.
+    // If the spec already includes ApiErrorResponse (from the trading API's utoipa annotations),
+    // this is a no-op. Otherwise, it injects them — needed for older spec versions.
+    ensure_error_responses(&mut spec);
 
     let spec: openapiv3::OpenAPI = serde_json::from_value(spec.clone()).map_err(|e| {
         // Save the problematic spec for debugging
@@ -139,42 +141,55 @@ fn convert_nullable_types(v: &mut Value) {
     }
 }
 
-/// Replace non-200 responses with `4XX` and `5XX` error responses using the
-/// `ApiErrorResponse` schema, so progenitor generates `Error<types::ApiErrorResponse>`
-/// and auto-deserializes error bodies.
+/// Ensure all operations have error response definitions so progenitor generates
+/// `Error<types::ApiErrorResponse>` and auto-deserializes error bodies.
 ///
-/// Note: `default` responses can't be used here because progenitor treats `default`
-/// as both success and error, causing an assertion failure when multiple response
-/// types exist (`assert!(response_types.len() <= 1)` in progenitor-impl).
-fn inject_error_responses(spec: &mut Value) {
-    // 1. Add ApiErrorResponse to components/schemas
-    let error_schema = serde_json::json!({
-        "type": "object",
-        "required": ["status", "message"],
-        "properties": {
-            "status": {
-                "type": "integer",
-                "format": "uint16",
-                "description": "HTTP status code"
-            },
-            "message": {
-                "type": "string",
-                "description": "Human-readable error message"
-            },
-            "details": {
-                "description": "Optional structured error details",
-                "nullable": true
-            }
-        }
-    });
+/// If the spec already includes `ApiErrorResponse` in components/schemas (from the
+/// trading API's utoipa annotations), this only fills in missing error responses on
+/// operations that lack them. For older specs without any error schemas, it injects
+/// everything.
+///
+/// Note: `default` responses can't be used because progenitor treats `default` as both
+/// success and error, causing `assert!(response_types.len() <= 1)` in progenitor-impl.
+fn ensure_error_responses(spec: &mut Value) {
+    // 1. Ensure ApiErrorResponse exists in components/schemas
+    let has_schema = spec
+        .get("components")
+        .and_then(|c| c.get("schemas"))
+        .and_then(|s| s.get("ApiErrorResponse"))
+        .is_some();
 
-    if let Some(components) = spec.get_mut("components").and_then(|c| c.as_object_mut()) {
-        if let Some(schemas) = components.get_mut("schemas").and_then(|s| s.as_object_mut()) {
-            schemas.insert("ApiErrorResponse".to_string(), error_schema);
+    if !has_schema {
+        let error_schema = serde_json::json!({
+            "type": "object",
+            "required": ["status", "message"],
+            "properties": {
+                "status": {
+                    "type": "integer",
+                    "format": "uint16",
+                    "description": "HTTP status code"
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Human-readable error message"
+                },
+                "details": {
+                    "description": "Optional structured error details",
+                    "nullable": true
+                }
+            }
+        });
+
+        if let Some(components) = spec.get_mut("components").and_then(|c| c.as_object_mut()) {
+            if let Some(schemas) = components.get_mut("schemas").and_then(|s| s.as_object_mut()) {
+                schemas.insert("ApiErrorResponse".to_string(), error_schema);
+            }
         }
     }
 
-    // 2. For every operation: remove non-200 responses, add 4XX and 5XX error responses
+    // 2. For operations missing error responses, add 4XX/5XX with ApiErrorResponse.
+    //    Strip any non-200 responses that don't reference ApiErrorResponse (e.g. old
+    //    501/503 stubs without a body schema) to avoid confusing progenitor.
     let error_response = serde_json::json!({
         "description": "Error response",
         "content": {
@@ -194,9 +209,21 @@ fn inject_error_responses(spec: &mut Value) {
                         && let Some(responses) =
                             operation_obj.get_mut("responses").and_then(|r| r.as_object_mut())
                     {
-                        responses.retain(|status_code, _| status_code == "200");
-                        responses.insert("4XX".to_string(), error_response.clone());
-                        responses.insert("5XX".to_string(), error_response.clone());
+                        // Check if this operation already has error responses referencing
+                        // ApiErrorResponse (i.e., from the updated trading API spec).
+                        let has_error_responses = responses.iter().any(|(code, resp)| {
+                            code != "200"
+                                && resp
+                                    .to_string()
+                                    .contains("ApiErrorResponse")
+                        });
+
+                        if !has_error_responses {
+                            // Old-style spec: strip non-200 stubs and inject 4XX/5XX
+                            responses.retain(|status_code, _| status_code == "200");
+                            responses.insert("4XX".to_string(), error_response.clone());
+                            responses.insert("5XX".to_string(), error_response.clone());
+                        }
                     }
                 }
             }
