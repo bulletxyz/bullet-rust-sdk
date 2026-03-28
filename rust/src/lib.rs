@@ -9,6 +9,7 @@ pub mod errors;
 // Re-export main types at crate root for ergonomic imports
 pub use client::{Client, Network};
 pub use errors::{SDKError, SDKResult, WSErrors};
+pub use generated::types::ApiErrorResponse;
 pub use keypair::Keypair;
 pub use transaction_builder::Transaction;
 // Re-export WebSocket close code for pattern matching
