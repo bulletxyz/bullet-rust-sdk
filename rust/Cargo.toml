@@ -21,7 +21,8 @@ thiserror = "2"
 url = "2"
 
 # Signing
-ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+ed25519-dalek = { version = "2.1", features = ["rand_core", "zeroize"] }
+zeroize = "1"
 rand = "0.8"
 borsh = "1"
 hex = "0.4"
@@ -56,6 +57,7 @@ clap = { version = "4", features = ["derive"] }
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros", "io-std", "io-util"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+wiremock = "0.6"
 
 [features]
 default = []

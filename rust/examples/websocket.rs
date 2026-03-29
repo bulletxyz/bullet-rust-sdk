@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = Client::builder().network(api_endpoint).build().await?;
 
-    let mut ws = client.connect_ws().call().await?;
+    let mut ws = client.connect_ws().connect().await?;
     println!("Connected to WebSocket");
 
     // Subscribe to multiple topics
@@ -73,7 +73,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 sub_account_index: None,
             },
         ),
-        10_000_000,
     )?;
 
     // TODO: use ENV var or generate.

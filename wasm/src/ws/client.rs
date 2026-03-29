@@ -8,6 +8,7 @@ use web_time::Duration;
 
 use crate::client::WasmTradingApi;
 use crate::errors::WasmResult;
+use crate::transactions::WasmTransaction;
 
 /// Handle to an active WebSocket connection.
 #[wasm_bindgen(js_name = WebsocketHandle)]
@@ -68,6 +69,36 @@ impl WasmWebsocketHandle {
     pub async fn order_cancel(&mut self, tx: &str, id: Option<u64>) -> WasmResult<()> {
         Ok(self.inner.order_cancel(tx, id.map(RequestId::new)).await?)
     }
+
+    /// Place an order using a typed signed transaction.
+    ///
+    /// Handles Borsh serialisation and base64 encoding internally.
+    #[wasm_bindgen(js_name = orderPlaceSigned)]
+    pub async fn order_place_signed(
+        &mut self,
+        tx: &WasmTransaction,
+        id: Option<u64>,
+    ) -> WasmResult<()> {
+        Ok(self
+            .inner
+            .order_place_signed(&tx.inner, id.map(RequestId::new))
+            .await?)
+    }
+
+    /// Cancel an order using a typed signed transaction.
+    ///
+    /// Handles Borsh serialisation and base64 encoding internally.
+    #[wasm_bindgen(js_name = orderCancelSigned)]
+    pub async fn order_cancel_signed(
+        &mut self,
+        tx: &WasmTransaction,
+        id: Option<u64>,
+    ) -> WasmResult<()> {
+        Ok(self
+            .inner
+            .order_cancel_signed(&tx.inner, id.map(RequestId::new))
+            .await?)
+    }
 }
 
 #[wasm_bindgen(js_name = WebsocketConfig)]
@@ -100,7 +131,7 @@ impl WasmTradingApi {
                 .inner
                 .connect_ws()
                 .maybe_config(config.map(|c| c.inner))
-                .call()
+                .connect()
                 .await?,
         })
     }

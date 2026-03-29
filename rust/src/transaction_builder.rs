@@ -26,8 +26,8 @@
 //!     .signer(&keypair)
 //!     .build(&client)?;
 //!
-//! // Send later
-//! client.send_transaction(&signed).await?;
+//! // Submit later
+//! client.submit_transaction(&signed).await?;
 //! ```
 
 use bon::Builder;
@@ -100,7 +100,7 @@ impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
     /// Build the signed transaction without sending it.
     ///
     /// Use this if you want to inspect the transaction or send it later
-    /// via `client.send_transaction(&signed)`.
+    /// via `client.submit_transaction(&signed)`.
     ///
     /// # Errors
     ///
@@ -140,7 +140,7 @@ impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
     /// Sign and submit the transaction to the network.
     ///
     /// This is equivalent to calling `build()` followed by
-    /// `client.send_transaction()`.
+    /// `client.submit_transaction()`.
     ///
     /// # Errors
     ///

@@ -90,19 +90,22 @@ impl WasmTradingApi {
     /// Build and sign a transaction, returning an opaque `Transaction` handle.
     ///
     /// - `call_msg` – a `CallMessage` constructed via a factory method
-    /// - `max_fee`  – maximum fee in base units
+    /// - `max_fee`  – maximum fee in base units (overrides client default when provided)
     /// - `keypair`  – signing keypair
     #[wasm_bindgen(js_name = buildSignedTransaction)]
     pub fn build_signed_transaction(
         &self,
         call_msg: WasmCallMessage,
-        max_fee: u64,
+        max_fee: Option<u64>,
         keypair: &WasmKeypair,
     ) -> WasmResult<WasmTransaction> {
-        let unsigned = self
-            .inner
-            .build_transaction(call_msg.inner, u128::from(max_fee))?;
-        let signed = self.inner.sign_transaction(unsigned, &keypair.inner)?;
+        let mut builder = bullet_rust_sdk::Transaction::builder()
+            .call_message(call_msg.inner)
+            .signer(&keypair.inner);
+        if let Some(fee) = max_fee {
+            builder = builder.max_fee(u128::from(fee));
+        }
+        let signed = builder.build(&self.inner)?;
         Ok(WasmTransaction { inner: signed })
     }
 

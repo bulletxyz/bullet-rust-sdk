@@ -60,6 +60,25 @@ impl Keypair {
     pub fn public_key_hex(&self) -> String {
         hex::encode(self.public_key())
     }
+
+    /// Export the 32-byte secret key, zeroed from memory on drop.
+    ///
+    /// # Security
+    ///
+    /// The caller is responsible for not copying the bytes into unprotected memory.
+    /// Use only when you need to persist or transmit the key.
+    pub fn secret_key_bytes(&self) -> zeroize::Zeroizing<[u8; 32]> {
+        zeroize::Zeroizing::new(self.signing_key.to_bytes())
+    }
+
+    /// Export the secret key as a hex string.
+    ///
+    /// # Security
+    ///
+    /// See [`secret_key_bytes`](Self::secret_key_bytes).
+    pub fn secret_key_hex(&self) -> String {
+        hex::encode(*self.secret_key_bytes())
+    }
 }
 
 impl std::fmt::Debug for Keypair {

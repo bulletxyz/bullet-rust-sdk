@@ -138,7 +138,7 @@ impl Client {
         let left = trim(&our_schema, &Self::filter_variants);
         let right = trim(&schema_file.schema, &Self::filter_variants);
         if left != right {
-            panic!("Schema outdated - recompile the binary to update bullet-exchange-interface.")
+            return Err(SDKError::SchemaOutdated);
         }
 
         // get chain_hash
@@ -251,6 +251,61 @@ impl Client {
     /// Get the default gas limit for transactions.
     pub fn gas_limit(&self) -> Option<Gas> {
         self.gas_limit.clone()
+    }
+
+    /// Clone the underlying `reqwest::Client` for use in reconnection loops.
+    pub(crate) fn http_client(&self) -> reqwest::Client {
+        self.generated_client.client.clone()
+    }
+
+    /// Connect to the WebSocket API with automatic reconnection.
+    ///
+    /// Returns a [`ManagedWebsocket`] that reconnects on disconnect and replays
+    /// all active subscriptions. Eagerly connects — errors surface immediately.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use bullet_rust_sdk::{Client, Topic};
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let api = Client::mainnet().await?;
+    /// let mut ws = api.connect_ws_managed().await?;
+    ///
+    /// ws.subscribe([Topic::agg_trade("BTC-USD")], None).await?;
+    ///
+    /// loop {
+    ///     let msg = ws.recv().await?; // reconnects automatically
+    ///     println!("{:?}", msg);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn connect_ws_managed(
+        &self,
+    ) -> SDKResult<crate::ws::ManagedWebsocket> {
+        crate::ws::ManagedWebsocket::new(self).await.map_err(Into::into)
+    }
+
+    /// Look up the numeric `MarketId` for a symbol string (e.g. `"BTC-USD"`).
+    ///
+    /// Calls the exchange info endpoint on each invocation; results are not cached.
+    /// For high-frequency use, resolve the `MarketId` once and reuse it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SDKError::SymbolNotFound`] if the symbol is not listed on the exchange.
+    pub async fn market_id_for(
+        &self,
+        symbol: &str,
+    ) -> crate::SDKResult<bullet_exchange_interface::types::MarketId> {
+        let info = self.exchange_info().await?;
+        info.into_inner()
+            .symbols
+            .iter()
+            .find(|s| s.symbol == symbol)
+            .map(|s| bullet_exchange_interface::types::MarketId(s.market_id))
+            .ok_or_else(|| crate::SDKError::SymbolNotFound(symbol.to_string()))
     }
 }
 

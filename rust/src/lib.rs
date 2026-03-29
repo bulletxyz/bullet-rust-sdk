@@ -1,5 +1,6 @@
 mod client;
 mod keypair;
+mod orders;
 mod transaction_builder;
 mod transactions;
 
@@ -9,7 +10,9 @@ pub mod errors;
 // Re-export main types at crate root for ergonomic imports
 pub use client::{Client, Network};
 pub use errors::{SDKError, SDKResult, WSErrors};
+pub use generated::types::ApiErrorResponse;
 pub use keypair::Keypair;
+pub use orders::NewOrder;
 pub use transaction_builder::Transaction;
 // Re-export WebSocket close code for pattern matching
 pub use reqwest_websocket::CloseCode;
@@ -18,6 +21,7 @@ pub use types::CallMessage;
 // Re-export WebSocket module and types
 pub mod ws;
 pub use ws::client::{WebsocketConfig, WebsocketHandle};
+pub use ws::managed::ManagedWebsocket;
 pub use ws::models::ServerMessage;
 pub use ws::topics::{KlineInterval, OrderbookDepth, Topic};
 
@@ -40,5 +44,10 @@ pub mod types {
 
     /// CallMessage type alias with the Address type pre-filled.
     pub type CallMessage = bullet_exchange_interface::message::CallMessage<Address>;
+
+    // Order-related types for use with NewOrder builder
+    pub use bullet_exchange_interface::message::NewOrderArgs;
+    pub use bullet_exchange_interface::types::{MarketId, OrderType, Side};
+
     pub use bullet_ws_interface::*;
 }

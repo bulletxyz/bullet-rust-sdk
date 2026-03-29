@@ -1,8 +1,6 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use bullet_exchange_interface::transaction::{
-    Amount, PriorityFeeBips, RuntimeCall, TxDetails, UniquenessData, Version0,
-};
+use bullet_exchange_interface::transaction::{RuntimeCall, TxDetails, UniquenessData, Version0};
 use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::generated::types::{SubmitTxRequest, SubmitTxResponse};
@@ -12,20 +10,33 @@ use crate::{Client, Keypair, SDKError, SDKResult};
 impl Client {
     /// Build an unsigned transaction from a call message.
     ///
-    /// This creates an unsigned transaction that can be signed with `sign_transaction`.
+    /// Applies the client's default `max_fee`, `gas_limit`, and
+    /// `max_priority_fee_bips` unless overridden per-transaction.
+    ///
+    /// # When to use this instead of `Transaction::builder()`
+    ///
+    /// Use this (together with `sign_transaction`) when you need to:
+    /// - Build the transaction once, then sign it repeatedly in a loop
+    ///   (e.g. a WebSocket order loop where the same unsigned tx is
+    ///   re-signed on each keystroke)
+    /// - Support hardware wallet / Ledger signing: build the unsigned tx,
+    ///   send the raw bytes to the signer, receive the signature out-of-band,
+    ///   and submit with `submit_transaction`
+    ///
+    /// For the common case of build + sign + submit in one step, prefer
+    /// `Transaction::builder().call_message(...).send(&client).await`.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let unsigned = client.build_transaction(call_msg, 10_000_000)?;
-    /// let signed = client.sign_transaction(unsigned, &keypair)?;
-    /// let response = client.submit_transaction(&signed).await?;
+    /// // Build once, sign repeatedly
+    /// let unsigned = client.build_transaction(call_msg)?;
+    /// loop {
+    ///     let signed = client.sign_transaction(unsigned.clone(), &keypair)?;
+    ///     client.submit_transaction(&signed).await?;
+    /// }
     /// ```
-    pub fn build_transaction(
-        &self,
-        call_msg: CallMessage,
-        max_fee: u128,
-    ) -> SDKResult<UnsignedTransaction> {
+    pub fn build_transaction(&self, call_msg: CallMessage) -> SDKResult<UnsignedTransaction> {
         let runtime_call = RuntimeCall::Exchange(call_msg);
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -34,9 +45,9 @@ impl Client {
         let uniqueness = UniquenessData::Generation(timestamp);
         let details = TxDetails {
             chain_id: self.chain_id(),
-            max_fee: Amount(max_fee),
-            gas_limit: None,
-            max_priority_fee_bips: PriorityFeeBips(0),
+            max_fee: self.max_fee(),
+            gas_limit: self.gas_limit(),
+            max_priority_fee_bips: self.max_priority_fee_bips(),
         };
         Ok(UnsignedTransaction {
             runtime_call,
@@ -47,12 +58,20 @@ impl Client {
 
     /// Sign an unsigned transaction with the given keypair.
     ///
-    /// Returns a signed transaction ready for submission.
+    /// Returns a signed transaction ready for submission via `submit_transaction`.
     ///
-    /// The signing process:
+    /// # When to use this
+    ///
+    /// Use when you need the signed transaction as a value — for example:
+    /// - Signing the same unsigned tx repeatedly in a WebSocket order loop
+    /// - Hardware wallet flows where `sign_transaction` is replaced by an
+    ///   out-of-band signing call
+    ///
+    /// # Signing process
+    ///
     /// 1. Borsh-serialize the unsigned transaction
     /// 2. Append the chain hash (32 bytes) as domain separator
-    /// 3. Sign the combined bytes with ed25519
+    /// 3. Sign the concatenated bytes with Ed25519
     pub fn sign_transaction(
         &self,
         tx: UnsignedTransaction,
@@ -86,6 +105,7 @@ impl Client {
         }))
     }
 
+    /// Encode a signed transaction as a base64 string for wire transmission.
     pub fn sign_to_base64(signed: &SignedTransaction) -> SDKResult<String> {
         let bytes =
             borsh::to_vec(&signed).map_err(|e| SDKError::SerializationError(e.to_string()))?;
@@ -94,7 +114,8 @@ impl Client {
 
     /// Submit a signed transaction to the network.
     ///
-    /// Returns the response from the sequencer.
+    /// Returns the sequencer's response. For the common build + sign + submit
+    /// flow, prefer `Transaction::builder().call_message(...).send(&client).await`.
     pub async fn submit_transaction(
         &self,
         signed: &SignedTransaction,
@@ -104,44 +125,23 @@ impl Client {
         Ok(response.into_inner())
     }
 
-    /// Alias for `submit_transaction`.
-    ///
-    /// Submits a pre-signed transaction to the network. This is useful when
-    /// using the `TransactionBuilder` pattern:
-    ///
-    /// ```ignore
-    /// let signed = TransactionBuilder::new()
-    ///     .call_message(call_msg)
-    ///     .max_fee(10_000_000)
-    ///     .signer(&keypair)
-    ///     .build(&client)?;
-    ///
-    /// client.send_transaction(&signed).await?;
-    /// ```
-    pub async fn send_transaction(
-        &self,
-        signed: &SignedTransaction,
-    ) -> SDKResult<SubmitTxResponse> {
-        self.submit_transaction(signed).await
-    }
-
     /// Convenience method to sign and submit a transaction in one call.
     ///
-    /// This is equivalent to calling `build_transaction`, `sign_transaction`,
-    /// and `submit_transaction` in sequence.
+    /// Equivalent to `build_transaction` + `sign_transaction` + `submit_transaction`.
+    /// For most use cases, prefer `Transaction::builder()` which also provides a
+    /// fluent interface for setting per-transaction fee overrides.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// client.sign_and_submit(call_msg, 10_000_000, &keypair).await?;
+    /// client.sign_and_submit(call_msg, &keypair).await?;
     /// ```
     pub async fn sign_and_submit(
         &self,
         call_msg: CallMessage,
-        max_fee: u128,
         keypair: &Keypair,
     ) -> SDKResult<SubmitTxResponse> {
-        let unsigned = self.build_transaction(call_msg, max_fee)?;
+        let unsigned = self.build_transaction(call_msg)?;
         let signed = self.sign_transaction(unsigned, keypair)?;
         self.submit_transaction(&signed).await
     }
@@ -173,7 +173,7 @@ mod tests {
                 CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
 
             let unsigned = client
-                .build_transaction(call_msg, 10_000_000)
+                .build_transaction(call_msg)
                 .expect("Failed to build transaction");
 
             let signed = client

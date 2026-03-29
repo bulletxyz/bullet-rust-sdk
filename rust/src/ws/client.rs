@@ -22,7 +22,7 @@
 //! let api = Client::mainnet().await?;
 //!
 //! 'reconnect: loop {
-//!     let mut ws = api.connect_ws().call().await?;
+//!     let mut ws = api.connect_ws().connect().await?;
 //!
 //!     ws.send(ClientMessage::Subscribe {
 //!         id: Some(1.into()),
@@ -96,7 +96,7 @@ pub struct WebsocketHandle {
 /// let config = WebsocketConfig {
 ///     connection_timeout: Duration::from_secs(30),
 /// };
-/// let mut ws = api.connect_ws().config(config).call().await?;
+/// let mut ws = api.connect_ws().config(config).connect().await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -125,8 +125,20 @@ impl Deref for WebsocketHandle {
 
 #[bon]
 impl Client {
-    /// TODO: Fix docs
-    #[builder]
+    /// Connect to the WebSocket API.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use bullet_rust_sdk::Client;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let api = Client::mainnet().await?;
+    /// let mut ws = api.connect_ws().connect().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[builder(finish_fn = connect)]
     pub async fn connect_ws(
         &self,
         config: Option<WebsocketConfig>,
@@ -155,11 +167,16 @@ impl Client {
 }
 
 impl WebsocketHandle {
+    /// Create a handle from a raw websocket (for `ManagedWebsocket` reconnect).
+    pub(crate) fn from_socket(socket: reqwest_websocket::WebSocket) -> Self {
+        Self { socket }
+    }
+
     /// Wait for the server's "connected" status message.
     ///
     /// Called automatically during connection. Times out if no message received
     /// within the specified timeout.
-    async fn wait_for_connected(&mut self, timeout: Duration) -> SDKResult<(), WSErrors> {
+    pub(crate) async fn wait_for_connected(&mut self, timeout: Duration) -> SDKResult<(), WSErrors> {
         // Note: web_time::Duration is std::time::Duration on native, but different on WASM.
         // The try_into() is needed for WASM compatibility.
         #[allow(clippy::useless_conversion)]
@@ -206,7 +223,7 @@ impl WebsocketHandle {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let api = Client::mainnet().await?;
-    /// # let mut ws = api.connect_ws().call().await?;
+    /// # let mut ws = api.connect_ws().connect().await?;
     /// // Subscribe to aggregated trades
     /// ws.send(ClientMessage::Subscribe {
     ///     id: Some(1.into()),
@@ -255,7 +272,7 @@ impl WebsocketHandle {
     /// let api = Client::mainnet().await?;
     ///
     /// 'reconnect: loop {
-    ///     let mut ws = api.connect_ws().call().await?;
+    ///     let mut ws = api.connect_ws().connect().await?;
     ///
     ///     ws.send(ClientMessage::Subscribe {
     ///         id: Some(1.into()),
@@ -339,7 +356,7 @@ impl WebsocketHandle {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let api = Client::mainnet().await?;
-    /// let mut ws = api.connect_ws().call().await?;
+    /// let mut ws = api.connect_ws().connect().await?;
     ///
     /// // Subscribe to multiple topics using type-safe builders
     /// ws.subscribe([
@@ -385,7 +402,7 @@ impl WebsocketHandle {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let api = Client::mainnet().await?;
-    /// let mut ws = api.connect_ws().call().await?;
+    /// let mut ws = api.connect_ws().connect().await?;
     ///
     /// ws.list_subscriptions(Some(RequestId::new(1))).await?;
     /// // Match response by request_id
@@ -411,7 +428,7 @@ impl WebsocketHandle {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let api = Client::mainnet().await?;
-    /// let mut ws = api.connect_ws().call().await?;
+    /// let mut ws = api.connect_ws().connect().await?;
     ///
     /// let tx_bytes = "base64_encoded_transaction";
     /// ws.order_place(tx_bytes, Some(RequestId::new(1))).await?;
@@ -446,7 +463,7 @@ impl WebsocketHandle {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let api = Client::mainnet().await?;
-    /// let mut ws = api.connect_ws().call().await?;
+    /// let mut ws = api.connect_ws().connect().await?;
     ///
     /// let tx_bytes = "base64_encoded_cancel_transaction";
     /// ws.order_cancel(tx_bytes, Some(RequestId::new(1))).await?;
@@ -464,5 +481,50 @@ impl WebsocketHandle {
             params: OrderParams { tx: tx.into() },
         })
         .await
+    }
+
+    /// Place an order using a typed signed transaction.
+    ///
+    /// Handles Borsh serialisation and base64 encoding internally.
+    /// Prefer this over `order_place` for type-safe order submission.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use bullet_rust_sdk::{Client, Keypair};
+    /// use bullet_rust_sdk::types::RequestId;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let api = Client::mainnet().await?;
+    /// let keypair = Keypair::generate();
+    /// let mut ws = api.connect_ws().connect().await?;
+    ///
+    /// let unsigned = api.build_transaction(/* call_msg */
+    /// # unimplemented!()
+    /// )?;
+    /// let signed = api.sign_transaction(unsigned, &keypair)?;
+    /// ws.order_place_signed(&signed, Some(RequestId::new(1))).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn order_place_signed(
+        &mut self,
+        tx: &crate::types::SignedTransaction,
+        id: Option<RequestId>,
+    ) -> SDKResult<(), WSErrors> {
+        let encoded = Client::sign_to_base64(tx).map_err(|e| WSErrors::WsError(e.to_string()))?;
+        self.order_place(encoded, id).await
+    }
+
+    /// Cancel an order using a typed signed transaction.
+    ///
+    /// Handles Borsh serialisation and base64 encoding internally.
+    pub async fn order_cancel_signed(
+        &mut self,
+        tx: &crate::types::SignedTransaction,
+        id: Option<RequestId>,
+    ) -> SDKResult<(), WSErrors> {
+        let encoded = Client::sign_to_base64(tx).map_err(|e| WSErrors::WsError(e.to_string()))?;
+        self.order_cancel(encoded, id).await
     }
 }
