@@ -1,7 +1,10 @@
 [package]
 name = "bullet-rust-sdk-wasm"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
+license = "MIT"
+description = "WebAssembly bindings for the Bullet trading SDK"
+repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
