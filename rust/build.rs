@@ -210,12 +210,13 @@ fn ensure_error_responses(spec: &mut Value) {
                             operation_obj.get_mut("responses").and_then(|r| r.as_object_mut())
                     {
                         // Check if this operation already has error responses referencing
-                        // ApiErrorResponse (i.e., from the updated trading API spec).
+                        // ApiErrorResponse via $ref (i.e., from the updated trading API spec).
                         let has_error_responses = responses.iter().any(|(code, resp)| {
                             code != "200"
                                 && resp
-                                    .to_string()
-                                    .contains("ApiErrorResponse")
+                                    .pointer("/content/application~1json/schema/$ref")
+                                    .and_then(|v| v.as_str())
+                                    .is_some_and(|r| r.ends_with("/ApiErrorResponse"))
                         });
 
                         if !has_error_responses {

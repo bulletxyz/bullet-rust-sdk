@@ -20,7 +20,10 @@ impl ApiErrorResponse {
     /// Whether this error is potentially transient and the operation could
     /// be retried with backoff.
     pub fn is_retryable(&self) -> bool {
-        self.status == 429 || self.status >= 500
+        // status 0 means the status code was lost (e.g. progenitor couldn't
+        // deserialize the body) — treat as retryable since this typically
+        // comes from transient upstream issues (load balancer HTML, etc).
+        self.status == 0 || self.status == 429 || self.status >= 500
     }
 }
 
@@ -146,7 +149,7 @@ impl SDKError {
     /// be retried with backoff.
     pub fn is_retryable(&self) -> bool {
         match self {
-            SDKError::HttpError(_) => true,
+            SDKError::HttpError(e) => e.is_timeout() || e.is_connect() || e.is_request(),
             SDKError::ApiError(resp) => resp.is_retryable(),
             SDKError::WebsocketError(e) => matches!(
                 e.as_ref(),
@@ -294,5 +297,8 @@ mod tests {
         let resp = err.api_error().expect("should be ApiError");
         assert_eq!(resp.status, 0);
         assert!(resp.message.contains("Bad Gateway"));
+        // status=0 (unknown) is treated as retryable since it typically
+        // comes from transient upstream issues.
+        assert!(err.is_retryable());
     }
 }

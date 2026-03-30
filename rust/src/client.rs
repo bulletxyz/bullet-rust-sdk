@@ -143,9 +143,12 @@ impl Client {
 
         // validate the remote schema
         let obj = schema_obj.into_inner();
-        let sobj = serde_json::to_string(&obj).unwrap();
-        let schema_file = serde_json::from_str::<SchemaFile>(&sobj).unwrap();
-        let our_schema = Schema::of_single_type::<Transaction>().unwrap();
+        let sobj = serde_json::to_string(&obj)
+            .map_err(|_| SDKError::InvalidSchemaResponse("failed to serialize schema"))?;
+        let schema_file = serde_json::from_str::<SchemaFile>(&sobj)
+            .map_err(|_| SDKError::InvalidSchemaResponse("failed to parse SchemaFile"))?;
+        let our_schema = Schema::of_single_type::<Transaction>()
+            .map_err(|_| SDKError::InvalidSchemaResponse("failed to derive local schema"))?;
         let filter = |name: &str, variant: &str| {
             Self::filter_variants(name, variant, user_actions.as_deref())
         };
