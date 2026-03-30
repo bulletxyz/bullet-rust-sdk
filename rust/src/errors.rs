@@ -20,10 +20,20 @@ impl ApiErrorResponse {
     /// Whether this error is potentially transient and the operation could
     /// be retried with backoff.
     pub fn is_retryable(&self) -> bool {
-        // status 0 means the status code was lost (e.g. progenitor couldn't
-        // deserialize the body) — treat as retryable since this typically
-        // comes from transient upstream issues (load balancer HTML, etc).
-        self.status == 0 || self.status == 429 || self.status >= 500
+        self.status == 429 || self.status >= 500
+    }
+
+    /// Whether the HTTP status code was lost during error conversion.
+    ///
+    /// This happens when the server returns a non-JSON body (e.g. HTML from a
+    /// load balancer) that progenitor can't deserialize. The raw body is
+    /// preserved in `message`, but the status code is unavailable.
+    ///
+    /// Callers may want to treat these as retryable (usually transient proxy
+    /// errors) but should be aware that a 4xx with a non-JSON body would also
+    /// produce `status == 0`.
+    pub fn is_status_unknown(&self) -> bool {
+        self.status == 0
     }
 }
 
@@ -297,8 +307,10 @@ mod tests {
         let resp = err.api_error().expect("should be ApiError");
         assert_eq!(resp.status, 0);
         assert!(resp.message.contains("Bad Gateway"));
-        // status=0 (unknown) is treated as retryable since it typically
-        // comes from transient upstream issues.
-        assert!(err.is_retryable());
+        // status=0 means the status code was lost (progenitor limitation).
+        // is_retryable() returns false since we can't be sure it's a 5xx.
+        // Callers can use is_status_unknown() to decide for themselves.
+        assert!(!err.is_retryable());
+        assert!(resp.is_status_unknown());
     }
 }
