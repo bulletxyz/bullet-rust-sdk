@@ -31,7 +31,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ..Default::default()
         },
         "rust_decimal::Decimal",
-        [progenitor::TypeImpl::Display, progenitor::TypeImpl::FromStr].into_iter(),
+        [
+            progenitor::TypeImpl::Display,
+            progenitor::TypeImpl::FromStr,
+        ]
+        .into_iter(),
     );
     let mut generator = progenitor::Generator::new(&settings);
 

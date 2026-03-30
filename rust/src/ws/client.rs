@@ -55,8 +55,8 @@
 use std::ops::Deref;
 
 use crate::types::{ClientMessage, OrderParams, RequestId};
-use bon::{Builder, bon};
-use futures::{FutureExt, SinkExt, StreamExt, select};
+use bon::{bon, Builder};
+use futures::{select, FutureExt, SinkExt, StreamExt};
 use futures_timer::Delay;
 use tracing::{debug, warn};
 use web_time::Duration;

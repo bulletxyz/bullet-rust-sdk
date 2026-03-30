@@ -105,6 +105,11 @@ impl Client {
     #[builder]
     pub async fn new(
         #[builder(into)] network: Network,
+        /// Custom reqwest client for REST requests.
+        ///
+        /// **Note:** WebSocket connections use a separate HTTP/1.1 client that does
+        /// not inherit settings from this client (e.g. proxy, TLS roots). This is a
+        /// reqwest limitation — existing clients can't be reconfigured after construction.
         reqwest_client: Option<reqwest::Client>,
         max_priority_fee_bips: Option<PriorityFeeBips>,
         max_fee: Option<Amount>,
@@ -122,7 +127,7 @@ impl Client {
         /// caught at connect time and may cause runtime serialization failures.
         user_actions: Option<Vec<UserActionDiscriminants>>,
     ) -> SDKResult<Self> {
-        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim};
+        use bullet_exchange_interface::schema::{trim, Schema, SchemaFile};
         use bullet_exchange_interface::transaction::Transaction;
 
         let url = network.url();
