@@ -151,6 +151,7 @@ async fn test_websocket_subscribe_unsubscribe() {
     let mut ws = fixture
         .client()
         .connect_ws()
+        .call()
         .await
         .expect("Failed to connect to WebSocket");
 
@@ -201,9 +202,12 @@ async fn test_websocket_subscribe_unsubscribe() {
 
     // Unsubscribe from the topic
     let unsubscribe_request_id = RequestId::new(2);
-    ws.unsubscribe([topic], Some(unsubscribe_request_id))
-        .await
-        .expect("Failed to send unsubscribe");
+    ws.send(bullet_rust_sdk::types::ClientMessage::Unsubscribe {
+        id: Some(unsubscribe_request_id),
+        params: vec![topic.to_string()],
+    })
+    .await
+    .expect("Failed to send unsubscribe");
 
     println!(
         "✓ Sent unsubscribe request (id: {})",
@@ -283,6 +287,7 @@ async fn test_websocket_list_subscriptions() {
     let mut ws = fixture
         .client()
         .connect_ws()
+        .call()
         .await
         .expect("Failed to connect to WebSocket");
 
