@@ -37,7 +37,8 @@ use bullet_exchange_interface::transaction::{
 use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::generated::types::SubmitTxResponse;
-use crate::types::{CallMessage, SignedTransaction};
+use bullet_exchange_interface::transaction::Transaction as SignedTransaction;
+use crate::types::CallMessage;
 use crate::{Client, Keypair, SDKError, SDKResult};
 
 /// A builder for constructing and submitting transactions.
