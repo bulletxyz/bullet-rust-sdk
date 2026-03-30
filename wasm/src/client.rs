@@ -1,3 +1,4 @@
+use bullet_exchange_interface::message::UserActionDiscriminants;
 use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
 use bullet_rust_sdk::{Client, Network};
 use wasm_bindgen::prelude::*;
@@ -166,6 +167,7 @@ pub struct WasmClientBuilder {
     max_fee: Option<u64>,
     max_priority_fee_bips: Option<u64>,
     gas_limit: Option<[u64; 2]>,
+    user_actions: Option<Vec<UserActionDiscriminants>>,
 }
 
 impl WasmClientBuilder {
@@ -176,6 +178,7 @@ impl WasmClientBuilder {
             max_fee: None,
             max_priority_fee_bips: None,
             gas_limit: None,
+            user_actions: None,
         }
     }
 }
@@ -219,6 +222,28 @@ impl WasmClientBuilder {
         self
     }
 
+    /// Restrict schema validation to specific `UserAction` variants.
+    ///
+    /// Pass an array of action name strings (e.g. `["PlaceOrders", "CancelOrders"]`).
+    /// When set, only these actions are checked against the remote schema — changes
+    /// to other actions won't prevent connection.
+    ///
+    /// **Warning:** If you use an action not listed here, the client will silently
+    /// skip its schema check — a breaking change to that action's schema won't be
+    /// caught at connect time and may cause runtime serialization failures.
+    #[wasm_bindgen(js_name = userActions)]
+    pub fn user_actions(mut self, actions: Vec<String>) -> Result<WasmClientBuilder, JsError> {
+        let parsed: Result<Vec<UserActionDiscriminants>, _> = actions
+            .iter()
+            .map(|s| {
+                UserActionDiscriminants::try_from(s.as_str())
+                    .map_err(|_| JsError::new(&format!("unknown UserAction variant: {s}")))
+            })
+            .collect();
+        self.user_actions = Some(parsed?);
+        Ok(self)
+    }
+
     /// Build the client and connect to the API.
     pub async fn build(self) -> WasmResult<WasmTradingApi> {
         let network: Network = self.network.ok_or("network is required")?.as_str().into();
@@ -234,6 +259,7 @@ impl WasmClientBuilder {
             .maybe_max_fee(max_fee)
             .maybe_max_priority_fee_bips(max_priority_fee_bips)
             .maybe_gas_limit(gas_limit)
+            .maybe_user_actions(self.user_actions)
             .build()
             .await?;
 

@@ -1,12 +1,13 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use bullet_exchange_interface::transaction::{
-    Amount, PriorityFeeBips, RuntimeCall, TxDetails, UniquenessData, Version0,
+    Amount, PriorityFeeBips, RuntimeCall, Transaction as SignedTransaction, TxDetails,
+    UniquenessData, UnsignedTransaction, Version0,
 };
 use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::generated::types::{SubmitTxRequest, SubmitTxResponse};
-use crate::types::{CallMessage, SignedTransaction, UnsignedTransaction};
+use crate::types::CallMessage;
 use crate::{Client, Keypair, SDKError, SDKResult};
 
 impl Client {

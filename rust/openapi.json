@@ -101,7 +101,7 @@
           {
             "name": "startTime",
             "in": "query",
-            "description": "Start time in microseconds (optional)",
+            "description": "Start time in microseconds. Defaults to now - 24h. Max range with endTime is 24h",
             "required": false,
             "schema": {
               "type": [
@@ -114,7 +114,7 @@
           {
             "name": "endTime",
             "in": "query",
-            "description": "End time in microseconds (optional)",
+            "description": "End time in microseconds. Defaults to startTime + 24h",
             "required": false,
             "schema": {
               "type": [
@@ -151,6 +151,46 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Historical data service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -183,6 +223,36 @@
                   "items": {
                     "$ref": "#/components/schemas/BorrowLendPoolResponse"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -263,6 +333,46 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -281,6 +391,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ExchangeInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -316,6 +456,46 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -337,6 +517,36 @@
                   "items": {
                     "$ref": "#/components/schemas/InsuranceBalance"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -374,6 +584,100 @@
                   "items": {
                     "$ref": "#/components/schemas/LeverageBracket"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fapi/v1/openInterest": {
+      "get": {
+        "tags": [
+          "Market-Data"
+        ],
+        "summary": "Open interest per market",
+        "operationId": "open_interest",
+        "responses": {
+          "200": {
+            "description": "Open Interest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OpenInterest"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Historical data service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -442,6 +746,46 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -483,6 +827,46 @@
                   "items": {
                     "$ref": "#/components/schemas/BinanceOrder"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -565,26 +949,48 @@
         "tags": [
           "Market-Data"
         ],
-        "summary": "24 hour rolling window price change statistics",
+        "summary": "24 hour rolling window price change statistics.\nreturns all markets — no per-symbol filtering (intentional, dataset is small)",
         "operationId": "ticker_24hr",
-        "parameters": [
-          {
-            "name": "symbol",
-            "in": "query",
-            "description": "Symbol",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "24hr ticker statistics",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Ticker24hr"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Ticker24hr"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Historical data service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -620,6 +1026,46 @@
                   "items": {
                     "$ref": "#/components/schemas/PriceTicker"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -691,6 +1137,276 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Historical data service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fapi/v1/userDeposits": {
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "summary": "User Deposit History",
+        "operationId": "user_deposits",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "description": "Account address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Start time in microseconds. Defaults to now - 24h. Max range with endTime is 24h",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "endTime",
+            "in": "query",
+            "description": "End time in microseconds. Defaults to startTime + 24h",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of results (default 500, max 1000)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of user deposits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserDeposit"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Historical data service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fapi/v1/userLiquidations": {
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "summary": "User Liquidation History",
+        "operationId": "user_liquidations",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "description": "Account address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "symbol",
+            "in": "query",
+            "description": "Trading pair symbol (optional filter)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Start time in microseconds. Defaults to now - 24h. Max range with endTime is 24h",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "endTime",
+            "in": "query",
+            "description": "End time in microseconds. Defaults to startTime + 24h",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of results (default 500, max 1000)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of user liquidations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserLiquidation"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Historical data service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -727,7 +1443,7 @@
           {
             "name": "startTime",
             "in": "query",
-            "description": "Start time in microseconds (optional)",
+            "description": "Start time in microseconds. Defaults to now - 24h. Max range with endTime is 24h",
             "required": false,
             "schema": {
               "type": [
@@ -740,7 +1456,7 @@
           {
             "name": "endTime",
             "in": "query",
-            "description": "End time in microseconds (optional)",
+            "description": "End time in microseconds. Defaults to startTime + 24h",
             "required": false,
             "schema": {
               "type": [
@@ -777,6 +1493,150 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Historical data service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fapi/v1/userWithdrawals": {
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "summary": "User Withdrawal History",
+        "operationId": "user_withdrawals",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "description": "Account address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Start time in microseconds. Defaults to now - 24h. Max range with endTime is 24h",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "endTime",
+            "in": "query",
+            "description": "End time in microseconds. Defaults to startTime + 24h",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of results (default 500, max 1000)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of user withdrawals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserWithdrawal"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Historical data service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -805,6 +1665,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -839,6 +1729,36 @@
                   "items": {
                     "$ref": "#/components/schemas/Balance"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -912,6 +1832,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Constants not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -927,6 +1857,16 @@
               "application/json": {
                 "schema": {
                   "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Schema not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -955,6 +1895,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SubmitTxResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid transaction format or validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid signature or public key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Validation service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -1116,6 +2096,31 @@
           "updateTime": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "ApiErrorResponse": {
+        "type": "object",
+        "description": "Structured API error response matching Bullet API format.\n\nAll error responses from the trading API conform to this schema.",
+        "required": [
+          "status",
+          "message"
+        ],
+        "properties": {
+          "details": {
+            "description": "Optional structured error details."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message.",
+            "example": "Transaction validation failed: insufficient funds"
+          },
+          "status": {
+            "type": "integer",
+            "format": "uint16",
+            "description": "HTTP status code.",
+            "example": 400,
+            "minimum": 0
           }
         }
       },
@@ -1744,6 +2749,28 @@
           }
         }
       },
+      "OpenInterest": {
+        "type": "object",
+        "description": "open interest for a single market",
+        "required": [
+          "symbol",
+          "openInterest",
+          "time"
+        ],
+        "properties": {
+          "openInterest": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "OrderBook": {
         "type": "object",
         "required": [
@@ -2123,7 +3150,6 @@
           "priceChangePercent",
           "weightedAvgPrice",
           "lastPrice",
-          "lastQty",
           "openPrice",
           "highPrice",
           "lowPrice",
@@ -2131,8 +3157,6 @@
           "quoteVolume",
           "openTime",
           "closeTime",
-          "firstId",
-          "lastId",
           "count"
         ],
         "properties": {
@@ -2142,25 +3166,14 @@
           },
           "count": {
             "type": "integer",
-            "format": "int64"
-          },
-          "firstId": {
-            "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "minimum": 0
           },
           "highPrice": {
             "type": "string",
             "format": "decimal"
           },
-          "lastId": {
-            "type": "integer",
-            "format": "int64"
-          },
           "lastPrice": {
-            "type": "string",
-            "format": "decimal"
-          },
-          "lastQty": {
             "type": "string",
             "format": "decimal"
           },
@@ -2283,6 +3296,112 @@
           "finalized"
         ]
       },
+      "UserDeposit": {
+        "type": "object",
+        "required": [
+          "asset",
+          "assetId",
+          "amount",
+          "amountNotional",
+          "txHash",
+          "eventNumber",
+          "time"
+        ],
+        "properties": {
+          "amount": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "amountNotional": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "assetId": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0
+          },
+          "eventNumber": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "txHash": {
+            "type": "string"
+          }
+        }
+      },
+      "UserLiquidation": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "liquidateeAddress",
+          "liquidatorAddress",
+          "marketId",
+          "markPrice",
+          "size",
+          "side",
+          "liquidatorReward",
+          "realizedPnl",
+          "txHash",
+          "eventNumber",
+          "time"
+        ],
+        "properties": {
+          "eventNumber": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "liquidateeAddress": {
+            "type": "string"
+          },
+          "liquidatorAddress": {
+            "type": "string"
+          },
+          "liquidatorReward": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "markPrice": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "marketId": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0
+          },
+          "realizedPnl": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "side": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "txHash": {
+            "type": "string"
+          }
+        }
+      },
       "UserTrade": {
         "type": "object",
         "required": [
@@ -2354,6 +3473,53 @@
           },
           "symbol": {
             "type": "string"
+          },
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "txHash": {
+            "type": "string"
+          }
+        }
+      },
+      "UserWithdrawal": {
+        "type": "object",
+        "required": [
+          "asset",
+          "assetId",
+          "amount",
+          "amountNotional",
+          "fee",
+          "txHash",
+          "eventNumber",
+          "time"
+        ],
+        "properties": {
+          "amount": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "amountNotional": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "assetId": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0
+          },
+          "eventNumber": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "fee": {
+            "type": "string",
+            "format": "decimal"
           },
           "time": {
             "type": "integer",

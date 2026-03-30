@@ -94,7 +94,7 @@ describe('Decimal arithmetic', () => {
   test('div by zero throws', () => {
     const a = new Decimal('1');
     const b = Decimal.zero();
-    expect(() => a.div(b)).toThrow('division by zero');
+    expect(() => a.div(b)).toThrow('division failed (zero or overflow)');
   });
 
   test('rem', () => {

@@ -63,15 +63,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 24hr ticker for first symbol
     if let Some(first_symbol) = info.symbols.first() {
         println!("=== 24hr Ticker ({}) ===", first_symbol.symbol);
-        let ticker = api
-            .ticker_24hr(Some(&first_symbol.symbol))
-            .await?
-            .into_inner();
-        println!("  Price change: {}", ticker.price_change);
-        println!("  Price change %: {}", ticker.price_change_percent);
-        println!("  High: {}", ticker.high_price);
-        println!("  Low: {}", ticker.low_price);
-        println!("  Volume: {}", ticker.volume);
+        let tickers_24hr = api.ticker_24hr().await?.into_inner();
+        if let Some(ticker) = tickers_24hr
+            .iter()
+            .find(|t| t.symbol == first_symbol.symbol)
+        {
+            println!("  Price change: {}", ticker.price_change);
+            println!("  Price change %: {}", ticker.price_change_percent);
+            println!("  High: {}", ticker.high_price);
+            println!("  Low: {}", ticker.low_price);
+            println!("  Volume: {}", ticker.volume);
+        }
         println!();
 
         // Order book
