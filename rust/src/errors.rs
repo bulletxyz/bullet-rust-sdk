@@ -149,7 +149,7 @@ impl SDKError {
     /// be retried with backoff.
     pub fn is_retryable(&self) -> bool {
         match self {
-            SDKError::HttpError(e) => e.is_timeout() || e.is_connect() || e.is_request(),
+            SDKError::HttpError(e) => e.is_timeout() || e.is_request(),
             SDKError::ApiError(resp) => resp.is_retryable(),
             SDKError::WebsocketError(e) => matches!(
                 e.as_ref(),
