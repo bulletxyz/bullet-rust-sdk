@@ -32,6 +32,7 @@ pub struct Client {
     rest_url: String,
     ws_url: String,
     generated_client: GeneratedClient,
+    pub(crate) ws_client: reqwest::Client,
     chain_id: u64,
     chain_hash: [u8; 32],
 
@@ -104,6 +105,11 @@ impl Client {
     #[builder]
     pub async fn new(
         #[builder(into)] network: Network,
+        /// Custom reqwest client for REST requests.
+        ///
+        /// **Note:** WebSocket connections use a separate HTTP/1.1 client that does
+        /// not inherit settings from this client (e.g. proxy, TLS roots). This is a
+        /// reqwest limitation — existing clients can't be reconfigured after construction.
         reqwest_client: Option<reqwest::Client>,
         max_priority_fee_bips: Option<PriorityFeeBips>,
         max_fee: Option<Amount>,
@@ -136,6 +142,14 @@ impl Client {
             Some(client) => GeneratedClient::new_with_client(&rest_url, client),
             None => GeneratedClient::new(&rest_url),
         };
+
+        // WebSocket requires HTTP/1.1 (HTTP/2 does not support the Upgrade mechanism).
+        // We always build a dedicated HTTP/1.1 client for WS, regardless of whether
+        // the caller supplied a custom reqwest client for REST.
+        #[cfg(not(target_arch = "wasm32"))]
+        let ws_client = reqwest::Client::builder().http1_only().build()?;
+        #[cfg(target_arch = "wasm32")]
+        let ws_client = reqwest::Client::new();
 
         // fetch schema
         let schema_obj = generated_client.schema().await?;
@@ -180,6 +194,7 @@ impl Client {
             rest_url,
             ws_url,
             generated_client,
+            ws_client,
             chain_id,
             chain_hash,
             gas_limit,

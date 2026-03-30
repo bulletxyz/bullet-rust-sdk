@@ -136,7 +136,7 @@ impl Client {
         let config = config.unwrap_or_default();
 
         let response: reqwest_websocket::UpgradeResponse = self
-            .client
+            .ws_client
             .clone()
             .get(self.ws_url())
             .upgrade()
