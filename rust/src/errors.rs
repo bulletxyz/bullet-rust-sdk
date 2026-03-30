@@ -66,7 +66,9 @@ pub enum SDKError {
     RequestError(String),
 
     /// No keypair available for signing.
-    #[error("No keypair available. Provide a signer via Transaction::builder().signer() or Client::builder().keypair()")]
+    #[error(
+        "No keypair available. Provide a signer via Transaction::builder().signer() or Client::builder().keypair()"
+    )]
     MissingKeypair,
 
     #[error(transparent)]
