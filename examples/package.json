@@ -1,6 +1,7 @@
 {
   "name": "bullet-sdk-examples",
   "private": true,
+  "packageManager": "npm@11.6.2",
   "workspaces": [
     "node",
     "web"

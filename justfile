@@ -106,6 +106,50 @@ test-example-deno: build-wasm
 # Run all example tests (Node + Deno)
 test-examples: test-example-node test-example-deno
 
+# ── CI ────────────────────────────────────────────────────────────────────────
+
+# Full end-to-end build + test (Rust → WASM → examples)
+ci:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    step() { printf '\n\033[1;34m══ %s\033[0m\n' "$1"; }
+
+    step "Rust: format check"
+    cargo fmt -- --check
+
+    step "Rust: clippy"
+    cargo clippy --all-targets -- -D warnings
+
+    step "Rust: build"
+    cargo build
+
+    step "Rust: unit tests"
+    cargo nextest run
+
+    step "Rust: doc tests"
+    cargo test --doc
+
+    step "WASM: build"
+    just build-wasm
+
+    step "WASM: Jest tests"
+    cd wasm && npm test && cd ..
+
+    step "Examples: install"
+    cd examples && npm install && cd ..
+
+    step "Examples: Node.js tests"
+    cd examples/node && npm test && cd ../..
+
+    step "Examples: Deno tests"
+    cd examples/deno && deno task test && cd ../..
+
+    step "Examples: Next.js build"
+    cd examples/web && npm install --install-links && npx next build && cd ../..
+
+    printf '\n\033[1;32m✓ All checks passed\033[0m\n'
+
 # ── OpenAPI spec ──────────────────────────────────────────────────────────────
 
 # Fetch and cache the latest OpenAPI spec from mainnet

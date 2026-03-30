@@ -35,7 +35,8 @@ pub mod codegen {
 /// Re-export bullet_rollup types commonly used with the SDK.
 pub mod types {
     pub use bullet_exchange_interface;
-    pub type CallMessage =
-        bullet_exchange_interface::message::CallMessage<bullet_exchange_interface::address::Address>;
+    pub type CallMessage = bullet_exchange_interface::message::CallMessage<
+        bullet_exchange_interface::address::Address,
+    >;
     pub use bullet_ws_interface::*;
 }

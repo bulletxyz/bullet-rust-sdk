@@ -22,6 +22,6 @@ pub use generated::*;
 pub use keypair::*;
 pub use transaction_builder::*;
 pub use transactions::*;
+pub use utils::decimal::WasmDecimal;
 pub use ws::client::*;
 pub use ws::topics::*;
-pub use utils::decimal::WasmDecimal;

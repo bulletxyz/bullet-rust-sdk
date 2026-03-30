@@ -162,6 +162,7 @@ pub struct SchemaStruct {
     /// The Rust type name, e.g. "NewOrderArgs".
     pub type_name: String,
     /// Schema index where this type lives.
+    #[allow(dead_code)]
     pub schema_index: usize,
     /// Fields with resolved param mappings.
     pub fields: Vec<MappedField>,

@@ -45,6 +45,7 @@ pub fn emit_struct(s: &SchemaStruct) -> TokenStream {
         #[wasm_bindgen(js_class = #js_name)]
         impl #wrapper_name {
             #[wasm_bindgen(constructor)]
+            #[allow(clippy::too_many_arguments)]
             pub fn new(#(#params),*) -> WasmResult<#wrapper_name> {
                 Ok(#wrapper_name {
                     inner: #type_name {

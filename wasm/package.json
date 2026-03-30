@@ -34,9 +34,8 @@
       ".ts"
     ]
   },
-  "main": "./pkg/bullet_rust_sdk_wasm.js",
-  "module": "./pkg/bullet_rust_sdk_wasm.js",
-  "types": "./pkg/bullet_rust_sdk_wasm.d.ts",
+  "main": "./pkg/node.js",
+  "types": "./pkg/node.d.ts",
   "exports": {
     ".": {
       "node": "./pkg/node.js",

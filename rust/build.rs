@@ -31,11 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ..Default::default()
         },
         "rust_decimal::Decimal",
-        [
-            progenitor::TypeImpl::Display,
-            progenitor::TypeImpl::FromStr,
-        ]
-        .into_iter(),
+        [progenitor::TypeImpl::Display, progenitor::TypeImpl::FromStr].into_iter(),
     );
     let mut generator = progenitor::Generator::new(&settings);
 
@@ -119,7 +115,7 @@ fn convert_nullable_types(v: &mut Value) {
             // Check if this is a type field with a oneOf null value
             if let Some(Value::Array(types)) = map.get_mut("oneOf") {
                 let has_null = types
-                    .into_iter()
+                    .iter_mut()
                     .any(|t| t.get("type").and_then(|x| x.as_str()) == Some("null"));
                 if has_null {
                     types.retain(|t| t.get("type").and_then(|x| x.as_str()) != Some("null"));
@@ -180,10 +176,12 @@ fn ensure_error_responses(spec: &mut Value) {
             }
         });
 
-        if let Some(components) = spec.get_mut("components").and_then(|c| c.as_object_mut()) {
-            if let Some(schemas) = components.get_mut("schemas").and_then(|s| s.as_object_mut()) {
-                schemas.insert("ApiErrorResponse".to_string(), error_schema);
-            }
+        if let Some(components) = spec.get_mut("components").and_then(|c| c.as_object_mut())
+            && let Some(schemas) = components
+                .get_mut("schemas")
+                .and_then(|s| s.as_object_mut())
+        {
+            schemas.insert("ApiErrorResponse".to_string(), error_schema);
         }
     }
 
@@ -206,8 +204,9 @@ fn ensure_error_responses(spec: &mut Value) {
             if let Some(path_obj) = path_item.as_object_mut() {
                 for operation in path_obj.values_mut() {
                     if let Some(operation_obj) = operation.as_object_mut()
-                        && let Some(responses) =
-                            operation_obj.get_mut("responses").and_then(|r| r.as_object_mut())
+                        && let Some(responses) = operation_obj
+                            .get_mut("responses")
+                            .and_then(|r| r.as_object_mut())
                     {
                         // Check if this operation already has error responses referencing
                         // ApiErrorResponse via $ref (i.e., from the updated trading API spec).

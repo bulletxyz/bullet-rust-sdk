@@ -186,14 +186,14 @@ fn vec_getter(
 
     let inner_ret = wasm_type(inner, enums);
 
-    // Copy/Clone types that .cloned() already handles don't need a map step.
+    // Copy/Clone types use .to_vec(); named types use .iter().map() with clone inside.
     let body = match inner {
         RustType::Bool | RustType::Primitive(_) | RustType::String => {
-            quote! { self.0.#field.iter().cloned().collect() }
+            quote! { self.0.#field.to_vec() }
         }
         _ => {
             let conv = value_conversion(inner, &quote! { v }, enums);
-            quote! { self.0.#field.iter().cloned().map(|v| #conv).collect() }
+            quote! { self.0.#field.iter().map(|v| #conv).collect() }
         }
     };
 
@@ -201,7 +201,6 @@ fn vec_getter(
 }
 
 // ── Parameter Mapping ────────────────────────────────────────────────────────
-
 
 /// Map a method parameter type to its WASM declaration type and call argument expression.
 ///

@@ -181,6 +181,7 @@ pub struct EnumDetails {
     /// Module path relative to the codegen root, e.g. `["types"]` for `types::TxStatus`.
     pub module_path: Vec<String>,
     /// Derive macros on this enum (e.g., `["Serialize", "Deserialize", "Clone"]`).
+    #[allow(dead_code)]
     pub derives: Vec<String>,
     /// Methods from inherent `impl` blocks (e.g. `as_str()` for string enums).
     pub methods: Vec<MethodDetails>,
@@ -202,10 +203,12 @@ pub struct VariantDetails {
 #[derive(Debug, Clone)]
 pub struct ImplDetails {
     /// The type this impl is for, e.g. `Client`.
+    #[allow(dead_code)]
     pub target: String,
     /// Methods in this impl.
     pub methods: Vec<MethodDetails>,
     /// Module path relative to the codegen root.
+    #[allow(dead_code)]
     pub module_path: Vec<String>,
 }
 

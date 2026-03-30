@@ -5,8 +5,8 @@ use bullet_exchange_interface::time::UnixTimestampMicros;
 use bullet_exchange_interface::transaction::Transaction;
 use bullet_exchange_interface::types::{
     AdminType, AssetId, ClientOrderId, FeeTier, MarketId, OrderId, OrderType, Side,
-    SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection,
-    TriggerOrderId, TriggerPriceCondition, TwapId,
+    SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
+    TriggerPriceCondition, TwapId,
 };
 use bullet_rust_sdk::types::CallMessage;
 use std::str::FromStr;

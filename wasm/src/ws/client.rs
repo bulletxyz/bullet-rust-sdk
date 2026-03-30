@@ -81,7 +81,7 @@ impl WasmWebsocketConfig {
     pub fn new(connection_timeout: Option<u64>) -> Self {
         Self {
             inner: WebsocketConfig::builder()
-                .maybe_connection_timeout(connection_timeout.map(|ct| Duration::from_secs(ct)))
+                .maybe_connection_timeout(connection_timeout.map(Duration::from_secs))
                 .build(),
         }
     }

@@ -95,16 +95,15 @@ impl From<String> for Network {
     }
 }
 
-pub const MAX_FEE: &'static Amount = &Amount(10000000000_u128);
-pub const MAX_PRIORITY_FEE_BIPS: &'static PriorityFeeBips = &PriorityFeeBips(0);
+pub const MAX_FEE: &Amount = &Amount(10000000000_u128);
+pub const MAX_PRIORITY_FEE_BIPS: &PriorityFeeBips = &PriorityFeeBips(0);
 
 #[bon]
 impl Client {
     /// Create a new Client connected to a network.
     #[builder]
     pub async fn new(
-        #[builder(into)]
-        network: Network,
+        #[builder(into)] network: Network,
         reqwest_client: Option<reqwest::Client>,
         max_priority_fee_bips: Option<PriorityFeeBips>,
         max_fee: Option<Amount>,
@@ -122,7 +121,7 @@ impl Client {
         /// caught at connect time and may cause runtime serialization failures.
         user_actions: Option<Vec<UserActionDiscriminants>>,
     ) -> SDKResult<Self> {
-        use bullet_exchange_interface::schema::{trim, Schema, SchemaFile};
+        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim};
         use bullet_exchange_interface::transaction::Transaction;
 
         let url = network.url();
@@ -174,8 +173,8 @@ impl Client {
             .and_then(|x| x.as_u64())
             .ok_or(SDKError::InvalidSchemaResponse("chain_id"))?;
 
-        let max_priority_fee_bips = max_priority_fee_bips.unwrap_or_else(|| *MAX_PRIORITY_FEE_BIPS);
-        let max_fee = max_fee.unwrap_or_else(|| *MAX_FEE);
+        let max_priority_fee_bips = max_priority_fee_bips.unwrap_or(*MAX_PRIORITY_FEE_BIPS);
+        let max_fee = max_fee.unwrap_or(*MAX_FEE);
 
         Ok(Self {
             rest_url,
