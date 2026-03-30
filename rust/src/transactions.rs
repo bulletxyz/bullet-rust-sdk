@@ -100,7 +100,10 @@ impl Client {
         signed: &SignedTransaction,
     ) -> SDKResult<SubmitTxResponse> {
         let body = Self::sign_to_base64(signed)?;
-        let response = self.client().submit_tx(&SubmitTxRequest { body }).await?;
+        let response = match self.client().submit_tx(&SubmitTxRequest { body }).await {
+            Ok(r) => r,
+            Err(e) => return Err(SDKError::from_progenitor(e).await),
+        };
         Ok(response.into_inner())
     }
 

@@ -115,8 +115,41 @@ pub enum WSErrors {
 
 pub type SDKResult<T, E = SDKError> = Result<T, E>;
 
+/// Max bytes to read from an error response body.
+const ERROR_BODY_LIMIT: usize = 16_384;
+
+impl SDKError {
+    /// Async conversion that reads the response body for `UnexpectedResponse`.
+    pub(crate) async fn from_progenitor<T: std::fmt::Debug>(
+        err: progenitor_client::Error<T>,
+    ) -> Self {
+        match err {
+            progenitor_client::Error::UnexpectedResponse(response) => {
+                let status = response.status();
+                let body = response
+                    .bytes()
+                    .await
+                    .ok()
+                    .and_then(|b| {
+                        let truncated = &b[..b.len().min(ERROR_BODY_LIMIT)];
+                        String::from_utf8(truncated.to_vec()).ok()
+                    })
+                    .unwrap_or_default();
+                SDKError::ApiError(format!("{status}: {body}"))
+            }
+            other => other.into(),
+        }
+    }
+}
+
 impl<T: std::fmt::Debug> From<progenitor_client::Error<T>> for SDKError {
     fn from(err: progenitor_client::Error<T>) -> Self {
-        SDKError::ApiError(format!("{err:?}"))
+        match err {
+            progenitor_client::Error::UnexpectedResponse(response) => {
+                // Body unavailable synchronously; include the status code.
+                SDKError::ApiError(format!("HTTP {}", response.status()))
+            }
+            other => SDKError::ApiError(format!("{other}")),
+        }
     }
 }

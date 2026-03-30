@@ -128,7 +128,10 @@ impl Client {
         };
 
         // fetch schema
-        let schema_obj = generated_client.schema().await?;
+        let schema_obj = match generated_client.schema().await {
+            Ok(r) => r,
+            Err(e) => return Err(SDKError::from_progenitor(e).await),
+        };
 
         // validate the remote schema
         let obj = schema_obj.into_inner();
