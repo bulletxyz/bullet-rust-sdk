@@ -83,6 +83,9 @@ pub enum SDKError {
     #[error("Invalid public key length: expected 32 bytes, got {0}")]
     InvalidPublicKeyLength(usize),
 
+    #[error("Schema outdated - recompile the binary to update bullet-exchange-interface")]
+    SchemaOutdated,
+
     #[error(transparent)]
     WebsocketError(#[from] Box<WSErrors>),
 }

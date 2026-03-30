@@ -110,6 +110,17 @@ impl Client {
         max_fee: Option<Amount>,
         gas_limit: Option<Gas>,
         keypair: Option<Keypair>,
+        /// Restrict schema validation to specific `UserAction` variants.
+        ///
+        /// By default (`None`), the client validates that **all** `UserAction` variants
+        /// match the remote schema and returns `SDKError::SchemaOutdated` if any differ.
+        /// If you only use a subset of actions (e.g. `PlaceOrders`), you can pass them
+        /// here to avoid false negatives when unrelated variants change server-side.
+        ///
+        /// **Warning:** If you use an action not listed here, the client will silently
+        /// skip its schema check — a breaking change to that action's schema won't be
+        /// caught at connect time and may cause runtime serialization failures.
+        user_actions: Option<Vec<UserActionDiscriminants>>,
     ) -> SDKResult<Self> {
         use bullet_exchange_interface::schema::{trim, Schema, SchemaFile};
         use bullet_exchange_interface::transaction::Transaction;
@@ -135,10 +146,13 @@ impl Client {
         let sobj = serde_json::to_string(&obj).unwrap();
         let schema_file = serde_json::from_str::<SchemaFile>(&sobj).unwrap();
         let our_schema = Schema::of_single_type::<Transaction>().unwrap();
-        let left = trim(&our_schema, &Self::filter_variants);
-        let right = trim(&schema_file.schema, &Self::filter_variants);
+        let filter = |name: &str, variant: &str| {
+            Self::filter_variants(name, variant, user_actions.as_deref())
+        };
+        let left = trim(&our_schema, &filter);
+        let right = trim(&schema_file.schema, &filter);
         if left != right {
-            panic!("Schema outdated - recompile the binary to update bullet-exchange-interface.")
+            return Err(SDKError::SchemaOutdated);
         }
 
         // get chain_hash
@@ -173,14 +187,39 @@ impl Client {
         })
     }
 
-    /// This is a white-list of Transaction variants that must not
-    /// change to not break our binary.
-    fn filter_variants(name: &str, variant: &str) -> bool {
+    /// Decides whether a given enum variant should be included in the schema
+    /// comparison between our compiled types and the remote API.
+    ///
+    /// Called by [`trim`] for every `(enum_name, variant_name)` pair in the
+    /// schema tree. Returning `true` keeps the variant; `false` prunes it
+    /// from both sides before diffing so that changes to pruned variants
+    /// don't trigger [`SDKError::SchemaOutdated`].
+    ///
+    /// The fixed rules pin the path the SDK actually serializes:
+    ///   `Transaction::V0 → RuntimeCall::Exchange → CallMessage::User → UserAction::*`
+    ///
+    /// For `UserAction`, the behaviour depends on `user_actions`:
+    /// - `None` — include every variant known to this binary (full check).
+    /// - `Some(&[PlaceOrders, CancelOrders])` — only include those two;
+    ///   schema changes to other actions (e.g. `Withdraw`) are ignored.
+    ///
+    /// Unknown enum names default to `true` so any new enums in the schema
+    /// are kept, ensuring the diff still catches unexpected additions.
+    fn filter_variants(
+        name: &str,
+        variant: &str,
+        user_actions: Option<&[UserActionDiscriminants]>,
+    ) -> bool {
         match name {
             "Transaction" => variant == "V0",
             "RuntimeCall" => variant == "Exchange",
             "CallMessage" => variant == "User",
-            "UserAction" => UserActionDiscriminants::try_from(variant).is_ok(),
+            "UserAction" => match user_actions {
+                Some(actions) => UserActionDiscriminants::try_from(variant)
+                    .map(|v| actions.contains(&v))
+                    .unwrap_or(false),
+                None => UserActionDiscriminants::try_from(variant).is_ok(),
+            },
             "UniquenessData" => variant == "Generation",
             _ => {
                 // include the variant - to be sure we fail afterwards
