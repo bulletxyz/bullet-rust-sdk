@@ -51,6 +51,16 @@ impl Keypair {
         signature.to_bytes().to_vec()
     }
 
+    /// Get the 32-byte secret key.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.signing_key.to_bytes().to_vec()
+    }
+
+    /// Get the secret key as a lowercase hex string.
+    pub fn to_hex(&self) -> String {
+        hex::encode(self.to_bytes())
+    }
+
     /// Get the 32-byte public key.
     pub fn public_key(&self) -> Vec<u8> {
         self.signing_key.verifying_key().as_bytes().to_vec()
