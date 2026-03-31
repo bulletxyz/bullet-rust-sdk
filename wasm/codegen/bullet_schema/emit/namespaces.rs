@@ -83,6 +83,7 @@ fn emit_factory(group: &ActionGroup, variant: &VariantInfo) -> TokenStream {
 
     quote! {
         #[wasm_bindgen(js_name = #js_name)]
+        #[allow(clippy::too_many_arguments)]
         pub fn #rust_fn_name(#(#params),*) -> WasmResult<WasmCallMessage> {
             #body
         }

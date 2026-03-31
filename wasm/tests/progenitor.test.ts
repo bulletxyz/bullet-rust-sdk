@@ -11,15 +11,12 @@
  */
 
 import { jest } from '@jest/globals';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const sdk = require('../pkg/node/bullet_rust_sdk_wasm.js') as typeof import('../pkg/node/bullet_rust_sdk_wasm.js');
 
-const {
+import {
   Client, Decimal,
   // Enums
   TxResult, TxStatus, HealthState,
-  // Type wrappers — we only check they're exported; instances come from API calls
+  // Type wrappers
   Account, AccountAsset, AccountPosition,
   Asset, Balance,
   BinanceOrder, Bracket, LeverageBracket,
@@ -29,7 +26,7 @@ const {
   PingResponse, PriceTicker, TradingSymbol, Ticker24hr, TimeResponse, Trade,
   LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
   ReadinessStatus,
-} = sdk;
+} from '../pkg/node';
 
 const ENDPOINT =
   process.env.BULLET_API_ENDPOINT ?? 'https://tradingapi.bullet.xyz';
@@ -86,8 +83,20 @@ describe('progenitor type wrappers are exported', () => {
     'ReadinessStatus',
   ];
 
+  const exportedClasses: Record<string, unknown> = {
+    Account, AccountAsset, AccountPosition,
+    Asset, Balance,
+    BinanceOrder, Bracket, LeverageBracket,
+    BorrowLendPoolResponse, InsuranceAsset, InsuranceBalance,
+    ChainInfo, ModuleRef, RateLimit, RateParams, RollupConstants,
+    ExchangeInfo, FundingRate, OrderBook,
+    PingResponse, PriceTicker, TradingSymbol, Ticker24hr, TimeResponse, Trade,
+    LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
+    ReadinessStatus,
+  };
+
   test.each(expectedClasses)('%s is exported as a constructor', (name) => {
-    const Ctor = (sdk as Record<string, unknown>)[name];
+    const Ctor = exportedClasses[name];
     expect(Ctor).toBeDefined();
     expect(typeof Ctor).toBe('function');
   });

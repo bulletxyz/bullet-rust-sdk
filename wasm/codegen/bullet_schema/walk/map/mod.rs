@@ -12,8 +12,7 @@ use std::collections::HashSet;
 use sov_universal_wallet::schema::Link;
 use sov_universal_wallet::ty::Ty;
 
-use super::super::{FieldInfo, SchemaEnum, Types};
-use super::structs::RawSchemaStruct;
+use super::super::{FieldInfo, Types};
 
 /// The resolved parameter type and conversion expression for a field.
 #[derive(Debug, Clone)]

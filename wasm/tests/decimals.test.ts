@@ -10,11 +10,8 @@
  */
 
 import { jest } from '@jest/globals';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const sdk = require('../pkg/node/bullet_rust_sdk_wasm.js') as typeof import('../pkg/node/bullet_rust_sdk_wasm.js');
 
-const { Client, Decimal } = sdk;
+import { Client, Decimal } from "../pkg/node";
 
 const ENDPOINT =
   process.env.BULLET_API_ENDPOINT ?? 'https://tradingapi.bullet.xyz';

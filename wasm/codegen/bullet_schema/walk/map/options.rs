@@ -42,9 +42,23 @@ fn build_option_conversion(inner: &ParamMapping) -> String {
         if inner_expr.contains('?') {
             let expr_no_q = inner_expr.trim_end_matches('?');
             format!("{{v}}.map(|v| {expr_no_q}).transpose()?")
+        } else if is_simple_constructor(&inner.conversion) {
+            // e.g. "ClientOrderId({v})" → "{v}.map(ClientOrderId)"
+            let ctor = inner.conversion.split('(').next().unwrap();
+            format!("{{v}}.map({ctor})")
         } else {
             format!("{{v}}.map(|v| {inner_expr})")
         }
+    }
+}
+
+/// Check if a conversion is a simple constructor like "TypeName({v})".
+fn is_simple_constructor(conversion: &str) -> bool {
+    if let Some(rest) = conversion.strip_suffix("({v})") {
+        // Must be a valid identifier (alphanumeric + underscore, starts with letter).
+        !rest.is_empty() && rest.chars().all(|c| c.is_alphanumeric() || c == '_')
+    } else {
+        false
     }
 }
 

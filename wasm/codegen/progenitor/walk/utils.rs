@@ -270,10 +270,10 @@ pub fn extract_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
 // ── Impl Helpers ─────────────────────────────────────────────────────────────
 
 pub fn impl_target_name(imp: &syn::ItemImpl) -> String {
-    if let Type::Path(tp) = imp.self_ty.as_ref() {
-        if let Some(seg) = tp.path.segments.last() {
-            return seg.ident.to_string();
-        }
+    if let Type::Path(tp) = imp.self_ty.as_ref()
+        && let Some(seg) = tp.path.segments.last()
+    {
+        return seg.ident.to_string();
     }
     String::new()
 }

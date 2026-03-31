@@ -18,20 +18,25 @@ build:
 build-release:
     cargo build --release
 
-# Build the WASM package for browser environments
-build-wasm-web:
-    wasm-pack build wasm --target web --out-dir pkg/web
-
-# Build the WASM package for Node.js environments
-build-wasm-node:
-    wasm-pack build wasm --target nodejs --out-dir pkg/node
-
-# Build the WASM package for both web and Node.js
-build-wasm: build-wasm-web build-wasm-node
+# Build the WASM package (web target + Node.js wrapper)
+build-wasm:
+    wasm-pack build wasm --target web --out-dir pkg
+    # Remove wasm-pack generated package.json and .gitignore that interfere with npm install --install-links
+    rm -f wasm/pkg/.gitignore wasm/pkg/package.json
+    # Generate Node.js auto-init wrapper (uses web target's initSync)
+    printf '%s\n' \
+        'import { readFileSync } from "node:fs";' \
+        'import { initSync } from "./bullet_rust_sdk_wasm.js";' \
+        'const wasm = readFileSync(new URL("./bullet_rust_sdk_wasm_bg.wasm", import.meta.url));' \
+        'initSync({ module: wasm });' \
+        'export * from "./bullet_rust_sdk_wasm.js";' \
+        > wasm/pkg/node.js
+    # Generate type re-exports
+    echo 'export * from "./bullet_rust_sdk_wasm.js";' > wasm/pkg/node.d.ts
 
 # Remove generated WASM build artifacts
 clean-wasm:
-    rm -rf wasm/pkg/web wasm/pkg/node
+    rm -rf wasm/pkg
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 
@@ -77,6 +82,73 @@ example-rest:
 # Run the WebSocket example (set API_ENDPOINT env var to override)
 example-ws:
     cargo run -p bullet-rust-sdk --example websocket
+
+# Run the Node.js WASM example
+example-node: build-wasm
+    cd examples/node && npm install && npm start
+
+# Run the Deno WASM example
+example-deno: build-wasm
+    cd examples/deno && deno task start
+
+# Run the web WASM example (Next.js)
+example-web: build-wasm
+    cd examples/web && npm install --install-links && npm run dev
+
+# Run Node.js WASM example tests
+test-example-node: build-wasm
+    cd examples/node && npm install && npm test
+
+# Run Deno WASM example tests
+test-example-deno: build-wasm
+    cd examples/deno && deno task test
+
+# Run all example tests (Node + Deno)
+test-examples: test-example-node test-example-deno
+
+# ── CI ────────────────────────────────────────────────────────────────────────
+
+# Full end-to-end build + test (Rust → WASM → examples)
+ci:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    step() { printf '\n\033[1;34m══ %s\033[0m\n' "$1"; }
+
+    step "Rust: format check"
+    cargo fmt -- --check
+
+    step "Rust: clippy"
+    cargo clippy --all-targets -- -D warnings
+
+    step "Rust: build"
+    cargo build
+
+    step "Rust: unit tests"
+    cargo nextest run
+
+    step "Rust: doc tests"
+    cargo test --doc
+
+    step "WASM: build"
+    just build-wasm
+
+    step "WASM: Jest tests"
+    cd wasm && npm test && cd ..
+
+    step "Examples: install"
+    cd examples && npm install && cd ..
+
+    step "Examples: Node.js tests"
+    cd examples/node && npm test && cd ../..
+
+    step "Examples: Deno tests"
+    cd examples/deno && deno task test && cd ../..
+
+    step "Examples: Next.js build"
+    cd examples/web && npm install --install-links && npx next build && cd ../..
+
+    printf '\n\033[1;32m✓ All checks passed\033[0m\n'
 
 # ── OpenAPI spec ──────────────────────────────────────────────────────────────
 

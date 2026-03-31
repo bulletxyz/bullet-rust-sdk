@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["jest", "node"]
   },
-  "include": ["tests/**/*.ts", "pkg/node/bullet_rust_sdk_wasm.d.ts"]
+  "include": ["tests/**/*.ts", "pkg/bullet_rust_sdk_wasm.d.ts"]
 }

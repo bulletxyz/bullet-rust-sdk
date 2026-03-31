@@ -157,9 +157,7 @@ impl WasmTransactionBuilder {
     /// Falls back to client defaults for maxFee, priorityFeeBips, gasLimit, and signer
     /// if not explicitly set on the builder.
     pub fn build(self, client: &WasmTradingApi) -> WasmResult<WasmTransaction> {
-        let call_message = self
-            .call_message
-            .ok_or_else(|| "call_message is required")?;
+        let call_message = self.call_message.ok_or("call_message is required")?;
 
         // Convert options to the types expected by the Rust builder
         let max_fee = self.max_fee.map(|f| f as u128);

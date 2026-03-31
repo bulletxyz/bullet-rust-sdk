@@ -187,9 +187,7 @@ pub type SDKResult<T, E = SDKError> = Result<T, E>;
 impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
     fn from(err: progenitor_client::Error<ApiErrorResponse>) -> Self {
         match err {
-            progenitor_client::Error::ErrorResponse(resp) => {
-                SDKError::ApiError(resp.into_inner())
-            }
+            progenitor_client::Error::ErrorResponse(resp) => SDKError::ApiError(resp.into_inner()),
             progenitor_client::Error::CommunicationError(e) => SDKError::HttpError(e),
             progenitor_client::Error::ResponseBodyError(e) => SDKError::HttpError(e),
             progenitor_client::Error::InvalidUpgrade(e) => SDKError::HttpError(e),
@@ -262,8 +260,14 @@ mod tests {
 
         let resp = err.api_error().expect("should be ApiError");
         assert_eq!(resp.status, 400);
-        assert_eq!(resp.message, "Transaction validation failed: insufficient funds");
-        assert_eq!(resp.details.as_ref().unwrap()["reason"], "insufficient_balance");
+        assert_eq!(
+            resp.message,
+            "Transaction validation failed: insufficient funds"
+        );
+        assert_eq!(
+            resp.details.as_ref().unwrap()["reason"],
+            "insufficient_balance"
+        );
         assert!(!err.is_retryable());
         assert!(err.to_string().contains("insufficient funds"));
     }
@@ -290,8 +294,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/tx/submit"))
             .respond_with(
-                ResponseTemplate::new(502)
-                    .set_body_string("<html><body>Bad Gateway</body></html>"),
+                ResponseTemplate::new(502).set_body_string("<html><body>Bad Gateway</body></html>"),
             )
             .mount(&server)
             .await;

@@ -6,8 +6,8 @@ use sov_universal_wallet::schema::Link;
 use sov_universal_wallet::ty::Ty;
 
 use super::super::super::Types;
-use super::primitives;
 use super::ParamMapping;
+use super::primitives;
 
 /// Map a `Vec { value }` schema type.
 pub fn map_vec(value_link: &Link, types: &Types, wrapper_indices: &HashSet<usize>) -> ParamMapping {

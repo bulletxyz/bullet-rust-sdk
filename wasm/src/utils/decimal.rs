@@ -1,5 +1,5 @@
-use rust_decimal::prelude::*;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use wasm_bindgen::prelude::*;
 
 use crate::errors::WasmResult;
@@ -134,12 +134,18 @@ impl WasmDecimal {
 
     /// Round down (toward negative infinity) to `dp` decimal places.
     pub fn floor(&self, dp: u32) -> WasmDecimal {
-        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::ToNegativeInfinity))
+        WasmDecimal(
+            self.0
+                .round_dp_with_strategy(dp, RoundingStrategy::ToNegativeInfinity),
+        )
     }
 
     /// Round up (toward positive infinity) to `dp` decimal places.
     pub fn ceil(&self, dp: u32) -> WasmDecimal {
-        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::ToPositiveInfinity))
+        WasmDecimal(
+            self.0
+                .round_dp_with_strategy(dp, RoundingStrategy::ToPositiveInfinity),
+        )
     }
 
     /// Truncate to `dp` decimal places without rounding.
@@ -159,6 +165,7 @@ impl WasmDecimal {
 
     // ── Comparison ───────────────────────────────────────────────────────
 
+    #[allow(clippy::should_implement_trait)]
     pub fn eq(&self, other: &WasmDecimal) -> bool {
         self.0 == other.0
     }
@@ -180,6 +187,7 @@ impl WasmDecimal {
     }
 
     /// Returns -1, 0, or 1.
+    #[allow(clippy::should_implement_trait)]
     pub fn cmp(&self, other: &WasmDecimal) -> i32 {
         match self.0.cmp(&other.0) {
             std::cmp::Ordering::Less => -1,
