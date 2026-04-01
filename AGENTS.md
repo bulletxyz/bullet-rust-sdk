@@ -11,9 +11,9 @@ This repository contains two crates that must stay in sync:
 
 ## WASM/Rust Synchronization
 
-**CRITICAL:** The WASM bindings must mirror the Rust SDK.
+**CRITICAL:** The WASM bindings must mirror the Rust SDK. **Every change to one crate must be applied to both crates in the same pass.** Do not update Rust and leave WASM for later — they ship as one unit. If you add, edit, or delete a public API in one crate, make the corresponding change in the other crate before moving on.
 
-When adding, editing, or deleting any of the following in the Rust crate, the corresponding changes **must** be made to the WASM crate:
+This applies to:
 
 - Public structs and their fields
 - Public methods on structs
@@ -21,13 +21,16 @@ When adding, editing, or deleting any of the following in the Rust crate, the co
 - Builder patterns and their methods
 - Error variants
 
+### README Documentation
+
+When the WASM SDK's public API surface changes (new methods, renamed methods, removed methods, new types), update `wasm/README.md` to reflect the change. The README is published to npm and is the primary documentation for JS/TS users.
+
 ### Key File Mappings
 
 | Rust (`rust/src/`)         | WASM (`wasm/src/`)              |
 |----------------------------|----------------------------------|
 | `client.rs`                | `client.rs`                      |
 | `transaction_builder.rs`   | `transaction_builder.rs`         |
-| `transactions.rs`          | `transactions.rs`                |
 | `keypair.rs`               | `keypair.rs`                     |
 | `errors.rs`                | `errors.rs`                      |
 | `ws/client.rs`             | `ws/client.rs`                   |
@@ -69,7 +72,7 @@ The codegen lives in `wasm/codegen/` with two phases:
 - `walk/` - Traverses the schema and extracts type information
 - `emit/` - Generates Rust source code from the resolved data
 
-Generated code is written to `$OUT_DIR/call_message_factories.rs` and included via `include!()` in `wasm/src/transactions.rs`.
+Generated code is written to `$OUT_DIR/call_message_factories.rs` and included via `include!()` in `wasm/src/transaction_builder.rs`.
 
 ## Development Commands
 
