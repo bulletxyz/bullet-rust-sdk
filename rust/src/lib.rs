@@ -1,7 +1,6 @@
 mod client;
 mod keypair;
 mod transaction_builder;
-mod transactions;
 
 /// Error types for the SDK.
 pub mod errors;
