@@ -276,15 +276,20 @@ impl WasmTransactionBuilder {
     pub fn build_unsigned(self, client: &WasmTradingApi) -> WasmResult<WasmUnsignedTransaction> {
         let call_message = self.call_message.ok_or("call_message is required")?;
 
-        let max_fee = self.max_fee.map(|f| f as u128);
-        let gas_limit = self.gas_limit.map(Gas);
+        let max_fee = self.max_fee.map(|f| f as u128)
+            .unwrap_or_else(|| client.inner.max_fee().0);
+        let priority_fee_bips = self.priority_fee_bips
+            .unwrap_or_else(|| client.inner.max_priority_fee_bips().0);
+        let gas_limit = self.gas_limit.map(Gas)
+            .or_else(|| client.inner.gas_limit());
 
-        let unsigned = RustTransaction::builder()
+        let unsigned = UnsignedTransaction::builder()
             .call_message(call_message.inner)
-            .maybe_max_fee(max_fee)
-            .maybe_priority_fee_bips(self.priority_fee_bips)
+            .max_fee(max_fee)
+            .priority_fee_bips(priority_fee_bips)
             .maybe_gas_limit(gas_limit)
-            .build_unsigned(&client.inner)?;
+            .client(&client.inner)
+            .build()?;
 
         Ok(WasmUnsignedTransaction { inner: unsigned })
     }
@@ -303,7 +308,8 @@ impl WasmTransactionBuilder {
             .maybe_priority_fee_bips(self.priority_fee_bips)
             .maybe_gas_limit(gas_limit)
             .maybe_signer(signer_ref)
-            .build(&client.inner)?;
+            .client(&client.inner)
+            .build()?;
 
         Ok(WasmTransaction { inner: signed })
     }

@@ -111,6 +111,32 @@ const signed = SignedTransaction.fromParts(unsigned, signature, pubKey);
 await client.sendTransaction(signed);
 ```
 
+### UnsignedTransaction
+
+Returned by `Transaction.builder().buildUnsigned(client)`. Contains the
+chain hash so signable bytes can be produced without a client reference.
+
+```typescript
+unsigned.toBytes()  // Uint8Array — borsh-serialized tx + chain hash (signable bytes)
+```
+
+### SignedTransaction
+
+Returned by `Transaction.builder().build(client)` or assembled from parts.
+
+```typescript
+// From builder
+const tx = Transaction.builder()
+    .callMessage(msg).maxFee(fee).signer(kp).build(client);
+
+// From external signing
+const tx = SignedTransaction.fromParts(unsigned, signature, pubKey);
+
+// Serialization
+tx.toBytes()   // Uint8Array (borsh)
+tx.toBase64()  // base64 string (for WebSocket submission)
+```
+
 ### Keypair
 
 Ed25519 keypair for signing transactions:

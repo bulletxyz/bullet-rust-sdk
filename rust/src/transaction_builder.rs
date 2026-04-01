@@ -3,31 +3,26 @@
 //! All transaction construction goes through the builder pattern:
 //!
 //! ```ignore
-//! use bullet_rust_sdk::{Transaction, Client, Keypair};
+//! use bullet_rust_sdk::{Transaction, UnsignedTransaction, Client, Keypair};
 //!
 //! // Build and send with explicit signer
 //! let response = Transaction::builder()
 //!     .call_message(call_msg)
 //!     .max_fee(10_000_000)
 //!     .signer(&keypair)
-//!     .send(&client)
-//!     .await?;
-//!
-//! // Or just build without sending
-//! let signed = Transaction::builder()
-//!     .call_message(call_msg)
-//!     .max_fee(10_000_000)
-//!     .signer(&keypair)
-//!     .build(&client)?;
+//!     .client(&client)
+//!     .build()?;
 //!
 //! // External signing
-//! let unsigned = Transaction::builder()
+//! let unsigned = UnsignedTransaction::builder()
 //!     .call_message(call_msg)
 //!     .max_fee(10_000_000)
-//!     .build_unsigned(&client)?;
+//!     .client(&client)
+//!     .build()?;
 //!
 //! let signable = unsigned.to_bytes()?;
-//! let signature = external_signer.sign(&signable);
+//! let signature: [u8; 64] = external_signer.sign(&signable);
+//! let pub_key: [u8; 32] = external_signer.public_key();
 //! let signed = Transaction::from_parts(unsigned, signature, pub_key);
 //!
 //! // Submit later
@@ -36,7 +31,7 @@
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use bon::Builder;
+use bon::bon;
 use bullet_exchange_interface::transaction::{
     Amount, Gas, PriorityFeeBips, RuntimeCall, Transaction as SignedTransaction, TxDetails,
     UniquenessData, UnsignedTransaction as RawUnsignedTransaction, Version0,
@@ -51,105 +46,148 @@ use crate::{Client, Keypair, SDKError, SDKResult};
 
 /// An unsigned transaction with the chain hash baked in.
 ///
-/// Created by [`TransactionBuilder::build_unsigned`]. Contains everything
+/// Created by [`UnsignedTransaction::build`]. Contains everything
 /// needed to produce signable bytes without a client reference.
 pub struct UnsignedTransaction {
     inner: RawUnsignedTransaction,
     chain_hash: [u8; 32],
 }
 
+#[bon]
 impl UnsignedTransaction {
     /// Serialize into the bytes that must be signed.
     ///
     /// Borsh-serializes the transaction and appends the chain hash (32 bytes)
     /// as a domain separator.
     pub fn to_bytes(&self) -> SDKResult<Vec<u8>> {
-        let mut data = borsh::to_vec(&self.inner)
-            .map_err(|e| SDKError::SerializationError(e.to_string()))?;
+        let mut data =
+            borsh::to_vec(&self.inner).map_err(|e| SDKError::SerializationError(e.to_string()))?;
         data.extend_from_slice(&self.chain_hash);
         Ok(data)
     }
-}
 
-// ── Transaction builder ──────────────────────────────────────────────────────
-
-/// A builder for constructing and submitting transactions.
-///
-/// Use `Transaction::builder()` to create a new builder, then chain
-/// the required fields and call `.build(&client)`, `.build_unsigned(&client)`,
-/// or `.send(&client)`.
-///
-/// # Required Fields
-///
-/// - `call_message` - The action to execute (e.g., place order, withdraw)
-///
-/// # Optional Fields (fall back to client defaults if not set)
-///
-/// - `max_fee` - Maximum fee willing to pay (in base units)
-/// - `priority_fee_bips` - Priority fee in basis points
-/// - `gas_limit` - Optional gas limit
-/// - `signer` - Keypair to sign the transaction (not required for `build_unsigned`)
-///
-/// # Example
-///
-/// ```ignore
-/// // With explicit values
-/// let response = Transaction::builder()
-///     .call_message(call_msg)
-///     .max_fee(10_000_000)
-///     .priority_fee_bips(100)
-///     .signer(&keypair)
-///     .send(&client)
-///     .await?;
-///
-/// // Using client defaults
-/// let response = Transaction::builder()
-///     .call_message(call_msg)
-///     .send(&client)
-///     .await?;
-/// ```
-#[derive(Builder)]
-#[builder(start_fn = builder, finish_fn = __build)]
-pub struct Transaction<'a> {
-    /// The action to be executed (e.g., place order, withdraw, etc.).
-    call_message: CallMessage,
-
-    /// Maximum fee (in base units) willing to pay for this transaction.
-    /// Falls back to client default if not set.
-    max_fee: Option<u128>,
-
-    /// Priority fee in basis points. Higher values may result in faster processing.
-    /// Falls back to client default if not set.
-    priority_fee_bips: Option<u64>,
-
-    /// Optional gas limit. Falls back to client default if not set.
-    gas_limit: Option<Gas>,
-
-    /// Keypair used to sign this transaction.
-    /// Falls back to client default if not set.
-    signer: Option<&'a Keypair>,
-}
-
-// ── Transaction associated functions ─────────────────────────────────────────
-
-impl Transaction<'_> {
-    /// Assemble a signed transaction from an unsigned transaction, a 64-byte
-    /// Ed25519 signature, and a 32-byte public key.
+    /// Build an unsigned transaction.
     ///
-    /// Use after signing the bytes from [`UnsignedTransaction::to_bytes`].
+    /// The returned [`UnsignedTransaction`] contains the chain hash, so
+    /// [`to_bytes()`](UnsignedTransaction::to_bytes) produces signable bytes
+    /// without needing a client reference.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let unsigned = Transaction::builder()
+    /// let unsigned = UnsignedTransaction::builder()
     ///     .call_message(call_msg)
     ///     .max_fee(10_000_000)
-    ///     .build_unsigned(&client)?;
+    ///     .client(&client)
+    ///     .build()?;
     ///
     /// let signable = unsigned.to_bytes()?;
-    /// let signature = external_signer.sign(&signable);
+    /// let signature: [u8; 64] = external_signer.sign(&signable);
+    /// let pub_key: [u8; 32] = external_signer.public_key();
     /// let signed = Transaction::from_parts(unsigned, signature, pub_key);
     /// ```
+    #[builder]
+    pub fn new(
+        call_message: CallMessage,
+        max_fee: u128,
+        priority_fee_bips: u64,
+        gas_limit: Option<Gas>,
+        client: &Client,
+    ) -> SDKResult<UnsignedTransaction> {
+        let runtime_call = RuntimeCall::Exchange(call_message);
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| SDKError::SystemTimeError)?
+            .as_millis() as u64;
+        let uniqueness = UniquenessData::Generation(timestamp);
+        let details = TxDetails {
+            chain_id: client.chain_id(),
+            max_fee: Amount(max_fee),
+            gas_limit,
+            max_priority_fee_bips: PriorityFeeBips(priority_fee_bips),
+        };
+
+        Ok(UnsignedTransaction {
+            inner: RawUnsignedTransaction {
+                runtime_call,
+                uniqueness,
+                details,
+            },
+            chain_hash: *client.chain_hash(),
+        })
+    }
+}
+
+// ── Transaction ──────────────────────────────────────────────────────────────
+
+/// Transaction construction and serialization.
+///
+/// Use `Transaction::builder()` for signed transactions, or
+/// `UnsignedTransaction::builder()` for external signing.
+pub struct Transaction;
+
+#[bon]
+impl Transaction {
+    /// Build a signed transaction.
+    ///
+    /// Internally builds an unsigned transaction, serializes it,
+    /// signs with the provided keypair, and assembles the result.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let signed = Transaction::builder()
+    ///     .call_message(call_msg)
+    ///     .max_fee(10_000_000)
+    ///     .signer(&keypair)
+    ///     .client(&client)
+    ///     .build()?;
+    ///
+    /// client.send_transaction(&signed).await?;
+    /// ```
+    #[builder]
+    pub fn new(
+        call_message: CallMessage,
+        max_fee: Option<u128>,
+        priority_fee_bips: Option<u64>,
+        gas_limit: Option<Gas>,
+        signer: Option<&Keypair>,
+        client: &Client,
+    ) -> SDKResult<SignedTransaction> {
+        let signer = signer
+            .or_else(|| client.keypair())
+            .ok_or(SDKError::MissingKeypair)?;
+
+        let max_fee = max_fee.unwrap_or_else(|| client.max_fee().0);
+        let priority_fee_bips =
+            priority_fee_bips.unwrap_or_else(|| client.max_priority_fee_bips().0);
+        let gas_limit = gas_limit.or_else(|| client.gas_limit());
+
+        let unsigned = UnsignedTransaction::builder()
+            .call_message(call_message)
+            .max_fee(max_fee)
+            .priority_fee_bips(priority_fee_bips)
+            .maybe_gas_limit(gas_limit)
+            .client(client)
+            .build()?;
+
+        let data = unsigned.to_bytes()?;
+        let sig_bytes: [u8; 64] = signer
+            .sign(&data)
+            .try_into()
+            .map_err(|v: Vec<u8>| SDKError::InvalidSignatureLength(v.len()))?;
+        let pub_key: [u8; 32] = signer
+            .public_key()
+            .try_into()
+            .map_err(|v: Vec<u8>| SDKError::InvalidPublicKeyLength(v.len()))?;
+
+        Ok(Self::from_parts(unsigned, sig_bytes, pub_key))
+    }
+
+    /// Assemble a signed transaction from an unsigned transaction, a 64-byte
+    /// Ed25519 signature, and a 32-byte public key.
+    ///
+    /// Use after signing the bytes from [`UnsignedTransaction::to_bytes`].
     pub fn from_parts(
         tx: UnsignedTransaction,
         signature: [u8; 64],
@@ -183,108 +221,6 @@ impl Transaction<'_> {
     }
 }
 
-// ── Builder methods ──────────────────────────────────────────────────────────
-
-impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
-    /// Build the unsigned transaction without signing it.
-    ///
-    /// The returned [`UnsignedTransaction`] contains the chain hash, so
-    /// [`to_bytes()`](UnsignedTransaction::to_bytes) produces signable bytes
-    /// without needing a client reference.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let unsigned = Transaction::builder()
-    ///     .call_message(call_msg)
-    ///     .max_fee(10_000_000)
-    ///     .build_unsigned(&client)?;
-    ///
-    /// let signable = unsigned.to_bytes()?;
-    /// let signature = external_signer.sign(&signable);
-    /// let signed = Transaction::from_parts(unsigned, signature, pub_key);
-    /// ```
-    pub fn build_unsigned(self, client: &Client) -> SDKResult<UnsignedTransaction>
-    where
-        S: transaction_builder::IsComplete,
-    {
-        let tx = self.__build();
-        let max_fee = tx.max_fee.unwrap_or_else(|| client.max_fee().0);
-        let priority_fee_bips = tx
-            .priority_fee_bips
-            .unwrap_or_else(|| client.max_priority_fee_bips().0);
-        let gas_limit = tx.gas_limit.or_else(|| client.gas_limit());
-        let inner = make_unsigned(tx.call_message, max_fee, priority_fee_bips, gas_limit, client)?;
-        Ok(UnsignedTransaction {
-            inner,
-            chain_hash: *client.chain_hash(),
-        })
-    }
-
-    /// Build the signed transaction without sending it.
-    ///
-    /// Use this if you want to inspect the transaction or send it later
-    /// via `client.send_transaction(&signed)`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - No signer is provided and client has no default keypair
-    /// - Signing fails
-    /// - System time is unavailable
-    pub fn build(self, client: &Client) -> SDKResult<SignedTransaction>
-    where
-        S: transaction_builder::IsComplete,
-    {
-        let tx = self.__build();
-
-        let max_fee = tx.max_fee.unwrap_or_else(|| client.max_fee().0);
-        let priority_fee_bips = tx
-            .priority_fee_bips
-            .unwrap_or_else(|| client.max_priority_fee_bips().0);
-        let gas_limit = tx.gas_limit.or_else(|| client.gas_limit());
-
-        let signer = tx
-            .signer
-            .or_else(|| client.keypair())
-            .ok_or(SDKError::MissingKeypair)?;
-
-        let inner = make_unsigned(
-            tx.call_message,
-            max_fee,
-            priority_fee_bips,
-            gas_limit,
-            client,
-        )?;
-        let unsigned = UnsignedTransaction {
-            inner,
-            chain_hash: *client.chain_hash(),
-        };
-        let data = unsigned.to_bytes()?;
-        let sig_bytes: [u8; 64] = signer
-            .sign(&data)
-            .try_into()
-            .map_err(|v: Vec<u8>| SDKError::InvalidSignatureLength(v.len()))?;
-        let pub_key: [u8; 32] = signer
-            .public_key()
-            .try_into()
-            .map_err(|v: Vec<u8>| SDKError::InvalidPublicKeyLength(v.len()))?;
-        Ok(Transaction::from_parts(unsigned, sig_bytes, pub_key))
-    }
-
-    /// Sign and submit the transaction to the network.
-    ///
-    /// This is equivalent to calling `build()` followed by
-    /// `client.send_transaction()`.
-    pub async fn send(self, client: &Client) -> SDKResult<SubmitTxResponse>
-    where
-        S: transaction_builder::IsComplete,
-    {
-        let signed = self.build(client)?;
-        client.send_transaction(&signed).await
-    }
-}
-
 // ── Client methods ───────────────────────────────────────────────────────────
 
 impl Client {
@@ -301,36 +237,6 @@ impl Client {
     }
 }
 
-// ── Internal ─────────────────────────────────────────────────────────────────
-
-/// Build a raw unsigned transaction from resolved parameters.
-fn make_unsigned(
-    call_message: CallMessage,
-    max_fee: u128,
-    priority_fee_bips: u64,
-    gas_limit: Option<Gas>,
-    client: &Client,
-) -> SDKResult<RawUnsignedTransaction> {
-    let runtime_call = RuntimeCall::Exchange(call_message);
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| SDKError::SystemTimeError)?
-        .as_millis() as u64;
-    let uniqueness = UniquenessData::Generation(timestamp);
-    let details = TxDetails {
-        chain_id: client.chain_id(),
-        max_fee: Amount(max_fee),
-        gas_limit,
-        max_priority_fee_bips: PriorityFeeBips(priority_fee_bips),
-    };
-
-    Ok(RawUnsignedTransaction {
-        runtime_call,
-        uniqueness,
-        details,
-    })
-}
-
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -343,9 +249,9 @@ mod tests {
 
     fn test_unsigned_tx() -> UnsignedTransaction {
         let inner = RawUnsignedTransaction {
-            runtime_call: RuntimeCall::Exchange(CallMessage::Public(
-                PublicAction::ApplyFunding { addresses: vec![] },
-            )),
+            runtime_call: RuntimeCall::Exchange(CallMessage::Public(PublicAction::ApplyFunding {
+                addresses: vec![],
+            })),
             uniqueness: UniquenessData::Generation(12345),
             details: TxDetails {
                 chain_id: 1,
@@ -438,18 +344,6 @@ mod tests {
         assert!(!Transaction::to_base64(&signed).unwrap().is_empty());
     }
 
-    // Compile-time test: ensure the builder works correctly.
-    #[allow(dead_code)]
-    fn builder_compiles() {
-        let keypair = Keypair::generate();
-        let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
-
-        let _builder = Transaction::builder()
-            .call_message(call_msg)
-            .max_fee(10_000_000)
-            .signer(&keypair);
-    }
-
     #[cfg(feature = "integration")]
     mod integration {
         use super::*;
@@ -475,7 +369,8 @@ mod tests {
                 .call_message(call_msg)
                 .max_fee(10_000_000)
                 .signer(&keypair)
-                .build(&client)
+                .client(&client)
+                .build()
                 .expect("Failed to build transaction");
 
             assert!(!Transaction::to_base64(&signed).unwrap().is_empty());
