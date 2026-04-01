@@ -138,8 +138,14 @@ impl WasmTransaction {
         signature: &[u8],
         pub_key: &[u8],
     ) -> WasmResult<WasmTransaction> {
+        let signature: [u8; 64] = signature
+            .try_into()
+            .map_err(|_| format!("expected 64-byte signature, got {}", signature.len()))?;
+        let pub_key: [u8; 32] = pub_key
+            .try_into()
+            .map_err(|_| format!("expected 32-byte public key, got {}", pub_key.len()))?;
         Ok(WasmTransaction {
-            inner: RustTransaction::from_parts(unsigned_tx.inner, signature, pub_key)?,
+            inner: RustTransaction::from_parts(unsigned_tx.inner, signature, pub_key),
         })
     }
 
