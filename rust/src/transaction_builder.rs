@@ -27,8 +27,9 @@
 //!     .build_unsigned(&client)?;
 //!
 //! let signable = unsigned.to_bytes()?;
-//! let signature = external_signer.sign(&signable);
-//! let signed = Transaction::from_parts(unsigned, &signature, &pub_key)?;
+//! let signature: [u8; 64] = external_signer.sign(&signable).try_into().unwrap();
+//! let pub_key: [u8; 32] = external_signer.public_key().try_into().unwrap();
+//! let signed = Transaction::from_parts(unsigned, signature, pub_key);
 //!
 //! // Submit later
 //! client.send_transaction(&signed).await?;
@@ -64,8 +65,8 @@ impl UnsignedTransaction {
     /// Borsh-serializes the transaction and appends the chain hash (32 bytes)
     /// as a domain separator.
     pub fn to_bytes(&self) -> SDKResult<Vec<u8>> {
-        let mut data = borsh::to_vec(&self.inner)
-            .map_err(|e| SDKError::SerializationError(e.to_string()))?;
+        let mut data =
+            borsh::to_vec(&self.inner).map_err(|e| SDKError::SerializationError(e.to_string()))?;
         data.extend_from_slice(&self.chain_hash);
         Ok(data)
     }
@@ -147,33 +148,27 @@ impl Transaction<'_> {
     ///     .build_unsigned(&client)?;
     ///
     /// let signable = unsigned.to_bytes()?;
-    /// let signature = external_signer.sign(&signable);
-    /// let signed = Transaction::from_parts(unsigned, &signature, &pub_key)?;
+    /// let signature: [u8; 64] = external_signer.sign(&signable).try_into().unwrap();
+    /// let pub_key: [u8; 32] = external_signer.public_key().try_into().unwrap();
+    /// let signed = Transaction::from_parts(unsigned, signature, pub_key);
     /// ```
     pub fn from_parts(
         tx: UnsignedTransaction,
-        signature: &[u8],
-        pub_key: &[u8],
-    ) -> SDKResult<SignedTransaction> {
-        let signature: [u8; 64] = signature
-            .try_into()
-            .map_err(|_| SDKError::InvalidSignatureLength(signature.len()))?;
-        let pub_key: [u8; 32] = pub_key
-            .try_into()
-            .map_err(|_| SDKError::InvalidPublicKeyLength(pub_key.len()))?;
-
+        signature: [u8; 64],
+        pub_key: [u8; 32],
+    ) -> SignedTransaction {
         let RawUnsignedTransaction {
             runtime_call,
             uniqueness,
             details,
         } = tx.inner;
-        Ok(SignedTransaction::V0(Version0 {
+        SignedTransaction::V0(Version0 {
             runtime_call,
             uniqueness,
             details,
             pub_key,
             signature,
-        }))
+        })
     }
 
     /// Borsh-serialize a signed transaction to bytes.
@@ -208,8 +203,9 @@ impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
     ///     .build_unsigned(&client)?;
     ///
     /// let signable = unsigned.to_bytes()?;
-    /// let signature = external_signer.sign(&signable);
-    /// let signed = Transaction::from_parts(unsigned, &signature, &pub_key)?;
+    /// let signature: [u8; 64] = external_signer.sign(&signable).try_into().unwrap();
+    /// let pub_key: [u8; 32] = external_signer.public_key().try_into().unwrap();
+    /// let signed = Transaction::from_parts(unsigned, signature, pub_key);
     /// ```
     pub fn build_unsigned(self, client: &Client) -> SDKResult<UnsignedTransaction>
     where
@@ -221,7 +217,13 @@ impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
             .priority_fee_bips
             .unwrap_or_else(|| client.max_priority_fee_bips().0);
         let gas_limit = tx.gas_limit.or_else(|| client.gas_limit());
-        let inner = make_unsigned(tx.call_message, max_fee, priority_fee_bips, gas_limit, client)?;
+        let inner = make_unsigned(
+            tx.call_message,
+            max_fee,
+            priority_fee_bips,
+            gas_limit,
+            client,
+        )?;
         Ok(UnsignedTransaction {
             inner,
             chain_hash: *client.chain_hash(),
@@ -270,7 +272,15 @@ impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
         let data = unsigned.to_bytes()?;
         let sig_bytes = signer.sign(&data);
         let pk_bytes = signer.public_key();
-        Transaction::from_parts(unsigned, &sig_bytes, &pk_bytes)
+        let signature: [u8; 64] = sig_bytes
+            .clone()
+            .try_into()
+            .map_err(|_| SDKError::InvalidSignatureLength(sig_bytes.len()))?;
+        let pub_key: [u8; 32] = pk_bytes
+            .clone()
+            .try_into()
+            .map_err(|_| SDKError::InvalidPublicKeyLength(pk_bytes.len()))?;
+        Ok(Transaction::from_parts(unsigned, signature, pub_key))
     }
 
     /// Sign and submit the transaction to the network.
@@ -344,9 +354,9 @@ mod tests {
 
     fn test_unsigned_tx() -> UnsignedTransaction {
         let inner = RawUnsignedTransaction {
-            runtime_call: RuntimeCall::Exchange(CallMessage::Public(
-                PublicAction::ApplyFunding { addresses: vec![] },
-            )),
+            runtime_call: RuntimeCall::Exchange(CallMessage::Public(PublicAction::ApplyFunding {
+                addresses: vec![],
+            })),
             uniqueness: UniquenessData::Generation(12345),
             details: TxDetails {
                 chain_id: 1,
@@ -388,7 +398,11 @@ mod tests {
             uniqueness: unsigned.inner.uniqueness.clone(),
             details: unsigned.inner.details.clone(),
         };
-        let assembled = Transaction::from_parts(unsigned, &sig, &pk).unwrap();
+        let assembled = Transaction::from_parts(
+            unsigned,
+            sig.clone().try_into().unwrap(),
+            pk.clone().try_into().unwrap(),
+        );
 
         // Direct Version0 construction
         let mut data = borsh::to_vec(&inner_clone).unwrap();
@@ -415,9 +429,11 @@ mod tests {
         let unsigned = test_unsigned_tx();
 
         let signable = unsigned.to_bytes().unwrap();
-        let signed =
-            Transaction::from_parts(unsigned, &keypair.sign(&signable), &keypair.public_key())
-                .unwrap();
+        let signed = Transaction::from_parts(
+            unsigned,
+            keypair.sign(&signable).try_into().unwrap(),
+            keypair.public_key().try_into().unwrap(),
+        );
 
         let bytes = Transaction::to_bytes(&signed).unwrap();
         assert!(!bytes.is_empty());
@@ -433,28 +449,13 @@ mod tests {
         let unsigned = test_unsigned_tx();
 
         let signable = unsigned.to_bytes().unwrap();
-        let signed =
-            Transaction::from_parts(unsigned, &keypair.sign(&signable), &keypair.public_key())
-                .unwrap();
+        let signed = Transaction::from_parts(
+            unsigned,
+            keypair.sign(&signable).try_into().unwrap(),
+            keypair.public_key().try_into().unwrap(),
+        );
 
         assert!(!Transaction::to_base64(&signed).unwrap().is_empty());
-    }
-
-    #[test]
-    fn from_parts_rejects_invalid_signature_length() {
-        let unsigned = test_unsigned_tx();
-        let result = Transaction::from_parts(unsigned, &[0u8; 63], &[0u8; 32]);
-        assert!(matches!(result, Err(SDKError::InvalidSignatureLength(63))));
-    }
-
-    #[test]
-    fn from_parts_rejects_invalid_pubkey_length() {
-        let unsigned = test_unsigned_tx();
-        let result = Transaction::from_parts(unsigned, &[0u8; 64], &[0u8; 31]);
-        assert!(matches!(
-            result,
-            Err(SDKError::InvalidPublicKeyLength(31))
-        ));
     }
 
     // Compile-time test: ensure the builder works correctly.

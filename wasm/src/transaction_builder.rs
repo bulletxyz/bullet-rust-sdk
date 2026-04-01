@@ -29,14 +29,14 @@ use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::*;
 use bullet_exchange_interface::time::UnixTimestampMicros;
 use bullet_exchange_interface::transaction::{Gas, Transaction};
-use bullet_rust_sdk::UnsignedTransaction;
 use bullet_exchange_interface::types::{
     AdminType, AssetId, ClientOrderId, FeeTier, MarketId, OrderId, OrderType, Side,
     SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
     TriggerPriceCondition, TwapId,
 };
-use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::Transaction as RustTransaction;
+use bullet_rust_sdk::UnsignedTransaction;
+use bullet_rust_sdk::types::CallMessage;
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
@@ -138,8 +138,21 @@ impl WasmTransaction {
         signature: &[u8],
         pub_key: &[u8],
     ) -> WasmResult<WasmTransaction> {
+        let signature: [u8; 64] = signature.try_into().map_err(|_| {
+            format!(
+                "Invalid signature length: expected 64 bytes, got {}",
+                signature.len()
+            )
+        })?;
+        let pub_key: [u8; 32] = pub_key.try_into().map_err(|_| {
+            format!(
+                "Invalid public key length: expected 32 bytes, got {}",
+                pub_key.len()
+            )
+        })?;
+
         Ok(WasmTransaction {
-            inner: RustTransaction::from_parts(unsigned_tx.inner, signature, pub_key)?,
+            inner: RustTransaction::from_parts(unsigned_tx.inner, signature, pub_key),
         })
     }
 
