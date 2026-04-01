@@ -21,6 +21,10 @@ This applies to:
 - Builder patterns and their methods
 - Error variants
 
+### README Documentation
+
+When the WASM SDK's public API surface changes (new methods, renamed methods, removed methods, new types), update `wasm/README.md` to reflect the change. The README is published to npm and is the primary documentation for JS/TS users.
+
 ### Key File Mappings
 
 | Rust (`rust/src/`)         | WASM (`wasm/src/`)              |

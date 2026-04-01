@@ -1,6 +1,6 @@
 [package]
 name = "bullet-rust-sdk"
-version = "1.0.0"
+version = "0.0.2"
 edition = "2024"
 license = "MIT"
 description = "Rust SDK for the Bullet trading platform"
