@@ -16,7 +16,7 @@
 //!     .maxFee(10_000_000n)
 //!     .buildUnsigned(client);
 //!
-//! const signable = unsigned.toSignableBytes(client);
+//! const signable = unsigned.toBytes();
 //! const signature = myExternalSigner(signable);
 //! const signed = SignedTransaction.fromParts(unsigned, signature, pubKey);
 //!
@@ -28,7 +28,8 @@ use bullet_exchange_interface::address::Address;
 use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::*;
 use bullet_exchange_interface::time::UnixTimestampMicros;
-use bullet_exchange_interface::transaction::{Gas, Transaction, UnsignedTransaction};
+use bullet_exchange_interface::transaction::{Gas, Transaction};
+use bullet_rust_sdk::UnsignedTransaction;
 use bullet_exchange_interface::types::{
     AdminType, AssetId, ClientOrderId, FeeTier, MarketId, OrderId, OrderType, Side,
     SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
@@ -89,10 +90,11 @@ include!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
 
 /// An unsigned transaction ready for external signing.
 ///
-/// Create via `Transaction.builder().buildUnsigned(client)`, then:
+/// Created via `Transaction.builder().buildUnsigned(client)`. The chain hash
+/// is already baked in, so `toBytes()` produces signable bytes directly.
 ///
 /// ```js
-/// const signable = unsigned.toSignableBytes(client);
+/// const signable = unsigned.toBytes();
 /// const signature = myExternalSigner(signable);
 /// const signed = SignedTransaction.fromParts(unsigned, signature, pubKey);
 /// ```
@@ -103,13 +105,13 @@ pub struct WasmUnsignedTransaction {
 
 #[wasm_bindgen(js_class = UnsignedTransaction)]
 impl WasmUnsignedTransaction {
-    /// Serialize into the bytes that need to be signed.
+    /// Serialize into the bytes that must be signed.
     ///
     /// Borsh-serializes the transaction and appends the chain hash (32 bytes)
     /// as domain separator. Pass the resulting `Uint8Array` to your signing function.
-    #[wasm_bindgen(js_name = toSignableBytes)]
-    pub fn to_signable_bytes(&self, client: &WasmTradingApi) -> WasmResult<Vec<u8>> {
-        Ok(client.inner.to_signable_bytes(&self.inner)?)
+    #[wasm_bindgen(js_name = toBytes)]
+    pub fn to_bytes(&self) -> WasmResult<Vec<u8>> {
+        Ok(self.inner.to_bytes()?)
     }
 }
 
@@ -129,7 +131,7 @@ impl WasmTransaction {
     /// Assemble a signed transaction from an unsigned transaction, a 64-byte
     /// Ed25519 signature, and a 32-byte public key.
     ///
-    /// Use after signing the bytes from `unsigned.toSignableBytes(client)`.
+    /// Use after signing the bytes from `unsigned.toBytes()`.
     #[wasm_bindgen(js_name = fromParts)]
     pub fn from_parts(
         unsigned_tx: WasmUnsignedTransaction,
@@ -260,7 +262,7 @@ impl WasmTransactionBuilder {
     ///     .maxFee(10_000_000n)
     ///     .buildUnsigned(client);
     ///
-    /// const signable = unsigned.toSignableBytes(client);
+    /// const signable = unsigned.toBytes();
     /// const signature = myExternalSigner(signable);
     /// const signed = SignedTransaction.fromParts(unsigned, signature, pubKey);
     /// ```

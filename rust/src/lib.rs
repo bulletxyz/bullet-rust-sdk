@@ -10,7 +10,7 @@ pub use client::{Client, Network};
 pub use errors::{SDKError, SDKResult, WSErrors};
 pub use generated::types::ApiErrorResponse;
 pub use keypair::Keypair;
-pub use transaction_builder::Transaction;
+pub use transaction_builder::{Transaction, UnsignedTransaction};
 // Re-export WebSocket close code for pattern matching
 pub use reqwest_websocket::CloseCode;
 pub use types::CallMessage;

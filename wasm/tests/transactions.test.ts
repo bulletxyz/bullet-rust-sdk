@@ -94,7 +94,7 @@ describe('Transaction.builder()', () => {
 // ── External signing ─────────────────────────────────────────────────────────
 
 describe('external signing', () => {
-  test('buildUnsigned → toSignableBytes → fromParts', async () => {
+  test('buildUnsigned → toBytes → fromParts', async () => {
     const client = await Client.connect(ENDPOINT);
     const keypair = Keypair.generate();
 
@@ -103,8 +103,8 @@ describe('external signing', () => {
       .maxFee(10_000_000n)
       .buildUnsigned(client);
 
-    // Get signable bytes (borsh tx + chain hash)
-    const signableBytes = unsigned.toSignableBytes(client);
+    // Get signable bytes (borsh tx + chain hash baked in)
+    const signableBytes = unsigned.toBytes();
     expect(signableBytes).toBeInstanceOf(Uint8Array);
     expect(signableBytes.length).toBeGreaterThan(32);
 

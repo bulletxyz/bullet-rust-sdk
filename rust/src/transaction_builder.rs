@@ -26,7 +26,7 @@
 //!     .max_fee(10_000_000)
 //!     .build_unsigned(&client)?;
 //!
-//! let signable = client.to_signable_bytes(&unsigned)?;
+//! let signable = unsigned.to_bytes()?;
 //! let signature = external_signer.sign(&signable);
 //! let signed = Transaction::from_parts(unsigned, &signature, &pub_key)?;
 //!
@@ -39,13 +39,39 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use bon::Builder;
 use bullet_exchange_interface::transaction::{
     Amount, Gas, PriorityFeeBips, RuntimeCall, Transaction as SignedTransaction, TxDetails,
-    UniquenessData, UnsignedTransaction, Version0,
+    UniquenessData, UnsignedTransaction as RawUnsignedTransaction, Version0,
 };
 use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::generated::types::{SubmitTxRequest, SubmitTxResponse};
 use crate::types::CallMessage;
 use crate::{Client, Keypair, SDKError, SDKResult};
+
+// ── UnsignedTransaction ──────────────────────────────────────────────────────
+
+/// An unsigned transaction with the chain hash baked in.
+///
+/// Created by [`TransactionBuilder::build_unsigned`]. Contains everything
+/// needed to produce signable bytes without a client reference.
+pub struct UnsignedTransaction {
+    inner: RawUnsignedTransaction,
+    chain_hash: [u8; 32],
+}
+
+impl UnsignedTransaction {
+    /// Serialize into the bytes that must be signed.
+    ///
+    /// Borsh-serializes the transaction and appends the chain hash (32 bytes)
+    /// as a domain separator.
+    pub fn to_bytes(&self) -> SDKResult<Vec<u8>> {
+        let mut data = borsh::to_vec(&self.inner)
+            .map_err(|e| SDKError::SerializationError(e.to_string()))?;
+        data.extend_from_slice(&self.chain_hash);
+        Ok(data)
+    }
+}
+
+// ── Transaction builder ──────────────────────────────────────────────────────
 
 /// A builder for constructing and submitting transactions.
 ///
@@ -110,8 +136,7 @@ impl Transaction<'_> {
     /// Assemble a signed transaction from an unsigned transaction, a 64-byte
     /// Ed25519 signature, and a 32-byte public key.
     ///
-    /// Use after signing the bytes from [`Client::to_signable_bytes`] with an
-    /// external signer.
+    /// Use after signing the bytes from [`UnsignedTransaction::to_bytes`].
     ///
     /// # Example
     ///
@@ -121,7 +146,7 @@ impl Transaction<'_> {
     ///     .max_fee(10_000_000)
     ///     .build_unsigned(&client)?;
     ///
-    /// let signable = client.to_signable_bytes(&unsigned)?;
+    /// let signable = unsigned.to_bytes()?;
     /// let signature = external_signer.sign(&signable);
     /// let signed = Transaction::from_parts(unsigned, &signature, &pub_key)?;
     /// ```
@@ -137,11 +162,11 @@ impl Transaction<'_> {
             .try_into()
             .map_err(|_| SDKError::InvalidPublicKeyLength(pub_key.len()))?;
 
-        let UnsignedTransaction {
+        let RawUnsignedTransaction {
             runtime_call,
             uniqueness,
             details,
-        } = tx;
+        } = tx.inner;
         Ok(SignedTransaction::V0(Version0 {
             runtime_call,
             uniqueness,
@@ -170,8 +195,9 @@ impl Transaction<'_> {
 impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
     /// Build the unsigned transaction without signing it.
     ///
-    /// Returns an `UnsignedTransaction` that can be signed externally via
-    /// [`Client::to_signable_bytes`] and [`Transaction::from_parts`].
+    /// The returned [`UnsignedTransaction`] contains the chain hash, so
+    /// [`to_bytes()`](UnsignedTransaction::to_bytes) produces signable bytes
+    /// without needing a client reference.
     ///
     /// # Example
     ///
@@ -181,7 +207,7 @@ impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
     ///     .max_fee(10_000_000)
     ///     .build_unsigned(&client)?;
     ///
-    /// let signable = client.to_signable_bytes(&unsigned)?;
+    /// let signable = unsigned.to_bytes()?;
     /// let signature = external_signer.sign(&signable);
     /// let signed = Transaction::from_parts(unsigned, &signature, &pub_key)?;
     /// ```
@@ -195,7 +221,11 @@ impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
             .priority_fee_bips
             .unwrap_or_else(|| client.max_priority_fee_bips().0);
         let gas_limit = tx.gas_limit.or_else(|| client.gas_limit());
-        make_unsigned(tx.call_message, max_fee, priority_fee_bips, gas_limit, client)
+        let inner = make_unsigned(tx.call_message, max_fee, priority_fee_bips, gas_limit, client)?;
+        Ok(UnsignedTransaction {
+            inner,
+            chain_hash: *client.chain_hash(),
+        })
     }
 
     /// Build the signed transaction without sending it.
@@ -226,14 +256,18 @@ impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
             .or_else(|| client.keypair())
             .ok_or(SDKError::MissingKeypair)?;
 
-        let unsigned = make_unsigned(
+        let inner = make_unsigned(
             tx.call_message,
             max_fee,
             priority_fee_bips,
             gas_limit,
             client,
         )?;
-        let data = client.to_signable_bytes(&unsigned)?;
+        let unsigned = UnsignedTransaction {
+            inner,
+            chain_hash: *client.chain_hash(),
+        };
+        let data = unsigned.to_bytes()?;
         let sig_bytes = signer.sign(&data);
         let pk_bytes = signer.public_key();
         Transaction::from_parts(unsigned, &sig_bytes, &pk_bytes)
@@ -255,17 +289,6 @@ impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
 // ── Client methods ───────────────────────────────────────────────────────────
 
 impl Client {
-    /// Serialize an unsigned transaction into the bytes that need to be signed.
-    ///
-    /// Borsh-serializes the transaction and appends this client's chain hash
-    /// (32 bytes) as a domain separator.
-    pub fn to_signable_bytes(&self, tx: &UnsignedTransaction) -> SDKResult<Vec<u8>> {
-        let mut data =
-            borsh::to_vec(tx).map_err(|e| SDKError::SerializationError(e.to_string()))?;
-        data.extend_from_slice(self.chain_hash());
-        Ok(data)
-    }
-
     /// Send a signed transaction to the network.
     ///
     /// Returns the response from the sequencer.
@@ -281,14 +304,14 @@ impl Client {
 
 // ── Internal ─────────────────────────────────────────────────────────────────
 
-/// Build an unsigned transaction from resolved parameters.
+/// Build a raw unsigned transaction from resolved parameters.
 fn make_unsigned(
     call_message: CallMessage,
     max_fee: u128,
     priority_fee_bips: u64,
     gas_limit: Option<Gas>,
     client: &Client,
-) -> SDKResult<UnsignedTransaction> {
+) -> SDKResult<RawUnsignedTransaction> {
     let runtime_call = RuntimeCall::Exchange(call_message);
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -302,7 +325,7 @@ fn make_unsigned(
         max_priority_fee_bips: PriorityFeeBips(priority_fee_bips),
     };
 
-    Ok(UnsignedTransaction {
+    Ok(RawUnsignedTransaction {
         runtime_call,
         uniqueness,
         details,
@@ -320,7 +343,7 @@ mod tests {
     };
 
     fn test_unsigned_tx() -> UnsignedTransaction {
-        UnsignedTransaction {
+        let inner = RawUnsignedTransaction {
             runtime_call: RuntimeCall::Exchange(CallMessage::Public(
                 PublicAction::ApplyFunding { addresses: vec![] },
             )),
@@ -331,31 +354,50 @@ mod tests {
                 gas_limit: None,
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
+        };
+        UnsignedTransaction {
+            inner,
+            chain_hash: [42u8; 32],
         }
     }
 
     #[test]
+    fn to_bytes_is_borsh_plus_chain_hash() {
+        let unsigned = test_unsigned_tx();
+        let bytes = unsigned.to_bytes().unwrap();
+
+        let mut expected = borsh::to_vec(&unsigned.inner).unwrap();
+        expected.extend_from_slice(&unsigned.chain_hash);
+        assert_eq!(bytes, expected);
+    }
+
+    #[test]
     fn from_parts_matches_direct_construction() {
-        let chain_hash = [42u8; 32];
         let keypair = Keypair::generate();
         let unsigned = test_unsigned_tx();
 
         // Via from_parts
-        let mut signable = borsh::to_vec(&unsigned).unwrap();
-        signable.extend_from_slice(&chain_hash);
+        let signable = unsigned.to_bytes().unwrap();
         let sig = keypair.sign(&signable);
         let pk = keypair.public_key();
-        let assembled =
-            Transaction::from_parts(unsigned.clone(), &sig, &pk).unwrap();
+
+        // Reconstruct for direct comparison (from_parts consumes unsigned)
+        let chain_hash = unsigned.chain_hash;
+        let inner_clone = RawUnsignedTransaction {
+            runtime_call: unsigned.inner.runtime_call.clone(),
+            uniqueness: unsigned.inner.uniqueness.clone(),
+            details: unsigned.inner.details.clone(),
+        };
+        let assembled = Transaction::from_parts(unsigned, &sig, &pk).unwrap();
 
         // Direct Version0 construction
-        let mut data = borsh::to_vec(&unsigned).unwrap();
+        let mut data = borsh::to_vec(&inner_clone).unwrap();
         data.extend_from_slice(&chain_hash);
         let sig2 = keypair.sign(&data);
         let direct = SignedTransaction::V0(Version0 {
-            runtime_call: unsigned.runtime_call,
-            uniqueness: unsigned.uniqueness,
-            details: unsigned.details,
+            runtime_call: inner_clone.runtime_call,
+            uniqueness: inner_clone.uniqueness,
+            details: inner_clone.details,
             pub_key: pk.clone().try_into().unwrap(),
             signature: sig2.try_into().unwrap(),
         });
@@ -368,13 +410,11 @@ mod tests {
     }
 
     #[test]
-    fn to_bytes_roundtrips() {
-        let chain_hash = [0u8; 32];
+    fn signed_to_bytes_roundtrips() {
         let keypair = Keypair::generate();
         let unsigned = test_unsigned_tx();
 
-        let mut signable = borsh::to_vec(&unsigned).unwrap();
-        signable.extend_from_slice(&chain_hash);
+        let signable = unsigned.to_bytes().unwrap();
         let signed =
             Transaction::from_parts(unsigned, &keypair.sign(&signable), &keypair.public_key())
                 .unwrap();
@@ -392,14 +432,12 @@ mod tests {
         let keypair = Keypair::generate();
         let unsigned = test_unsigned_tx();
 
-        let mut signable = borsh::to_vec(&unsigned).unwrap();
-        signable.extend_from_slice(&[0u8; 32]);
+        let signable = unsigned.to_bytes().unwrap();
         let signed =
             Transaction::from_parts(unsigned, &keypair.sign(&signable), &keypair.public_key())
                 .unwrap();
 
-        let b64 = Transaction::to_base64(&signed).unwrap();
-        assert!(!b64.is_empty());
+        assert!(!Transaction::to_base64(&signed).unwrap().is_empty());
     }
 
     #[test]
@@ -431,23 +469,11 @@ mod tests {
             .signer(&keypair);
     }
 
-    // Compile-time test: optional priority_fee_bips can be set
-    #[allow(dead_code)]
-    fn optional_fields_work() {
-        let keypair = Keypair::generate();
-        let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
-
-        let _builder = Transaction::builder()
-            .call_message(call_msg)
-            .max_fee(10_000_000)
-            .priority_fee_bips(100)
-            .signer(&keypair);
-    }
-
     #[cfg(feature = "integration")]
     mod integration {
         use super::*;
         use crate::Network;
+        use bullet_exchange_interface::message::PublicAction;
 
         #[tokio::test]
         async fn test_builder_build() {
