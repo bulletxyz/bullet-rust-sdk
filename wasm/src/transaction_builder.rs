@@ -1,60 +1,171 @@
-//! Fluent transaction builder for WASM.
+//! Transaction types, builder, and submission for WASM.
 //!
-//! Provides a chainable builder pattern for constructing and submitting transactions.
-//!
-//! # JavaScript Example
+//! All transaction construction goes through the builder pattern:
 //!
 //! ```js
-//! // With explicit values
+//! // Build and send with explicit signer
 //! const response = await Transaction.builder()
 //!     .callMessage(callMsg)
 //!     .maxFee(10_000_000n)
 //!     .signer(keypair)
 //!     .send(client);
 //!
-//! // Using client defaults (if keypair/maxFee set on client)
-//! const response = await Transaction.builder()
+//! // External signing
+//! const unsigned = Transaction.builder()
 //!     .callMessage(callMsg)
-//!     .send(client);
+//!     .maxFee(10_000_000n)
+//!     .buildUnsigned(client);
+//!
+//! const signable = unsigned.toSignableBytes(client);
+//! const signature = myExternalSigner(signable);
+//! const signed = SignedTransaction.fromParts(unsigned, signature, pubKey);
+//!
+//! // Submit later
+//! await client.sendTransaction(signed);
 //! ```
 
-use bullet_exchange_interface::transaction::Gas;
+use bullet_exchange_interface::address::Address;
+use bullet_exchange_interface::decimals::PositiveDecimal;
+use bullet_exchange_interface::message::*;
+use bullet_exchange_interface::time::UnixTimestampMicros;
+use bullet_exchange_interface::transaction::{Gas, Transaction, UnsignedTransaction};
+use bullet_exchange_interface::types::{
+    AdminType, AssetId, ClientOrderId, FeeTier, MarketId, OrderId, OrderType, Side,
+    SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
+    TriggerPriceCondition, TwapId,
+};
+use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::Transaction as RustTransaction;
+use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
 use crate::client::WasmTradingApi;
 use crate::errors::WasmResult;
 use crate::keypair::WasmKeypair;
-use crate::transactions::{WasmCallMessage, WasmTransaction};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Parse a base58 address string.
+fn parse_addr(s: &str) -> Result<Address, String> {
+    s.parse()
+}
+
+/// Parse a decimal string into `PositiveDecimal`.
+fn parse_dec(s: &str) -> Result<PositiveDecimal, String> {
+    PositiveDecimal::from_str(s).map_err(|e| format!("{e:?}"))
+}
+
+/// Parse a decimal string into `SurrogateDecimal` (used by funding/interest rate fields).
+fn parse_surrogate_dec(
+    s: &str,
+) -> Result<bullet_exchange_interface::decimals::SurrogateDecimal, String> {
+    use bullet_exchange_interface::decimals::SurrogateDecimal;
+    SurrogateDecimal::from_str(s).map_err(|e| format!("{e:?}"))
+}
+
+/// Parse a JSON string into a serde-deserializable type.
+fn from_json<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, String> {
+    serde_json::from_str(json).map_err(|e| e.to_string())
+}
+
+// ── WasmCallMessage ───────────────────────────────────────────────────────────
+
+/// An opaque call message to be included in a transaction.
+///
+/// Construct via the namespace modules: `User`, `Public`, `Admin`, `Keeper`, `Vault`.
+/// Each module has static factory methods, e.g. `User.deposit(0, "100.0")`.
+#[wasm_bindgen(js_name = CallMessage)]
+pub struct WasmCallMessage {
+    pub(crate) inner: CallMessage,
+}
+
+// ── Generated namespace structs (User, Public, Admin, Keeper, Vault) ─────────
+//
+// Each struct is a JS namespace with static factory methods that return
+// `WasmCallMessage` instances. Generated from the Transaction schema by build.rs.
+include!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
+
+// ── WasmUnsignedTransaction ───────────────────────────────────────────────────
+
+/// An unsigned transaction ready for external signing.
+///
+/// Create via `Transaction.builder().buildUnsigned(client)`, then:
+///
+/// ```js
+/// const signable = unsigned.toSignableBytes(client);
+/// const signature = myExternalSigner(signable);
+/// const signed = SignedTransaction.fromParts(unsigned, signature, pubKey);
+/// ```
+#[wasm_bindgen(js_name = UnsignedTransaction)]
+pub struct WasmUnsignedTransaction {
+    pub(crate) inner: UnsignedTransaction,
+}
+
+#[wasm_bindgen(js_class = UnsignedTransaction)]
+impl WasmUnsignedTransaction {
+    /// Serialize into the bytes that need to be signed.
+    ///
+    /// Borsh-serializes the transaction and appends the chain hash (32 bytes)
+    /// as domain separator. Pass the resulting `Uint8Array` to your signing function.
+    #[wasm_bindgen(js_name = toSignableBytes)]
+    pub fn to_signable_bytes(&self, client: &WasmTradingApi) -> WasmResult<Vec<u8>> {
+        Ok(client.inner.to_signable_bytes(&self.inner)?)
+    }
+}
+
+// ── WasmTransaction (SignedTransaction) ──────────────────────────────────────
+
+/// A signed transaction ready for submission.
+///
+/// Passed directly to `Client.submitTransaction` or serialised to base64 via
+/// `toBase64()` for WebSocket submission.
+#[wasm_bindgen(js_name = SignedTransaction)]
+pub struct WasmTransaction {
+    pub(crate) inner: Transaction,
+}
+
+#[wasm_bindgen(js_class = SignedTransaction)]
+impl WasmTransaction {
+    /// Assemble a signed transaction from an unsigned transaction, a 64-byte
+    /// Ed25519 signature, and a 32-byte public key.
+    ///
+    /// Use after signing the bytes from `unsigned.toSignableBytes(client)`.
+    #[wasm_bindgen(js_name = fromParts)]
+    pub fn from_parts(
+        unsigned_tx: WasmUnsignedTransaction,
+        signature: &[u8],
+        pub_key: &[u8],
+    ) -> WasmResult<WasmTransaction> {
+        Ok(WasmTransaction {
+            inner: RustTransaction::from_parts(unsigned_tx.inner, signature, pub_key)?,
+        })
+    }
+
+    /// Borsh-serialize the signed transaction to bytes.
+    ///
+    /// Useful for comparing two signed transactions byte-by-byte.
+    #[wasm_bindgen(js_name = toBytes)]
+    pub fn to_bytes(&self) -> WasmResult<Vec<u8>> {
+        Ok(RustTransaction::to_bytes(&self.inner)?)
+    }
+
+    /// Borsh-serialise and base64-encode the transaction.
+    ///
+    /// Use this when you need to pass the transaction over a WebSocket
+    /// connection (e.g. `WebsocketHandle.orderPlace`).
+    #[wasm_bindgen(js_name = toBase64)]
+    pub fn to_base64(&self) -> WasmResult<String> {
+        Ok(RustTransaction::to_base64(&self.inner)?)
+    }
+}
+
+// ── Transaction builder ──────────────────────────────────────────────────────
 
 /// Transaction builder entry point.
 ///
 /// Use `Transaction.builder()` to create a new builder, then chain
-/// the required fields and call `.build(client)` or `.send(client)`.
-///
-/// # Example
-///
-/// ```js
-/// // Build and send with explicit values
-/// const response = await Transaction.builder()
-///     .callMessage(callMsg)
-///     .maxFee(10_000_000n)
-///     .signer(keypair)
-///     .send(client);
-///
-/// // Using client defaults
-/// const response = await Transaction.builder()
-///     .callMessage(callMsg)
-///     .send(client);
-///
-/// // Or just build
-/// const tx = Transaction.builder()
-///     .callMessage(callMsg)
-///     .build(client);
-///
-/// // Send later
-/// const response = await client.sendTransaction(tx);
-/// ```
+/// the required fields and call `.build(client)`, `.buildUnsigned(client)`,
+/// or `.send(client)`.
 #[wasm_bindgen(js_name = Transaction)]
 pub struct WasmTransactionEntry;
 
@@ -79,7 +190,7 @@ impl WasmTransactionEntry {
 /// - `maxFee` - Maximum fee willing to pay (in base units)
 /// - `priorityFeeBips` - Priority fee in basis points
 /// - `gasLimit` - Optional gas limit [ref_time, proof_size]
-/// - `signer` - Keypair to sign the transaction
+/// - `signer` - Keypair to sign the transaction (not required for `buildUnsigned`)
 #[wasm_bindgen(js_name = TransactionBuilder)]
 pub struct WasmTransactionBuilder {
     call_message: Option<WasmCallMessage>,
@@ -104,8 +215,6 @@ impl WasmTransactionBuilder {
 #[wasm_bindgen(js_class = TransactionBuilder)]
 impl WasmTransactionBuilder {
     /// Set the call message for this transaction (required).
-    ///
-    /// This is the action to be executed (e.g., place order, withdraw, etc.).
     #[wasm_bindgen(js_name = callMessage)]
     pub fn call_message(mut self, msg: WasmCallMessage) -> WasmTransactionBuilder {
         self.call_message = Some(msg);
@@ -113,8 +222,6 @@ impl WasmTransactionBuilder {
     }
 
     /// Set the maximum fee (in base units) willing to pay for this transaction.
-    ///
-    /// Falls back to client default if not set.
     #[wasm_bindgen(js_name = maxFee)]
     pub fn max_fee(mut self, fee: u64) -> WasmTransactionBuilder {
         self.max_fee = Some(fee);
@@ -122,9 +229,6 @@ impl WasmTransactionBuilder {
     }
 
     /// Set the priority fee in basis points.
-    ///
-    /// Higher priority fees may result in faster transaction processing.
-    /// Falls back to client default if not set.
     #[wasm_bindgen(js_name = priorityFeeBips)]
     pub fn priority_fee_bips(mut self, bips: u64) -> WasmTransactionBuilder {
         self.priority_fee_bips = Some(bips);
@@ -134,7 +238,6 @@ impl WasmTransactionBuilder {
     /// Set the gas limit for this transaction.
     ///
     /// Takes [ref_time, proof_size] as parameters.
-    /// Falls back to client default if not set.
     #[wasm_bindgen(js_name = gasLimit)]
     pub fn gas_limit(mut self, ref_time: u64, proof_size: u64) -> WasmTransactionBuilder {
         self.gas_limit = Some([ref_time, proof_size]);
@@ -142,29 +245,50 @@ impl WasmTransactionBuilder {
     }
 
     /// Set the keypair used to sign this transaction.
-    ///
-    /// Falls back to client default if not set.
     pub fn signer(mut self, keypair: WasmKeypair) -> WasmTransactionBuilder {
         self.signer = Some(keypair);
         self
     }
 
+    /// Build the unsigned transaction without signing.
+    ///
+    /// Returns an `UnsignedTransaction` that can be signed externally:
+    ///
+    /// ```js
+    /// const unsigned = Transaction.builder()
+    ///     .callMessage(callMsg)
+    ///     .maxFee(10_000_000n)
+    ///     .buildUnsigned(client);
+    ///
+    /// const signable = unsigned.toSignableBytes(client);
+    /// const signature = myExternalSigner(signable);
+    /// const signed = SignedTransaction.fromParts(unsigned, signature, pubKey);
+    /// ```
+    #[wasm_bindgen(js_name = buildUnsigned)]
+    pub fn build_unsigned(self, client: &WasmTradingApi) -> WasmResult<WasmUnsignedTransaction> {
+        let call_message = self.call_message.ok_or("call_message is required")?;
+
+        let max_fee = self.max_fee.map(|f| f as u128);
+        let gas_limit = self.gas_limit.map(Gas);
+
+        let unsigned = RustTransaction::builder()
+            .call_message(call_message.inner)
+            .maybe_max_fee(max_fee)
+            .maybe_priority_fee_bips(self.priority_fee_bips)
+            .maybe_gas_limit(gas_limit)
+            .build_unsigned(&client.inner)?;
+
+        Ok(WasmUnsignedTransaction { inner: unsigned })
+    }
+
     /// Build the signed transaction without sending it.
-    ///
-    /// Use this if you want to inspect the transaction or send it later
-    /// via `client.sendTransaction(tx)`.
-    ///
-    /// Falls back to client defaults for maxFee, priorityFeeBips, gasLimit, and signer
-    /// if not explicitly set on the builder.
     pub fn build(self, client: &WasmTradingApi) -> WasmResult<WasmTransaction> {
         let call_message = self.call_message.ok_or("call_message is required")?;
 
-        // Convert options to the types expected by the Rust builder
         let max_fee = self.max_fee.map(|f| f as u128);
         let gas_limit = self.gas_limit.map(Gas);
         let signer_ref = self.signer.as_ref().map(|s| &s.inner);
 
-        // Build using the Rust Transaction builder which handles client defaults
         let signed = RustTransaction::builder()
             .call_message(call_message.inner)
             .maybe_max_fee(max_fee)
@@ -177,19 +301,28 @@ impl WasmTransactionBuilder {
     }
 
     /// Sign and submit the transaction to the network.
-    ///
-    /// Returns a JSON string of the `SubmitTxResponse`.
-    ///
-    /// Falls back to client defaults for maxFee, priorityFeeBips, gasLimit, and signer
-    /// if not explicitly set on the builder.
     pub async fn send(self, client: &WasmTradingApi) -> WasmResult<String> {
         let tx = self.build(client)?;
-        client.submit_transaction(&tx).await
+        client.send_transaction(&tx).await
     }
 }
 
 impl Default for WasmTransactionBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ── Client convenience methods ───────────────────────────────────────────────
+
+#[wasm_bindgen(js_class = Client)]
+impl WasmTradingApi {
+    /// Send a signed transaction to the network via REST.
+    ///
+    /// Returns a JSON string of the `SubmitTxResponse`.
+    #[wasm_bindgen(js_name = sendTransaction)]
+    pub async fn send_transaction(&self, tx: &WasmTransaction) -> WasmResult<String> {
+        let resp = self.inner.send_transaction(&tx.inner).await?;
+        Ok(serde_json::to_string(&resp)?)
     }
 }

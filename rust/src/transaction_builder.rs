@@ -248,7 +248,7 @@ impl<S: transaction_builder::State> TransactionBuilder<'_, S> {
         S: transaction_builder::IsComplete,
     {
         let signed = self.build(client)?;
-        client.submit_transaction(&signed).await
+        client.send_transaction(&signed).await
     }
 }
 
@@ -266,24 +266,16 @@ impl Client {
         Ok(data)
     }
 
-    /// Submit a signed transaction to the network.
+    /// Send a signed transaction to the network.
     ///
     /// Returns the response from the sequencer.
-    pub async fn submit_transaction(
+    pub async fn send_transaction(
         &self,
         signed: &SignedTransaction,
     ) -> SDKResult<SubmitTxResponse> {
         let body = Transaction::to_base64(signed)?;
         let response = self.client().submit_tx(&SubmitTxRequest { body }).await?;
         Ok(response.into_inner())
-    }
-
-    /// Alias for [`submit_transaction`](Self::submit_transaction).
-    pub async fn send_transaction(
-        &self,
-        signed: &SignedTransaction,
-    ) -> SDKResult<SubmitTxResponse> {
-        self.submit_transaction(signed).await
     }
 }
 
