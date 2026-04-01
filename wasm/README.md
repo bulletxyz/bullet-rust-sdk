@@ -85,10 +85,6 @@ const tx = Transaction.builder()
     .build(client);
 
 await client.sendTransaction(tx);
-
-// Serialization
-const bytes = tx.toBytes();   // Uint8Array (borsh)
-const b64 = tx.toBase64();    // base64 string
 ```
 
 ### External Signing
