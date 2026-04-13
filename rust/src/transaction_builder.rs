@@ -94,7 +94,7 @@ impl UnsignedTransaction {
         gas_limit: Option<Gas>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
-        // Check whether we use an unvalidated message
+        // Check whether the call-message was part of the schema validation
         if let Some(user_actions) = client.user_actions()
             && let CallMessage::User(ref call) = call_message
             && !user_actions.contains(&call.into())

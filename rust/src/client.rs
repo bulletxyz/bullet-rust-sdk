@@ -1,7 +1,9 @@
+use arc_swap::ArcSwap;
 use bon::bon;
 use bullet_exchange_interface::message::UserActionDiscriminants;
 use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
 use std::ops::Deref;
+use std::sync::Arc;
 
 use crate::generated::Client as GeneratedClient;
 use crate::{Keypair, SDKError, SDKResult};
@@ -33,8 +35,7 @@ pub struct Client {
     ws_url: String,
     generated_client: GeneratedClient,
     pub(crate) ws_client: reqwest::Client,
-    chain_id: u64,
-    chain_hash: [u8; 32],
+    chain_data: ArcSwap<ChainData>,
     user_actions: Option<Vec<UserActionDiscriminants>>,
 
     keypair: Option<Keypair>,
@@ -97,6 +98,11 @@ impl From<String> for Network {
     }
 }
 
+pub struct ChainData {
+    pub chain_hash: [u8; 32],
+    pub chain_id: u64,
+}
+
 pub const MAX_FEE: &Amount = &Amount(10000000000_u128);
 pub const MAX_PRIORITY_FEE_BIPS: &PriorityFeeBips = &PriorityFeeBips(0);
 
@@ -128,9 +134,6 @@ impl Client {
         /// caught at connect time and may cause runtime serialization failures.
         user_actions: Option<Vec<UserActionDiscriminants>>,
     ) -> SDKResult<Self> {
-        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim};
-        use bullet_exchange_interface::transaction::Transaction;
-
         let url = network.url();
         let parsed = Url::parse(url).map_err(|_| SDKError::InvalidNetworkUrl)?;
 
@@ -153,6 +156,32 @@ impl Client {
         let ws_client = reqwest::Client::new();
 
         // fetch schema
+        let chain_data = Self::fetch_schema(&generated_client, &user_actions).await?;
+
+        let max_priority_fee_bips = max_priority_fee_bips.unwrap_or(*MAX_PRIORITY_FEE_BIPS);
+        let max_fee = max_fee.unwrap_or(*MAX_FEE);
+
+        Ok(Self {
+            rest_url,
+            ws_url,
+            generated_client,
+            ws_client,
+            chain_data: Arc::new(chain_data).into(),
+            user_actions,
+            gas_limit,
+            max_priority_fee_bips,
+            max_fee,
+            keypair,
+        })
+    }
+
+    async fn fetch_schema(
+        generated_client: &GeneratedClient,
+        user_actions: &Option<Vec<UserActionDiscriminants>>,
+    ) -> SDKResult<ChainData> {
+        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim};
+        use bullet_exchange_interface::transaction::Transaction;
+
         let schema_obj = generated_client.schema().await?;
 
         // validate the remote schema
@@ -179,31 +208,17 @@ impl Client {
         let chain_hash = chain_hash_bytes.try_into().map_err(|v: Vec<u8>| {
             SDKError::InvalidChainHash(format!("expected 32 bytes, got {}", v.len()))
         })?;
-
-        // get chain-id - XXX unfortunatelly this field is private upstream
-        let chain_id = obj
-            .get("schema")
-            .and_then(|x| x.get("chain_data"))
-            .and_then(|x| x.get("chain_id"))
-            .and_then(|x| x.as_u64())
-            .ok_or(SDKError::InvalidSchemaResponse("chain_id"))?;
-
-        let max_priority_fee_bips = max_priority_fee_bips.unwrap_or(*MAX_PRIORITY_FEE_BIPS);
-        let max_fee = max_fee.unwrap_or(*MAX_FEE);
-
-        Ok(Self {
-            rest_url,
-            ws_url,
-            generated_client,
-            ws_client,
-            chain_id,
+        let chain_id = schema_file.schema.chain_data().chain_id;
+        Ok(ChainData {
             chain_hash,
-            user_actions,
-            gas_limit,
-            max_priority_fee_bips,
-            max_fee,
-            keypair,
+            chain_id,
         })
+    }
+
+    pub async fn update_schema(&self) -> SDKResult<()> {
+        let chain_data = Self::fetch_schema(self.client(), &self.user_actions()).await?;
+        self.chain_data.swap(chain_data.into());
+        Ok(())
     }
 
     /// Decides whether a given enum variant should be included in the schema
@@ -274,12 +289,12 @@ impl Client {
 
     /// Get the chain ID for this network.
     pub fn chain_id(&self) -> u64 {
-        self.chain_id
+        self.chain_data.load().chain_id
     }
 
     /// Get the current chain hash.
-    pub fn chain_hash(&self) -> &[u8; 32] {
-        &self.chain_hash
+    pub fn chain_hash(&self) -> [u8; 32] {
+        self.chain_data.load().chain_hash
     }
 
     pub fn user_actions(&self) -> &Option<Vec<UserActionDiscriminants>> {
