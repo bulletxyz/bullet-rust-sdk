@@ -230,7 +230,6 @@ impl Transaction {
 }
 
 // ── Client methods ───────────────────────────────────────────────────────────
-
 impl Client {
     /// Send a signed transaction to the network.
     ///
