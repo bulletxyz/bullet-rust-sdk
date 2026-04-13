@@ -35,7 +35,8 @@ pub struct Client {
     ws_url: String,
     generated_client: GeneratedClient,
     pub(crate) ws_client: reqwest::Client,
-    chain_data: ArcSwap<ChainData>,
+    chain_id: u64,
+    chain_hash: ArcSwap<[u8; 32]>,
     user_actions: Option<Vec<UserActionDiscriminants>>,
 
     keypair: Option<Keypair>,
@@ -166,7 +167,8 @@ impl Client {
             ws_url,
             generated_client,
             ws_client,
-            chain_data: Arc::new(chain_data).into(),
+	    chain_id: chain_data.chain_id,
+            chain_hash: Arc::new(chain_data.chain_hash).into(),
             user_actions,
             gas_limit,
             max_priority_fee_bips,
@@ -217,7 +219,7 @@ impl Client {
 
     pub async fn update_schema(&self) -> SDKResult<()> {
         let chain_data = Self::fetch_schema(self.client(), &self.user_actions()).await?;
-        self.chain_data.swap(chain_data.into());
+        self.chain_hash.swap(chain_data.chain_hash.into());
         Ok(())
     }
 
@@ -300,12 +302,12 @@ impl Client {
 
     /// Get the chain ID for this network.
     pub fn chain_id(&self) -> u64 {
-        self.chain_data.load().chain_id
+        self.chain_id
     }
 
     /// Get the current chain hash.
     pub fn chain_hash(&self) -> [u8; 32] {
-        self.chain_data.load().chain_hash
+	**self.chain_hash.load()
     }
 
     pub fn user_actions(&self) -> &Option<Vec<UserActionDiscriminants>> {
