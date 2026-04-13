@@ -94,6 +94,14 @@ impl UnsignedTransaction {
         gas_limit: Option<Gas>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
+        // Check whether we use an unvalidated message
+        if let Some(user_actions) = client.user_actions()
+            && let CallMessage::User(ref call) = call_message
+            && !user_actions.contains(&call.into())
+        {
+            return Err(SDKError::UnsupportedCallMessage(call_message.msg_type()));
+        }
+
         let runtime_call = RuntimeCall::Exchange(call_message);
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -106,7 +114,7 @@ impl UnsignedTransaction {
             gas_limit,
             max_priority_fee_bips: PriorityFeeBips(priority_fee_bips),
         };
-
+	
         Ok(UnsignedTransaction {
             inner: RawUnsignedTransaction {
                 runtime_call,

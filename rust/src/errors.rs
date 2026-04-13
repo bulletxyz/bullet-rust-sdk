@@ -101,6 +101,9 @@ pub enum SDKError {
     #[error("Schema outdated - recompile the binary to update bullet-exchange-interface")]
     SchemaOutdated,
 
+    #[error("CallMessage {0} must be added too user-actions")]
+    UnsupportedCallMessage(String),
+
     #[error(transparent)]
     WebsocketError(#[from] Box<WSErrors>),
 }

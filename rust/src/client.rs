@@ -35,6 +35,7 @@ pub struct Client {
     pub(crate) ws_client: reqwest::Client,
     chain_id: u64,
     chain_hash: [u8; 32],
+    user_actions: Option<Vec<UserActionDiscriminants>>,
 
     keypair: Option<Keypair>,
 
@@ -197,6 +198,7 @@ impl Client {
             ws_client,
             chain_id,
             chain_hash,
+            user_actions,
             gas_limit,
             max_priority_fee_bips,
             max_fee,
@@ -278,6 +280,10 @@ impl Client {
     /// Get the current chain hash.
     pub fn chain_hash(&self) -> &[u8; 32] {
         &self.chain_hash
+    }
+
+    pub fn user_actions(&self) -> &Option<Vec<UserActionDiscriminants>> {
+        &self.user_actions
     }
 
     /// The REST API URL.
