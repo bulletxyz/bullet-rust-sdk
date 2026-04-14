@@ -1,9 +1,8 @@
-use arc_swap::ArcSwap;
 use bon::bon;
 use bullet_exchange_interface::message::UserActionDiscriminants;
 use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::Mutex;
 
 use crate::generated::Client as GeneratedClient;
 use crate::{CallMessage, Keypair, SDKError, SDKResult};
@@ -36,7 +35,7 @@ pub struct Client {
     generated_client: GeneratedClient,
     pub(crate) ws_client: reqwest::Client,
     chain_id: u64,
-    chain_hash: ArcSwap<[u8; 32]>,
+    chain_hash: Mutex<[u8; 32]>,
     user_actions: Option<Vec<UserActionDiscriminants>>,
 
     keypair: Option<Keypair>,
@@ -167,8 +166,8 @@ impl Client {
             ws_url,
             generated_client,
             ws_client,
-	    chain_id: chain_data.chain_id,
-            chain_hash: Arc::new(chain_data.chain_hash).into(),
+            chain_id: chain_data.chain_id,
+            chain_hash: Mutex::new(chain_data.chain_hash),
             user_actions,
             gas_limit,
             max_priority_fee_bips,
@@ -219,7 +218,7 @@ impl Client {
 
     pub async fn update_schema(&self) -> SDKResult<()> {
         let chain_data = Self::fetch_schema(self.client(), &self.user_actions()).await?;
-        self.chain_hash.swap(chain_data.chain_hash.into());
+        *self.chain_hash.lock().unwrap() = chain_data.chain_hash;
         Ok(())
     }
 
@@ -307,7 +306,7 @@ impl Client {
 
     /// Get the current chain hash.
     pub fn chain_hash(&self) -> [u8; 32] {
-	**self.chain_hash.load()
+        *self.chain_hash.lock().unwrap()
     }
 
     pub fn user_actions(&self) -> &Option<Vec<UserActionDiscriminants>> {
