@@ -6,7 +6,10 @@ resolver = "2"
 bon = "3.9.0"
 
 # Optimize WASM binary size without affecting the rust crate
+[profile.release]
+lto = true
+
 [profile.release.package.bullet-rust-sdk-wasm]
-opt-level = "s"
+opt-level = "z"
 codegen-units = 1
 
