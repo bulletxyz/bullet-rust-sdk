@@ -21,7 +21,6 @@ const keypair = Keypair.fromHex('your-private-key');
 const client = await Client.builder()
     .network('mainnet')
     .keypair(keypair)
-    .maxFee(10_000_000n)
     .build();
 
 // Query market data
@@ -32,7 +31,6 @@ const ticker = await client.tickerPrice('BTC-USD');
 const order = new NewOrderArgs('50000.0', '0.1', Side.Bid, OrderType.Limit, false);
 const response = await Transaction.builder()
     .callMessage(User.placeOrders(0, [order], false))
-    .maxFee(10_000_000n)
     .signer(keypair)
     .send(client);
 ```
@@ -48,7 +46,6 @@ const client = await Client.connect('https://tradingapi.bullet.xyz');
 const client = await Client.builder()
     .network('mainnet')        // or 'testnet', or custom URL
     .keypair(keypair)          // default signer
-    .maxFee(10_000_000n)       // default max fee
     .maxPriorityFeeBips(100n)  // default priority fee
     .userActions(['PlaceOrders', 'CancelOrders'])  // optional schema filter
     .build();
@@ -73,14 +70,12 @@ All transaction construction goes through the builder:
 // Build and send in one step
 const response = await Transaction.builder()
     .callMessage(User.deposit(0, '1000.0'))
-    .maxFee(10_000_000n)
     .signer(keypair)
     .send(client);
 
 // Build without sending
 const tx = Transaction.builder()
     .callMessage(msg)
-    .maxFee(10_000_000n)
     .signer(keypair)
     .build(client);
 
@@ -95,7 +90,6 @@ For hardware wallets or external signing services:
 // Build unsigned (chain hash is baked in)
 const unsigned = Transaction.builder()
     .callMessage(User.deposit(0, '1000.0'))
-    .maxFee(10_000_000n)
     .buildUnsigned(client);
 
 // Get signable bytes and sign externally
@@ -194,7 +188,6 @@ const msg = await ws.recv();
 // Submit orders via WebSocket
 const tx = Transaction.builder()
     .callMessage(User.placeOrders(0, [order], false))
-    .maxFee(10_000_000n)
     .signer(keypair)
     .build(client);
 
