@@ -23,6 +23,8 @@ build-wasm:
     wasm-pack build wasm --target web --out-dir pkg
     # Remove wasm-pack generated package.json and .gitignore that interfere with npm install --install-links
     rm -f wasm/pkg/.gitignore wasm/pkg/package.json
+    # Copy the real README into pkg/ (wasm-pack generates a stub from Cargo.toml description)
+    cp wasm/README.md wasm/pkg/README.md
     # Generate Node.js auto-init wrapper (uses web target's initSync)
     printf '%s\n' \
         'import { readFileSync } from "node:fs";' \

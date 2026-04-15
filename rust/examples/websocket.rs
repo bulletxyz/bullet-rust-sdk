@@ -16,7 +16,7 @@
 use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::NewOrderArgs;
 use bullet_exchange_interface::types::Side;
-use bullet_rust_sdk::{Client, Keypair, KlineInterval, OrderbookDepth, Topic};
+use bullet_rust_sdk::{Client, Keypair, KlineInterval, OrderbookDepth, Topic, Transaction};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[tokio::main(flavor = "current_thread")]
@@ -56,25 +56,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut reader = BufReader::new(stdin);
     let mut line = String::new();
 
-    let ask_tx = client.build_transaction(
-        bullet_exchange_interface::message::CallMessage::User(
-            bullet_exchange_interface::message::UserAction::PlaceOrders {
-                market_id: bullet_exchange_interface::types::MarketId(0),
-                orders: vec![NewOrderArgs {
-                    price: 120_u8.into(),
-                    size: 1_u8.into(),
-                    side: Side::Ask,
-                    order_type: bullet_exchange_interface::types::OrderType::ImmediateOrCancel,
-                    reduce_only: false,
-                    client_order_id: None,
-                    pending_tpsl_pair: None,
-                }],
-                replace: false,
-                sub_account_index: None,
-            },
-        ),
-        10_000_000,
-    )?;
+    let call_msg = bullet_exchange_interface::message::CallMessage::User(
+        bullet_exchange_interface::message::UserAction::PlaceOrders {
+            market_id: bullet_exchange_interface::types::MarketId(0),
+            orders: vec![NewOrderArgs {
+                price: 120_u8.into(),
+                size: 1_u8.into(),
+                side: Side::Ask,
+                order_type: bullet_exchange_interface::types::OrderType::ImmediateOrCancel,
+                reduce_only: false,
+                client_order_id: None,
+                pending_tpsl_pair: None,
+            }],
+            replace: false,
+            sub_account_index: None,
+        },
+    );
 
     // TODO: use ENV var or generate.
     let keypair = Keypair::generate();
@@ -100,16 +97,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(_x) = reader.read_line(&mut line) => {
                 println!("Got input");
                 match line.trim() {
-                    "bid" => {
-                        let signed_tx = client.sign_transaction(ask_tx.clone(), &keypair)?;
-                        ws.order_place(Client::sign_to_base64(&signed_tx)?, req_id).await?;
-                        println!("Sent bid. Got ReqId {req_id:?}");
-                    },
-
-                    "ask" => {
-                        let signed_tx = client.sign_transaction(ask_tx.clone(), &keypair)?;
-                        ws.order_place(Client::sign_to_base64(&signed_tx)?, req_id).await?;
-                        println!("Sent ask. Got ReqId {req_id:?}");
+                    "bid" | "ask" => {
+                        let signed_tx = Transaction::builder()
+                            .call_message(call_msg.clone())
+                            .max_fee(10_000_000)
+                            .signer(&keypair)
+                            .build(&client)?;
+                        ws.order_place(Transaction::to_base64(&signed_tx)?, req_id).await?;
+                        println!("Sent {}. Got ReqId {req_id:?}", line.trim());
                     }
                     x => {
                         println!("Got unknown input {x}");

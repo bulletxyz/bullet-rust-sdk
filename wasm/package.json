@@ -1,6 +1,6 @@
 {
   "name": "@bulletxyz/sdk-wasm",
-  "version": "1.0.0",
+  "version": "0.0.4",
   "description": "WebAssembly bindings for the Bullet trading SDK — works in Node.js, browsers, and Deno",
   "author": "Bullet.xyz",
   "license": "MIT",
@@ -61,7 +61,8 @@
     }
   },
   "files": [
-    "pkg/"
+    "pkg/",
+    "README.md"
   ],
   "sideEffects": [
     "./pkg/node.js"

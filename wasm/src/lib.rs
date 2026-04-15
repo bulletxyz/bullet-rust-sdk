@@ -10,7 +10,6 @@ pub mod errors;
 pub mod generated;
 pub mod keypair;
 pub mod transaction_builder;
-pub mod transactions;
 pub mod utils;
 pub mod ws;
 
@@ -21,7 +20,6 @@ pub use errors::*;
 pub use generated::*;
 pub use keypair::*;
 pub use transaction_builder::*;
-pub use transactions::*;
 pub use utils::decimal::WasmDecimal;
 pub use ws::client::*;
 pub use ws::topics::*;
