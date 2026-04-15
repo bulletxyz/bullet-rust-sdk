@@ -38,7 +38,8 @@ pub struct ListSubscriptionsResult {
 }
 
 /// Tagged messages from the server (have an "e" event type field)
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, strum::AsRefStr)]
+#[strum(serialize_all = "camelCase")]
 #[serde(tag = "e", rename_all = "snake_case")]
 pub enum TaggedMessage {
     Status(StatusMessage),
@@ -53,7 +54,8 @@ pub enum TaggedMessage {
 ///
 /// Uses untagged deserialization - serde tries each variant in order until one matches.
 /// The `Unknown` variant captures any message that doesn't match known types.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, strum::AsRefStr)]
+#[strum(serialize_all = "camelCase")]
 #[serde(untagged)]
 pub enum ServerMessage {
     // Tagged messages with "e" field - try these first

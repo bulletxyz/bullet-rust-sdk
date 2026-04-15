@@ -46,6 +46,23 @@ All fallible functions in the WASM crate **must** return `WasmResult<T>` (define
 - WASM wrapper structs are prefixed with `Wasm` (e.g., `WasmKeypair`, `WasmTradingApi`)
 - The JS-facing name drops the prefix (e.g., `#[wasm_bindgen(js_name = Keypair)]`)
 
+### WASM JSDoc Annotations
+
+All public WASM methods and constructors **must** have JSDoc annotations in their `///` doc comments. When you add or change a public method, update its JSDoc. Use `@param`, `@returns`, and `@example` tags with proper TypeScript types:
+
+```rust
+/// Create a depth topic.
+/// @param {string} symbol - The market symbol.
+/// @param {OrderbookDepth} depth - Number of price levels.
+/// @returns {Topic}
+pub fn depth(symbol: &str, depth: WasmOrderbookDepth) -> WasmTopic { ... }
+```
+
+- `@param {Type} name - Description.` for every parameter (use `[name]` for optional params)
+- `@returns {Type}` for the return value (use `Promise<T>` for async methods)
+- `@example` with a JS code block where usage isn't obvious
+- Reference the JS-facing type names (e.g. `Topic`, not `WasmTopic`)
+
 ### Builder Pattern Notes
 
 The Rust SDK uses `bon` for builders which creates type-state patterns. In WASM, use the `maybe_` variants to handle optional fields:

@@ -35,6 +35,57 @@ pub fn js_name(rust_name: &str) -> String {
     rust_name.to_string()
 }
 
+// ── JSDoc Type Helpers ──────────────────────────────────────────────────────
+
+/// Map a `RustType` to its TypeScript/JSDoc type string.
+///
+/// Used in generated `@param` / `@returns` JSDoc comments.
+pub fn js_type_string(ty: &RustType, enums: &HashSet<&str>) -> String {
+    match ty {
+        RustType::String => "string".to_string(),
+        RustType::Bool => "boolean".to_string(),
+        RustType::Primitive(_) => "number".to_string(),
+        RustType::Map(_, _) => "object".to_string(),
+        RustType::Named { name, .. } if name == "Value" => "object".to_string(),
+        RustType::Named { name, .. } if name == "ByteStream" => "string".to_string(),
+        RustType::Named { name, .. } if enums.contains(name.as_str()) => "string".to_string(),
+        RustType::Named { name, .. } => js_name(name),
+        RustType::Option(inner) => {
+            format!("{} | undefined", js_type_string(inner, enums))
+        }
+        RustType::Vec(inner) => {
+            format!("Array<{}>", js_type_string(inner, enums))
+        }
+        RustType::Ref(inner) => match inner.as_ref() {
+            RustType::String => "string".to_string(),
+            RustType::Slice(elem) => format!("Array<{}>", js_type_string(elem, enums)),
+            other => js_type_string(other, enums),
+        },
+        RustType::ResponseValue(inner) => js_type_string(inner, enums),
+        RustType::Tuple(elems) if elems.is_empty() => "void".to_string(),
+        _ => "any".to_string(),
+    }
+}
+
+/// Map a method parameter's `RustType` to its JSDoc type string.
+pub fn param_js_type(ty: &RustType, enums: &HashSet<&str>) -> String {
+    match ty {
+        // Option<&str> shows as optional string
+        RustType::Option(inner)
+            if matches!(inner.as_ref(), RustType::Ref(r) if matches!(r.as_ref(), RustType::String)) =>
+        {
+            "string".to_string()
+        }
+        _ => js_type_string(ty, enums),
+    }
+}
+
+/// Map a method return `RustType` to its JSDoc `@returns` string.
+pub fn return_js_type(ty: &RustType, enums: &HashSet<&str>) -> String {
+    let inner = js_type_string(ty, enums);
+    format!("Promise<{inner}>")
+}
+
 // ── Core Type Helpers ────────────────────────────────────────────────────────
 
 /// Map a `Primitive` to its Rust type tokens.
