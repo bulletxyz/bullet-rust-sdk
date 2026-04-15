@@ -102,7 +102,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .call_message(call_msg.clone())
                             .max_fee(10_000_000)
                             .signer(&keypair)
-                            .build(&client)?;
+                            .client(&client)
+                            .build()?;
                         ws.order_place(Transaction::to_base64(&signed_tx)?, req_id).await?;
                         println!("Sent {}. Got ReqId {req_id:?}", line.trim());
                     }
