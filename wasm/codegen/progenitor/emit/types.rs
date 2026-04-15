@@ -130,7 +130,11 @@ fn emit_getter(f: &FieldDetails, enum_names: &HashSet<&str>) -> TokenStream {
         quote! { #[wasm_bindgen(getter)] }
     };
 
+    let js_ty = type_map::js_type_string(&f.ty, enum_names);
+    let doc = format!("@returns {{{js_ty}}}");
+
     quote! {
+        #[doc = #doc]
         #attr
         pub fn #method(&self) -> #ret_ty {
             #body

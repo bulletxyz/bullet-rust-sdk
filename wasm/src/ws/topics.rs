@@ -4,29 +4,47 @@ use bullet_rust_sdk::ws::topics::{
 use wasm_bindgen::prelude::*;
 
 /// Orderbook depth level for WebSocket depth subscriptions.
+/// @enum {number}
 #[wasm_bindgen(js_name = OrderbookDepth)]
 pub enum WasmOrderbookDepth {
+    /// 5 levels
     D5,
+    /// 10 levels
     D10,
+    /// 20 levels
     D20,
 }
 
 /// Kline/candlestick interval for WebSocket kline subscriptions.
+/// @enum {number}
 #[wasm_bindgen(js_name = KlineInterval)]
 pub enum WasmKlineInterval {
+    /// 1 minute
     M1,
+    /// 5 minutes
     M5,
+    /// 15 minutes
     M15,
+    /// 30 minutes
     M30,
+    /// 1 hour
     H1,
+    /// 4 hours
     H4,
+    /// 1 day
     D1,
 }
 
 /// A typed WebSocket subscription topic.
 ///
-/// Build with the static factory methods, then pass `toString()` to
-/// `WasmWebsocketHandle.subscribe()`.
+/// Build with the static factory methods, then pass to
+/// `WebsocketHandle.subscribe()`.
+///
+/// @example
+/// ```js
+/// const topics = [Topic.aggTrade("BTC-USD"), Topic.depth("ETH-USD", OrderbookDepth.D10)];
+/// await ws.subscribe(topics);
+/// ```
 #[wasm_bindgen(js_name = Topic)]
 pub struct WasmTopic {
     inner: String,
@@ -34,7 +52,9 @@ pub struct WasmTopic {
 
 #[wasm_bindgen(js_class = Topic)]
 impl WasmTopic {
-    /// e.g. `"BTC-USD@aggTrade"`
+    /// Create an aggregate trade topic, e.g. `"BTC-USD@aggTrade"`.
+    /// @param {string} symbol - The market symbol.
+    /// @returns {Topic}
     #[wasm_bindgen(js_name = aggTrade)]
     pub fn agg_trade(symbol: &str) -> WasmTopic {
         WasmTopic {
@@ -42,7 +62,10 @@ impl WasmTopic {
         }
     }
 
-    /// e.g. `"BTC-USD@depth10"`
+    /// Create an orderbook depth topic, e.g. `"BTC-USD@depth10"`.
+    /// @param {string} symbol - The market symbol.
+    /// @param {OrderbookDepth} depth - Number of price levels.
+    /// @returns {Topic}
     pub fn depth(symbol: &str, depth: WasmOrderbookDepth) -> WasmTopic {
         let d = match depth {
             WasmOrderbookDepth::D5 => SdkDepth::D5,
@@ -54,7 +77,9 @@ impl WasmTopic {
         }
     }
 
-    /// e.g. `"BTC-USD@bookTicker"`
+    /// Create a book ticker topic, e.g. `"BTC-USD@bookTicker"`.
+    /// @param {string} symbol - The market symbol.
+    /// @returns {Topic}
     #[wasm_bindgen(js_name = bookTicker)]
     pub fn book_ticker(symbol: &str) -> WasmTopic {
         WasmTopic {
@@ -62,7 +87,9 @@ impl WasmTopic {
         }
     }
 
-    /// e.g. `"BTC-USD@markPrice"`
+    /// Create a mark price topic, e.g. `"BTC-USD@markPrice"`.
+    /// @param {string} symbol - The market symbol.
+    /// @returns {Topic}
     #[wasm_bindgen(js_name = markPrice)]
     pub fn mark_price(symbol: &str) -> WasmTopic {
         WasmTopic {
@@ -70,7 +97,10 @@ impl WasmTopic {
         }
     }
 
-    /// e.g. `"BTC-USD@kline_1h"`
+    /// Create a kline/candlestick topic, e.g. `"BTC-USD@kline_1h"`.
+    /// @param {string} symbol - The market symbol.
+    /// @param {KlineInterval} interval - The candlestick interval.
+    /// @returns {Topic}
     pub fn kline(symbol: &str, interval: WasmKlineInterval) -> WasmTopic {
         let i = match interval {
             WasmKlineInterval::M1 => SdkKlineInterval::M1,
@@ -86,7 +116,9 @@ impl WasmTopic {
         }
     }
 
-    /// e.g. `"BTC-USD@forceOrder"`
+    /// Create a force order / liquidation topic, e.g. `"BTC-USD@forceOrder"`.
+    /// @param {string} symbol - The market symbol.
+    /// @returns {Topic}
     #[wasm_bindgen(js_name = forceOrder)]
     pub fn force_order(symbol: &str) -> WasmTopic {
         WasmTopic {
@@ -94,6 +126,8 @@ impl WasmTopic {
         }
     }
 
+    /// Subscribe to all market tickers.
+    /// @returns {Topic}
     #[wasm_bindgen(js_name = allTickers)]
     pub fn all_tickers() -> WasmTopic {
         WasmTopic {
@@ -101,6 +135,8 @@ impl WasmTopic {
         }
     }
 
+    /// Subscribe to all mark prices.
+    /// @returns {Topic}
     #[wasm_bindgen(js_name = allMarkPrices)]
     pub fn all_mark_prices() -> WasmTopic {
         WasmTopic {
@@ -108,6 +144,8 @@ impl WasmTopic {
         }
     }
 
+    /// Subscribe to all book tickers.
+    /// @returns {Topic}
     #[wasm_bindgen(js_name = allBookTickers)]
     pub fn all_book_tickers() -> WasmTopic {
         WasmTopic {
@@ -115,6 +153,8 @@ impl WasmTopic {
         }
     }
 
+    /// Subscribe to all force orders / liquidations.
+    /// @returns {Topic}
     #[wasm_bindgen(js_name = allForceOrders)]
     pub fn all_force_orders() -> WasmTopic {
         WasmTopic {
@@ -123,6 +163,7 @@ impl WasmTopic {
     }
 
     /// Wire-format string, e.g. `"BTC-USD@depth10"`.
+    /// @returns {string}
     #[wasm_bindgen(js_name = toString)]
     pub fn to_string_js(&self) -> String {
         self.inner.clone()
