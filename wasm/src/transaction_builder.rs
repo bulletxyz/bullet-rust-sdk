@@ -315,7 +315,12 @@ impl WasmTransactionBuilder {
     }
 
     /// Sign and submit the transaction to the network.
-    pub async fn send(self, client: &WasmTradingApi) -> WasmResult<String> {
+    /// @param {Client} client - The trading API client.
+    /// @returns {Promise<SubmitTxResponse>}
+    pub async fn send(
+        self,
+        client: &WasmTradingApi,
+    ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
         let tx = self.build(client)?;
         client.send_transaction(&tx).await
     }
@@ -332,11 +337,14 @@ impl Default for WasmTransactionBuilder {
 #[wasm_bindgen(js_class = Client)]
 impl WasmTradingApi {
     /// Send a signed transaction to the network via REST.
-    ///
-    /// Returns a JSON string of the `SubmitTxResponse`.
+    /// @param {Transaction} tx - A signed transaction.
+    /// @returns {Promise<SubmitTxResponse>}
     #[wasm_bindgen(js_name = sendTransaction)]
-    pub async fn send_transaction(&self, tx: &WasmTransaction) -> WasmResult<String> {
+    pub async fn send_transaction(
+        &self,
+        tx: &WasmTransaction,
+    ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
         let resp = self.inner.send_transaction(&tx.inner).await?;
-        Ok(serde_json::to_string(&resp)?)
+        Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
 }
