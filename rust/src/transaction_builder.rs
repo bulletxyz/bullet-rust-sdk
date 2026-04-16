@@ -41,7 +41,7 @@ use web_time::{SystemTime, UNIX_EPOCH};
 use crate::codegen::Error::ErrorResponse;
 use crate::generated::types::{SubmitTxRequest, SubmitTxResponse};
 use crate::types::CallMessage;
-use crate::{ApiErrorResponse, Client, Keypair, SDKError, SDKResult};
+use crate::{Client, Keypair, SDKError, SDKResult};
 
 // ── UnsignedTransaction ──────────────────────────────────────────────────────
 
@@ -246,12 +246,8 @@ impl Client {
                 let inner = response.into_inner();
                 if inner.message.contains("Invalid signature") {
                     self.update_schema().await?;
-                    // map the error to 429 to trigger the retry path
-                    return Err(SDKError::ApiError(ApiErrorResponse {
-                        status: 429,
-                        details: None,
-                        message: "Update Schema".to_string(),
-                    }));
+                    // indicate that a the transaction must be re-signed and can not be simply retried
+                    return Err(SDKError::TransactionOutdated);
                 }
                 Err(SDKError::ApiError(inner))
             }
