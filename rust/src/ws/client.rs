@@ -73,12 +73,50 @@ const DEFAULT_CONNECTION_TIMEOUT_SECS: u64 = 10;
 ///
 /// Provides methods to send messages and receive responses.
 ///
+/// # Thread Safety
+///
+/// `WebsocketHandle` is `Send` but **not `Sync`**. The underlying WebSocket
+/// transport contains non-thread-safe internal buffers.
+///
+/// If you need to share the handle across async tasks, wrap it in a
+/// [`tokio::sync::Mutex`]:
+///
+/// ```ignore
+/// use std::sync::Arc;
+/// use tokio::sync::Mutex;
+///
+/// let ws = Arc::new(Mutex::new(client.connect_ws().call().await?));
+///
+/// // Receiving task
+/// let ws_recv = ws.clone();
+/// tokio::spawn(async move {
+///     loop {
+///         let msg = ws_recv.lock().await.recv().await;
+///         // handle msg ...
+///     }
+/// });
+///
+/// // Sending task
+/// ws.lock().await.subscribe([Topic::agg_trade("BTC-USD")], None).await?;
+/// ```
+///
+/// For high-throughput bots, a common pattern is to dedicate one task to the
+/// WebSocket and use [`tokio::sync::mpsc`] channels to communicate with other
+/// tasks — this avoids lock contention on the hot path.
+///
 /// # Extracting the Inner Socket
 ///
 /// If you need direct access to the underlying `reqwest_websocket::WebSocket`,
 /// use the `Deref` implementation.
 pub struct WebsocketHandle {
     socket: reqwest_websocket::WebSocket,
+}
+
+impl WebsocketHandle {
+    /// Create a new handle from a raw WebSocket (used internally by managed WS).
+    pub(crate) fn new(socket: reqwest_websocket::WebSocket) -> Self {
+        Self { socket }
+    }
 }
 
 /// Configuration for WebSocket connection behavior.
@@ -464,5 +502,59 @@ impl WebsocketHandle {
             params: OrderParams { tx: tx.into() },
         })
         .await
+    }
+
+    /// Place an order via WebSocket using a signed transaction.
+    ///
+    /// This is a convenience wrapper around [`order_place`](Self::order_place) that
+    /// handles base64 encoding internally.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use bullet_rust_sdk::{Client, Transaction};
+    ///
+    /// let signed = Transaction::builder()
+    ///     .call_message(call_msg)
+    ///     .client(&client)
+    ///     .build()?;
+    ///
+    /// ws.place_order(&signed, None).await?;
+    /// ```
+    pub async fn place_order(
+        &mut self,
+        signed: &bullet_exchange_interface::transaction::Transaction,
+        id: Option<RequestId>,
+    ) -> SDKResult<(), WSErrors> {
+        let base64 = crate::Transaction::to_base64(signed)
+            .map_err(|e| WSErrors::WsError(e.to_string()))?;
+        self.order_place(base64, id).await
+    }
+
+    /// Cancel an order via WebSocket using a signed transaction.
+    ///
+    /// This is a convenience wrapper around [`order_cancel`](Self::order_cancel) that
+    /// handles base64 encoding internally.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use bullet_rust_sdk::{Client, Transaction};
+    ///
+    /// let signed = Transaction::builder()
+    ///     .call_message(cancel_msg)
+    ///     .client(&client)
+    ///     .build()?;
+    ///
+    /// ws.cancel_order(&signed, None).await?;
+    /// ```
+    pub async fn cancel_order(
+        &mut self,
+        signed: &bullet_exchange_interface::transaction::Transaction,
+        id: Option<RequestId>,
+    ) -> SDKResult<(), WSErrors> {
+        let base64 = crate::Transaction::to_base64(signed)
+            .map_err(|e| WSErrors::WsError(e.to_string()))?;
+        self.order_cancel(base64, id).await
     }
 }

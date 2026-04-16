@@ -153,6 +153,42 @@ impl WasmWebsocketHandle {
     pub async fn order_cancel(&mut self, tx: &str, id: Option<u64>) -> WasmResult<()> {
         Ok(self.inner.order_cancel(tx, id.map(RequestId::new)).await?)
     }
+
+    /// Place an order using a signed transaction object.
+    ///
+    /// Convenience wrapper that handles base64 encoding internally.
+    /// @param {Transaction} tx - A signed transaction.
+    /// @param {number} [id] - Optional request ID for correlating the server response.
+    /// @returns {Promise<void>}
+    #[wasm_bindgen(js_name = placeOrder)]
+    pub async fn place_order(
+        &mut self,
+        tx: &crate::transaction_builder::WasmTransaction,
+        id: Option<u64>,
+    ) -> WasmResult<()> {
+        Ok(self
+            .inner
+            .place_order(&tx.inner, id.map(RequestId::new))
+            .await?)
+    }
+
+    /// Cancel an order using a signed transaction object.
+    ///
+    /// Convenience wrapper that handles base64 encoding internally.
+    /// @param {Transaction} tx - A signed transaction.
+    /// @param {number} [id] - Optional request ID for correlating the server response.
+    /// @returns {Promise<void>}
+    #[wasm_bindgen(js_name = cancelOrder)]
+    pub async fn cancel_order(
+        &mut self,
+        tx: &crate::transaction_builder::WasmTransaction,
+        id: Option<u64>,
+    ) -> WasmResult<()> {
+        Ok(self
+            .inner
+            .cancel_order(&tx.inner, id.map(RequestId::new))
+            .await?)
+    }
 }
 
 /// Configuration for a WebSocket connection.

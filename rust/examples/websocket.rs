@@ -13,10 +13,10 @@
 //! ```
 
 #[allow(unused_imports)]
-use bullet_exchange_interface::decimals::PositiveDecimal;
-use bullet_exchange_interface::message::NewOrderArgs;
-use bullet_exchange_interface::types::Side;
-use bullet_rust_sdk::{Client, Keypair, KlineInterval, OrderbookDepth, Topic, Transaction};
+use bullet_rust_sdk::{
+    Client, Keypair, KlineInterval, MarketId, NewOrderArgs, OrderType, OrderbookDepth,
+    PositiveDecimal, Side, Topic, Transaction,
+};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[tokio::main(flavor = "current_thread")]
@@ -56,22 +56,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut reader = BufReader::new(stdin);
     let mut line = String::new();
 
-    let call_msg = bullet_exchange_interface::message::CallMessage::User(
-        bullet_exchange_interface::message::UserAction::PlaceOrders {
-            market_id: bullet_exchange_interface::types::MarketId(0),
-            orders: vec![NewOrderArgs {
-                price: 120_u8.into(),
-                size: 1_u8.into(),
-                side: Side::Ask,
-                order_type: bullet_exchange_interface::types::OrderType::ImmediateOrCancel,
-                reduce_only: false,
-                client_order_id: None,
-                pending_tpsl_pair: None,
-            }],
-            replace: false,
-            sub_account_index: None,
-        },
-    );
+    let call_msg = bullet_rust_sdk::CallMessage::User(bullet_rust_sdk::UserAction::PlaceOrders {
+        market_id: MarketId(0),
+        orders: vec![NewOrderArgs {
+            price: 120_u8.into(),
+            size: 1_u8.into(),
+            side: Side::Ask,
+            order_type: OrderType::ImmediateOrCancel,
+            reduce_only: false,
+            client_order_id: None,
+            pending_tpsl_pair: None,
+        }],
+        replace: false,
+        sub_account_index: None,
+    });
 
     // TODO: use ENV var or generate.
     let keypair = Keypair::generate();

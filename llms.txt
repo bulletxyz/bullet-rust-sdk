@@ -1,0 +1,438 @@
+# Bullet Rust SDK
+
+> Rust SDK for the Bullet perpetual futures DEX. Supports REST, WebSocket, and on-chain transaction signing via Ed25519.
+
+This file provides everything an LLM or agent needs to build a trading bot, integration, or tool on top of the Bullet exchange using the `bullet-rust-sdk` crate.
+
+## Quick Start
+
+```rust
+use bullet_rust_sdk::{
+    Client, Keypair, Network, Transaction, CallMessage, UserAction,
+    Side, OrderType, MarketId, NewOrderArgs, PositiveDecimal,
+    UserActionDiscriminants, Topic, OrderbookDepth, ServerMessage,
+};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Create keypair and client
+    let keypair = Keypair::from_hex("0x_your_private_key_hex")?;
+    let client = Client::builder()
+        .network(Network::Testnet) // or Network::Mainnet
+        .keypair(keypair.clone())
+        .user_actions(vec![
+            UserActionDiscriminants::PlaceOrders,
+            UserActionDiscriminants::CancelOrders,
+            UserActionDiscriminants::CancelMarketOrders,
+        ])
+        .build()
+        .await?;
+
+    // 2. Fetch market info (symbol -> MarketId mapping)
+    let info = client.exchange_info().await?.into_inner();
+    let btc_market_id: u16 = info.symbols.iter()
+        .find(|s| s.symbol == "BTC-USD" && s.status == "TRADING")
+        .map(|s| s.market_id)
+        .expect("BTC-USD not found");
+
+    // 3. Fetch orderbook
+    let book = client.order_book(Some(10), "BTC-USD").await?.into_inner();
+    // book.bids: Vec<Vec<String>> -- each entry is [price, quantity]
+    // book.asks: Vec<Vec<String>> -- each entry is [price, quantity]
+
+    // 4. Place an order (convenience method)
+    let resp = client.place_orders(
+        MarketId(btc_market_id),
+        vec![NewOrderArgs {
+            price: PositiveDecimal::try_from(rust_decimal::Decimal::from(50000))?,
+            size: PositiveDecimal::try_from(rust_decimal::Decimal::new(1, 3))?, // 0.001
+            side: Side::Bid,       // Bid = buy, Ask = sell
+            order_type: OrderType::PostOnly,
+            reduce_only: false,
+            client_order_id: None,
+            pending_tpsl_pair: None,
+        }],
+        false, // replace
+        None,  // sub_account_index
+    ).await?;
+    println!("TX submitted: id={}, status={:?}", resp.id, resp.status);
+
+    // 5. Cancel all orders on a market
+    client.cancel_market_orders(MarketId(btc_market_id), None).await?;
+
+    Ok(())
+}
+```
+
+## Architecture
+
+The SDK is a single crate (`bullet-rust-sdk`) that re-exports all commonly-needed types at the crate root. You never need to add internal crates as direct dependencies:
+
+- `bullet-exchange-interface` -- On-chain types (UserAction, Side, OrderType, MarketId, etc). Accessible via `bullet_rust_sdk::*` (flat re-exports) or `bullet_rust_sdk::types::bullet_exchange_interface` (full path).
+- `bullet-ws-interface` -- WebSocket message types (DepthUpdate, BookTickerMessage, etc). Access via `bullet_rust_sdk::types::*` or `bullet_rust_sdk::ServerMessage`.
+
+## Dependency
+
+```toml
+# In Cargo.toml -- use git dependency with a pinned rev:
+bullet-rust-sdk = { git = "https://github.com/bulletxyz/bullet-rust-sdk.git", rev = "...", default-features = false }
+
+# Or path for local development:
+bullet-rust-sdk = { path = "../bullet-rust-sdk/rust", default-features = false }
+```
+
+The SDK requires `edition = "2024"` and uses `tokio` for async.
+
+## Important Terminology
+
+| Bullet SDK term | Common term | Notes |
+|---|---|---|
+| `Side::Bid` | Buy | SDK uses Bid/Ask, not Buy/Sell |
+| `Side::Ask` | Sell | |
+| `MarketId(u16)` | Symbol ID | Numeric ID, not a string. Resolve via `exchange_info()` |
+| `PositiveDecimal` | Decimal (>0) | Newtype over `rust_decimal::Decimal`. Use `PositiveDecimal::try_from(decimal)` |
+| `OrderType::PostOnly` | Maker order | |
+| `OrderType::ImmediateOrCancel` | Market order | Standard across perp exchanges -- market orders are IoC |
+| `OrderType::Limit` | Limit order | |
+| `CallMessage` | Transaction payload | Wraps a `UserAction` for signing |
+
+## Common Imports
+
+```rust
+// Everything you need for a typical trading bot:
+use bullet_rust_sdk::{
+    // Core client
+    Client, Keypair, Network,
+    // Trading types
+    Side, OrderType, MarketId, OrderId, ClientOrderId,
+    NewOrderArgs, CancelOrderArgs, AmendOrderArgs, PositiveDecimal,
+    // Transaction building (only needed for manual CallMessage construction)
+    Transaction, CallMessage, UserAction, UserActionDiscriminants,
+    // WebSocket
+    ServerMessage, Topic, OrderbookDepth, KlineInterval,
+    // Errors
+    SDKError, SDKResult, WSErrors,
+    // Response types
+    SubmitTxResponse,
+};
+
+// Generated REST response types (for type annotations)
+use bullet_rust_sdk::codegen::types::{
+    Account, Balance, Symbol, BinanceOrder, OrderBook, ExchangeInfo,
+};
+
+// WebSocket message types (for pattern matching)
+use bullet_rust_sdk::types::{
+    DepthUpdate, AggTradeMessage, BookTickerMessage, MarkPriceMessage,
+    OrderUpdateMessage, OrderUpdateData,
+};
+```
+
+## REST API Methods
+
+All methods are on `Client` (via `Deref` to the generated Progenitor client). They take **positional arguments**, not builder pattern. Responses require `.into_inner()` to unwrap the response envelope.
+
+### Market Data
+
+```rust
+// Exchange info -- symbols, market IDs, filters
+let info = client.exchange_info().await?.into_inner();
+// info.symbols: Vec<Symbol>
+//   Symbol { symbol: String, market_id: u16, status: String, base_asset: String,
+//            price_precision: u8, quantity_precision: u8, filters: Vec<Value>, ... }
+
+// Orderbook
+let book = client.order_book(Some(20), "BTC-USD").await?.into_inner();
+// book.bids: Vec<Vec<String>> -- [[price, qty], ...]
+// book.asks: Vec<Vec<String>> -- [[price, qty], ...]
+// book.last_update_id: u64
+
+// Ticker
+let price = client.ticker_price("BTC-USD").await?.into_inner();
+// price.price: Decimal, price.symbol: String
+
+// Funding rate
+let rate = client.funding_rate(None, None, "BTC-USD").await?.into_inner();
+```
+
+### Account Data
+
+```rust
+let address = format!("0x{}", keypair.public_key_hex());
+
+// Account info (positions, margins)
+let account = client.account_info(&address).await?.into_inner();
+// account.positions: Vec<AccountPosition>
+//   AccountPosition { symbol, position_amt: Decimal, entry_price: Decimal,
+//                     unrealized_profit: Decimal, market_id: u16, ... }
+
+// Balances
+let balances = client.account_balance(&address).await?.into_inner();
+// Vec<Balance> { asset: String, balance: Decimal, available_balance: Decimal, ... }
+
+// Open orders
+let orders = client.query_open_orders(&address, "BTC-USD").await?.into_inner();
+// Vec<BinanceOrder> { order_id: u64, symbol: String, side: String, price: Decimal,
+//                     orig_qty: Decimal, executed_qty: Decimal, order_type: String,
+//                     client_order_id: Option<String>, status: String, ... }
+```
+
+## Order Operations
+
+### Convenience Methods (recommended)
+
+The simplest way to place and cancel orders. These handle CallMessage construction, transaction signing, and submission internally.
+
+```rust
+use bullet_rust_sdk::*;
+
+// Place orders
+let resp = client.place_orders(
+    MarketId(market_id),
+    vec![NewOrderArgs {
+        price: PositiveDecimal::try_from(price_decimal)?,
+        size: PositiveDecimal::try_from(qty_decimal)?,
+        side: Side::Bid,
+        order_type: OrderType::PostOnly,
+        reduce_only: false,
+        client_order_id: Some(ClientOrderId(12345)),
+        pending_tpsl_pair: None,
+    }],
+    false,  // replace: true = cancel-and-replace existing orders
+    None,   // sub_account_index: None = main account
+).await?;
+
+// Cancel specific orders
+let resp = client.cancel_orders(
+    MarketId(market_id),
+    vec![CancelOrderArgs {
+        order_id: Some(OrderId(12345)),
+        client_order_id: None,
+    }],
+    None,
+).await?;
+
+// Cancel all orders on a market
+client.cancel_market_orders(MarketId(market_id), None).await?;
+
+// Cancel all orders across all markets
+client.cancel_all_orders(None).await?;
+
+// Amend (cancel + replace) orders atomically
+let resp = client.amend_orders(
+    MarketId(market_id),
+    vec![AmendOrderArgs {
+        cancel: CancelOrderArgs {
+            order_id: Some(OrderId(12345)),
+            client_order_id: None,
+        },
+        place: NewOrderArgs {
+            price: PositiveDecimal::try_from(new_price)?,
+            size: PositiveDecimal::try_from(new_qty)?,
+            side: Side::Bid,
+            order_type: OrderType::Limit,
+            reduce_only: false,
+            client_order_id: None,
+            pending_tpsl_pair: None,
+        },
+    }],
+    None,
+).await?;
+```
+
+### Manual CallMessage Construction (advanced)
+
+For full control over transaction parameters, construct `CallMessage` directly:
+
+```rust
+use bullet_rust_sdk::{CallMessage, UserAction, Transaction};
+
+let call_msg = CallMessage::User(UserAction::PlaceOrders {
+    market_id: MarketId(market_id),
+    orders: vec![NewOrderArgs { /* ... */ }],
+    replace: false,
+    sub_account_index: None,
+});
+
+let signed = Transaction::builder()
+    .call_message(call_msg)
+    .max_fee(10_000_000)        // override client default
+    .signer(&other_keypair)     // override client keypair
+    .client(&client)
+    .build()?;
+
+let resp = client.send_transaction(&signed).await?;
+```
+
+## WebSocket Streaming
+
+```rust
+use bullet_rust_sdk::{Topic, OrderbookDepth, ServerMessage};
+use bullet_rust_sdk::ws::models::TaggedMessage;
+
+// Connect
+let mut ws = client.connect_ws().call().await?;
+
+// Subscribe to topics
+ws.subscribe([
+    Topic::depth("BTC-USD", OrderbookDepth::D20),   // 20-level orderbook
+    Topic::book_ticker("BTC-USD"),                   // best bid/ask
+    Topic::agg_trade("BTC-USD"),                     // trades
+    Topic::mark_price("BTC-USD"),                    // mark price + funding rate
+], None).await?;
+
+// Receive events
+loop {
+    match ws.recv().await? {
+        ServerMessage::DepthUpdate(d) => {
+            // d.symbol: String
+            // d.bids: Vec<PriceLevel> -- PriceLevel(String, String) = (price, qty)
+            // d.asks: Vec<PriceLevel>
+            // d.last_update_id: u64
+        }
+        ServerMessage::BookTicker(bt) => {
+            // bt.symbol, bt.best_bid_price, bt.best_bid_qty,
+            // bt.best_ask_price, bt.best_ask_qty: all String
+            // bt.update_id: u64
+        }
+        ServerMessage::AggTrade(t) => {
+            // t.symbol, t.price, t.quantity: String
+            // t.side: String ("BUY" or "SELL")
+            // t.order_id: u64, t.trade_id: u64
+            // t.user_address: String (hex)
+            // t.is_buyer_maker: bool
+            // t.fee: String, t.net_fee: String
+        }
+        ServerMessage::MarkPrice(mp) => {
+            // mp.symbol, mp.mark_price, mp.index_price, mp.funding_rate: String
+        }
+        ServerMessage::OrderUpdate(ou) => {
+            // ou.order: OrderUpdateData enum:
+            //   TradeFill { common, side, price, quantity, last_filled_qty, ... }
+            //   PlaceOrder { common, side, price, quantity, ... }
+            //   Cancel { common, ... }
+            // common: { symbol, order_id: u64, status: String, client_order_id, ... }
+            // status values: "NEW", "PARTIALLY_FILLED", "FILLED", "CANCELED", "EXPIRED"
+        }
+        ServerMessage::Tagged(TaggedMessage::Pong(_)) => { /* keepalive */ }
+        ServerMessage::Tagged(_) => { /* subscribe acks, etc */ }
+        ServerMessage::Unknown(err, raw) => {
+            eprintln!("Parse error: {err}, raw: {raw}");
+        }
+        _ => {}
+    }
+}
+```
+
+### WebSocket Order Submission
+
+Orders can also be submitted via WebSocket for lower latency:
+
+```rust
+// Build and sign the transaction
+let signed = Transaction::builder()
+    .call_message(call_msg)
+    .client(&client)
+    .build()?;
+
+// Submit via WebSocket (handles base64 encoding internally)
+ws.place_order(&signed, None).await?;
+ws.cancel_order(&cancel_signed, None).await?;
+```
+
+### WebSocket Reconnection
+
+`WebsocketHandle` returns `Err(WSErrors::WsClosed { .. })` or `Err(WSErrors::WsStreamEnded)` when the connection drops. Reconnect by calling `client.connect_ws().call().await` and re-subscribing.
+
+### WebSocket Thread Safety
+
+`WebsocketHandle` is `Send` but NOT `Sync`. For sharing across async tasks, wrap in `tokio::sync::Mutex`:
+
+```rust
+let ws = Arc::new(tokio::sync::Mutex::new(client.connect_ws().call().await?));
+```
+
+For high-throughput bots, dedicate one task to the WebSocket and use `tokio::sync::mpsc` channels to communicate with other tasks.
+
+## Error Handling
+
+```rust
+use bullet_rust_sdk::{SDKError, WSErrors};
+
+// REST errors
+match client.order_book(Some(10), "BTC-USD").await {
+    Ok(resp) => { /* use resp.into_inner() */ }
+    Err(e) => {
+        let sdk_err: SDKError = e.into();
+        match &sdk_err {
+            SDKError::ApiError(resp) if resp.is_retryable() => { /* 429 or 5xx */ }
+            SDKError::HttpError(_) => { /* network error, retry */ }
+            SDKError::SchemaOutdated => { /* SDK version mismatch, update SDK */ }
+            _ => { /* non-retryable */ }
+        }
+    }
+}
+
+// WebSocket errors
+match ws.recv().await {
+    Err(WSErrors::WsClosed { code, reason }) => { /* reconnect */ }
+    Err(WSErrors::WsStreamEnded) => { /* reconnect */ }
+    Err(WSErrors::WsConnectionTimeout) => { /* retry with longer timeout */ }
+    _ => {}
+}
+```
+
+## Schema Validation
+
+The client validates that the local SDK schema matches the remote exchange schema on `Client::builder().build()`. If the exchange has been updated and the SDK is out of date, you'll get `SDKError::SchemaOutdated`.
+
+To restrict validation to only the actions you use (avoiding false failures from unrelated schema changes):
+
+```rust
+use bullet_rust_sdk::UserActionDiscriminants;
+
+let client = Client::builder()
+    .network(Network::Mainnet)
+    .user_actions(vec![
+        UserActionDiscriminants::PlaceOrders,
+        UserActionDiscriminants::CancelOrders,
+        UserActionDiscriminants::CancelMarketOrders,
+    ])
+    .build()
+    .await?;
+```
+
+## Available OrderType Variants
+
+| Variant | Value | Use Case |
+|---|---|---|
+| `Limit` | 0 | Standard limit order |
+| `PostOnly` | 1 | Maker-only, rejected if it would take |
+| `FillOrKill` | 2 | Fill entirely or cancel |
+| `ImmediateOrCancel` | 3 | Fill what you can, cancel rest. Use for market orders |
+
+Use `ImmediateOrCancel` with an aggressive slippage price for market orders. This is the same pattern Hyperliquid uses -- their L1 has no native market order type either; the SDK sends a limit IoC at `mid * (1 +/- slippage%)`. Note: Binance futures does have a first-class `MARKET` type where you send no price, but most on-chain perp exchanges (Bullet, Hyperliquid) use IoC instead.
+
+## Available WebSocket Topics
+
+| Topic | Constructor | Data |
+|---|---|---|
+| Orderbook depth | `Topic::depth("BTC-USD", OrderbookDepth::D20)` | `ServerMessage::DepthUpdate` |
+| Best bid/ask | `Topic::book_ticker("BTC-USD")` | `ServerMessage::BookTicker` |
+| Trades | `Topic::agg_trade("BTC-USD")` | `ServerMessage::AggTrade` |
+| Mark price | `Topic::mark_price("BTC-USD")` | `ServerMessage::MarkPrice` |
+| Candles | `Topic::kline("BTC-USD", KlineInterval::H1)` | `ServerMessage::Kline` |
+| Liquidations | `Topic::force_order("BTC-USD")` | `ServerMessage::ForceOrder` |
+| All tickers | `Topic::all_tickers()` | Mini-ticker for all symbols |
+| All mark prices | `Topic::all_mark_prices()` | Mark price for all symbols |
+
+`OrderbookDepth` variants: `D5`, `D10`, `D20`.
+`KlineInterval` variants: `M1`, `M5`, `M15`, `M30`, `H1`, `H4`, `D1`.
+
+## Networks
+
+| Network | REST URL | Description |
+|---|---|---|
+| `Network::Mainnet` | `https://tradingapi.bullet.xyz` | Production |
+| `Network::Testnet` | `https://tradingapi.testnet.bullet.xyz` | Paper trading / testing |
+| `Network::from("https://custom-url")` | Custom URL | Self-hosted or staging |

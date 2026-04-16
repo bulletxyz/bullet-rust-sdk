@@ -4,7 +4,9 @@ use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
 use std::ops::Deref;
 
 use crate::generated::Client as GeneratedClient;
+use crate::metadata::{ExchangeMetadata, SymbolInfo};
 use crate::{Keypair, SDKError, SDKResult};
+use bullet_exchange_interface::types::MarketId;
 use url::Url;
 
 /// The main trading API client for REST operations.
@@ -37,6 +39,9 @@ pub struct Client {
     chain_hash: [u8; 32],
 
     keypair: Option<Keypair>,
+
+    // Exchange metadata (symbol lookups)
+    metadata: ExchangeMetadata,
 
     // Transaction Options
     max_priority_fee_bips: PriorityFeeBips,
@@ -190,6 +195,10 @@ impl Client {
         let max_priority_fee_bips = max_priority_fee_bips.unwrap_or(*MAX_PRIORITY_FEE_BIPS);
         let max_fee = max_fee.unwrap_or(*MAX_FEE);
 
+        // Fetch and cache exchange metadata (symbol -> MarketId mappings)
+        let exchange_info = generated_client.exchange_info().await?;
+        let metadata = ExchangeMetadata::from_symbols(&exchange_info.into_inner().symbols);
+
         Ok(Self {
             rest_url,
             ws_url,
@@ -201,6 +210,7 @@ impl Client {
             max_priority_fee_bips,
             max_fee,
             keypair,
+            metadata,
         })
     }
 
@@ -307,6 +317,46 @@ impl Client {
     /// Get the default gas limit for transactions.
     pub fn gas_limit(&self) -> Option<Gas> {
         self.gas_limit.clone()
+    }
+
+    // ── Symbol / Market Lookups ─────────────────────────────────────────
+
+    /// Resolve a symbol string to its [`MarketId`].
+    ///
+    /// Returns `None` if the symbol is not found in the cached metadata.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let market_id = client.market_id("BTC-USD").expect("unknown symbol");
+    /// client.place_orders(market_id, orders, false, None).await?;
+    /// ```
+    pub fn market_id(&self, symbol: &str) -> Option<MarketId> {
+        self.metadata.market_id(symbol)
+    }
+
+    /// Get all available symbols and their metadata.
+    pub fn symbols(&self) -> &[SymbolInfo] {
+        self.metadata.symbols()
+    }
+
+    /// Look up symbol info by [`MarketId`].
+    pub fn symbol_info(&self, market_id: MarketId) -> Option<&SymbolInfo> {
+        self.metadata.symbol_info_by_id(market_id)
+    }
+
+    /// Look up symbol info by name.
+    pub fn symbol_info_by_name(&self, symbol: &str) -> Option<&SymbolInfo> {
+        self.metadata.symbol_info_by_name(symbol)
+    }
+
+    /// Re-fetch exchange metadata from the server.
+    ///
+    /// Call this in long-running bots to pick up newly listed markets.
+    pub async fn refresh_metadata(&mut self) -> SDKResult<()> {
+        let info = self.generated_client.exchange_info().await?;
+        self.metadata = ExchangeMetadata::from_symbols(&info.into_inner().symbols);
+        Ok(())
     }
 }
 
