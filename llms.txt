@@ -160,7 +160,7 @@ let balances = client.my_balances().await?;
 let orders = client.my_open_orders("BTC-USD").await?;
 
 // Or with explicit address (for querying other accounts):
-let address = format!("0x{}", keypair.public_key_hex());
+let address = keypair.public_key_bs58();  // base58 format
 let account = client.account_info(&address).await?.into_inner();
 let balances = client.account_balance(&address).await?.into_inner();
 let orders = client.query_open_orders(&address, "BTC-USD").await?.into_inner();

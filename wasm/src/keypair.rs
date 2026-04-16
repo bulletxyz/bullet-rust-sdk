@@ -59,6 +59,15 @@ impl WasmKeypair {
         self.inner.public_key_hex()
     }
 
+    /// Public key as a base58 address string.
+    ///
+    /// This is the standard address format used by the Bullet exchange.
+    /// @returns {string}
+    #[wasm_bindgen(js_name = publicKeyBs58)]
+    pub fn public_key_bs58(&self) -> String {
+        self.inner.public_key_bs58()
+    }
+
     /// Sign `message` and return the 64-byte Ed25519 signature as `Uint8Array`.
     pub fn sign(&self, message: &[u8]) -> Vec<u8> {
         self.inner.sign(message)

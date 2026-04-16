@@ -268,12 +268,24 @@ impl Client {
     // These derive the account address from the client's keypair so you
     // don't have to format it manually on every call.
 
-    /// Get the hex address derived from the client's keypair.
+    /// Get the base58 address derived from the client's keypair.
     ///
     /// Returns `Err(SDKError::MissingKeypair)` if no keypair is configured.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let address = client.address()?;
+    /// println!("My address: {address}"); // e.g. "5Hq3...xyz"
+    /// ```
     pub fn address(&self) -> SDKResult<String> {
         let kp = self.keypair().ok_or(SDKError::MissingKeypair)?;
-        Ok(format!("0x{}", kp.public_key_hex()))
+        let pk_bytes: [u8; 32] = kp
+            .public_key()
+            .try_into()
+            .map_err(|_| SDKError::InvalidPublicKeyLength(0))?;
+        let addr = bullet_exchange_interface::address::Address(pk_bytes);
+        Ok(addr.to_string())
     }
 
     /// Query open orders for the client's own account on a symbol.
