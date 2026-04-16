@@ -43,7 +43,7 @@ impl Client {
     ///
     /// # Arguments
     ///
-    /// * `market_id` — Numeric market ID (resolve from `exchange_info()`)
+    /// * `market_id` — Numeric market ID (resolve via `client.market_id("BTC-USD")`)
     /// * `orders` — One or more orders to place
     /// * `replace` — If `true`, cancel existing orders before placing new ones
     /// * `sub_account_index` — `None` for the main account, `Some(n)` for a sub-account

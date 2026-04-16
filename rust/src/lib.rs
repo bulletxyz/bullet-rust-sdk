@@ -22,7 +22,7 @@ pub use types::CallMessage;
 pub mod ws;
 pub use ws::client::{WebsocketConfig, WebsocketHandle};
 #[cfg(not(target_arch = "wasm32"))]
-pub use ws::managed::{ManagedWebsocket, ManagedWsConfig, WsEvent};
+pub use ws::managed::{ManagedWebsocket, ManagedWsConfig, ManagedWsError, WsEvent};
 pub use ws::models::ServerMessage;
 pub use ws::topics::{KlineInterval, OrderbookDepth, Topic};
 
@@ -44,8 +44,8 @@ pub use metadata::SymbolInfo;
 
 // Re-export typed parsing helpers.
 pub use parse::{
-    AggTradeExt, BookTickerExt, DepthUpdateExt, ParseDecimal, TypedLevel, TypedOrderBook,
-    parse_levels,
+    AggTradeExt, BookTickerExt, DepthUpdateExt, MarkPriceExt, ParseDecimal, TypedLevel,
+    TypedOrderBook, parse_levels,
 };
 
 // ── On-chain trading types ──────────────────────────────────────────────────
@@ -70,8 +70,10 @@ pub use bullet_exchange_interface::types::OrderType;
 
 /// Numeric market identifier. Wraps a `u16`.
 ///
-/// Resolve a symbol string (e.g. `"BTC-USD"`) to a `MarketId` via
-/// [`Client::exchange_info()`](Client).
+/// Resolve a symbol string to a `MarketId` via [`Client::market_id()`]:
+/// ```ignore
+/// let market_id = client.market_id("BTC-USD").expect("unknown symbol");
+/// ```
 pub use bullet_exchange_interface::types::MarketId;
 
 /// Exchange-assigned order identifier. Wraps a `u64`.

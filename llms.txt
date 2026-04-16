@@ -28,12 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
 
-    // 2. Fetch market info (symbol -> MarketId mapping)
-    let info = client.exchange_info().await?.into_inner();
-    let btc_market_id: u16 = info.symbols.iter()
-        .find(|s| s.symbol == "BTC-USD" && s.status == "TRADING")
-        .map(|s| s.market_id)
-        .expect("BTC-USD not found");
+    // 2. Resolve symbol to MarketId (cached from exchange_info at construction)
+    let market_id = client.market_id("BTC-USD").expect("BTC-USD not found");
 
     // 3. Fetch orderbook
     let book = client.order_book(Some(10), "BTC-USD").await?.into_inner();
@@ -42,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. Place an order (convenience method)
     let resp = client.place_orders(
-        MarketId(btc_market_id),
+        market_id,
         vec![NewOrderArgs {
             price: PositiveDecimal::try_from(rust_decimal::Decimal::from(50000))?,
             size: PositiveDecimal::try_from(rust_decimal::Decimal::new(1, 3))?, // 0.001
@@ -58,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("TX submitted: id={}, status={:?}", resp.id, resp.status);
 
     // 5. Cancel all orders on a market
-    client.cancel_market_orders(MarketId(btc_market_id), None).await?;
+    client.cancel_market_orders(market_id, None).await?;
 
     Ok(())
 }
@@ -340,19 +336,31 @@ ws.place_order(&signed, None).await?;
 ws.cancel_order(&cancel_signed, None).await?;
 ```
 
-### WebSocket Reconnection
+### Managed WebSocket (recommended for production)
 
-`WebsocketHandle` returns `Err(WSErrors::WsClosed { .. })` or `Err(WSErrors::WsStreamEnded)` when the connection drops. Reconnect by calling `client.connect_ws().call().await` and re-subscribing.
-
-### WebSocket Thread Safety
-
-`WebsocketHandle` is `Send` but NOT `Sync`. For sharing across async tasks, wrap in `tokio::sync::Mutex`:
+`ManagedWebsocket` handles reconnection with exponential backoff + jitter and replays subscriptions automatically. It's `Send + Sync` (channel-based).
 
 ```rust
-let ws = Arc::new(tokio::sync::Mutex::new(client.connect_ws().call().await?));
+use bullet_rust_sdk::{ManagedWebsocket, WsEvent, Topic, OrderbookDepth};
+
+let mut ws = client.connect_ws_managed().call().await?;
+ws.subscribe([
+    Topic::depth("BTC-USD", OrderbookDepth::D20),
+    Topic::agg_trade("BTC-USD"),
+], None)?;  // fire-and-forget, ack comes as WsEvent::Message
+
+while let Some(event) = ws.recv().await {
+    match event {
+        WsEvent::Message(msg) => { /* process *msg */ }
+        WsEvent::Reconnecting => { /* log, subscriptions will replay */ }
+        WsEvent::Disconnected(reason) => { eprintln!("{reason}"); break; }
+    }
+}
 ```
 
-For high-throughput bots, dedicate one task to the WebSocket and use `tokio::sync::mpsc` channels to communicate with other tasks.
+### Raw WebSocket (advanced)
+
+`WebsocketHandle` gives direct socket access but requires manual reconnection. It is `Send` but NOT `Sync`. For sharing across async tasks, wrap in `tokio::sync::Mutex` or dedicate one task to the socket and use `mpsc` channels.
 
 ## Error Handling
 

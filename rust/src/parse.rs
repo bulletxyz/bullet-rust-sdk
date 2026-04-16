@@ -22,7 +22,7 @@
 use rust_decimal::Decimal;
 
 use bullet_ws_interface::{
-    AggTradeMessage, BookTickerMessage, DepthUpdate, PriceLevel,
+    AggTradeMessage, BookTickerMessage, DepthUpdate, MarkPriceMessage, PriceLevel,
 };
 
 /// Extension trait for parsing string-encoded prices and quantities into `Decimal`.
@@ -115,6 +115,30 @@ impl AggTradeExt for AggTradeMessage {
 
     fn parsed_quantity(&self) -> Result<Decimal, rust_decimal::Error> {
         self.quantity.parse()
+    }
+}
+
+/// Extension methods for [`MarkPriceMessage`] (WebSocket mark price + funding).
+pub trait MarkPriceExt {
+    /// Parse the mark price.
+    fn parsed_mark_price(&self) -> Result<Decimal, rust_decimal::Error>;
+    /// Parse the index price.
+    fn parsed_index_price(&self) -> Result<Decimal, rust_decimal::Error>;
+    /// Parse the funding rate.
+    fn parsed_funding_rate(&self) -> Result<Decimal, rust_decimal::Error>;
+}
+
+impl MarkPriceExt for MarkPriceMessage {
+    fn parsed_mark_price(&self) -> Result<Decimal, rust_decimal::Error> {
+        self.mark_price.parse()
+    }
+
+    fn parsed_index_price(&self) -> Result<Decimal, rust_decimal::Error> {
+        self.index_price.parse()
+    }
+
+    fn parsed_funding_rate(&self) -> Result<Decimal, rust_decimal::Error> {
+        self.funding_rate.parse()
     }
 }
 

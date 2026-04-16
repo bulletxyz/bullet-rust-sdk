@@ -7,6 +7,6 @@ pub mod topics;
 // Re-export commonly used types at ws module level
 pub use client::{WebsocketConfig, WebsocketHandle};
 #[cfg(not(target_arch = "wasm32"))]
-pub use managed::{ManagedWebsocket, ManagedWsConfig, WsEvent};
+pub use managed::{ManagedWebsocket, ManagedWsConfig, ManagedWsError, WsEvent};
 pub use models::{ServerMessage, TaggedMessage};
 pub use topics::{KlineInterval, OrderbookDepth, Topic};

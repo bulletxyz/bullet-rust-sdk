@@ -12,12 +12,12 @@
 //!
 //! ```ignore
 //! use bullet_rust_sdk::{Client, Topic, OrderbookDepth};
-//! use bullet_rust_sdk::ws::managed::ManagedWebsocket;
+//! use bullet_rust_sdk::ws::managed::{ManagedWebsocket, WsEvent};
 //!
 //! let client = Client::mainnet().await?;
 //! let mut ws = client.connect_ws_managed().call().await?;
 //!
-//! ws.subscribe([Topic::depth("BTC-USD", OrderbookDepth::D20)], None).await?;
+//! ws.subscribe([Topic::depth("BTC-USD", OrderbookDepth::D20)], None)?;
 //!
 //! // Receive messages — reconnection is handled automatically
 //! while let Some(event) = ws.recv().await {
@@ -29,9 +29,11 @@
 //! }
 //! ```
 
+use std::collections::HashSet;
 use std::time::Duration;
 
 use bon::bon;
+use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -41,6 +43,14 @@ use super::topics::Topic;
 use crate::errors::WSErrors;
 use crate::types::{ClientMessage, OrderParams, RequestId};
 use crate::Client;
+
+/// Errors from [`ManagedWebsocket`] operations.
+#[derive(Debug, Error)]
+pub enum ManagedWsError {
+    /// The background task has stopped (disconnected or explicitly stopped).
+    #[error("managed websocket is stopped")]
+    Stopped,
+}
 
 /// Events delivered to the user from the managed WebSocket.
 #[derive(Debug)]
@@ -73,6 +83,12 @@ pub struct ManagedWsConfig {
     /// Default: `None` (infinite retries)
     pub max_retries: Option<u32>,
 
+    /// Event channel buffer size. When the buffer is full and the consumer
+    /// isn't keeping up, the oldest events are dropped.
+    ///
+    /// Default: 10_000
+    pub channel_capacity: usize,
+
     /// Underlying WebSocket connection config (e.g. handshake timeout).
     pub ws_config: Option<WebsocketConfig>,
 }
@@ -83,6 +99,7 @@ impl Default for ManagedWsConfig {
             initial_backoff: Duration::from_secs(1),
             max_backoff: Duration::from_secs(30),
             max_retries: None,
+            channel_capacity: 10_000,
             ws_config: None,
         }
     }
@@ -98,9 +115,13 @@ enum WsCommand {
 
 /// Auto-reconnecting WebSocket handle.
 ///
-/// `Send + Sync` — safe to share across async tasks.
+/// `Send + Sync` — safe to share across async tasks without a `Mutex`.
+///
+/// Subscribe/unsubscribe are fire-and-forget (synchronous sends to the
+/// background task). Server acknowledgements arrive as [`WsEvent::Message`]
+/// on the event stream, matching the standard CEX WebSocket convention.
 pub struct ManagedWebsocket {
-    event_rx: mpsc::UnboundedReceiver<WsEvent>,
+    event_rx: mpsc::Receiver<WsEvent>,
     cmd_tx: mpsc::UnboundedSender<WsCommand>,
 }
 
@@ -114,55 +135,58 @@ impl ManagedWebsocket {
     }
 
     /// Subscribe to topics. The subscription is tracked and replayed on reconnect.
-    pub async fn subscribe(
+    ///
+    /// This is fire-and-forget — it queues the command to the background task.
+    /// The server's subscribe acknowledgement arrives as a [`WsEvent::Message`].
+    pub fn subscribe(
         &self,
         topics: impl IntoIterator<Item = Topic>,
         id: Option<RequestId>,
-    ) -> Result<(), String> {
+    ) -> Result<(), ManagedWsError> {
         let topics: Vec<Topic> = topics.into_iter().collect();
         self.cmd_tx
             .send(WsCommand::Subscribe(topics, id))
-            .map_err(|_| "managed websocket stopped".to_string())
+            .map_err(|_| ManagedWsError::Stopped)
     }
 
     /// Unsubscribe from topics. Removes them from the replay list.
-    pub async fn unsubscribe(
+    pub fn unsubscribe(
         &self,
         topics: impl IntoIterator<Item = Topic>,
         id: Option<RequestId>,
-    ) -> Result<(), String> {
+    ) -> Result<(), ManagedWsError> {
         let topics: Vec<Topic> = topics.into_iter().collect();
         self.cmd_tx
             .send(WsCommand::Unsubscribe(topics, id))
-            .map_err(|_| "managed websocket stopped".to_string())
+            .map_err(|_| ManagedWsError::Stopped)
     }
 
     /// Place an order via WebSocket.
-    pub async fn order_place(
+    pub fn order_place(
         &self,
         tx: impl Into<String>,
         id: Option<RequestId>,
-    ) -> Result<(), String> {
+    ) -> Result<(), ManagedWsError> {
         self.cmd_tx
             .send(WsCommand::Send(ClientMessage::OrderPlace {
                 id,
                 params: OrderParams { tx: tx.into() },
             }))
-            .map_err(|_| "managed websocket stopped".to_string())
+            .map_err(|_| ManagedWsError::Stopped)
     }
 
     /// Cancel an order via WebSocket.
-    pub async fn order_cancel(
+    pub fn order_cancel(
         &self,
         tx: impl Into<String>,
         id: Option<RequestId>,
-    ) -> Result<(), String> {
+    ) -> Result<(), ManagedWsError> {
         self.cmd_tx
             .send(WsCommand::Send(ClientMessage::OrderCancel {
                 id,
                 params: OrderParams { tx: tx.into() },
             }))
-            .map_err(|_| "managed websocket stopped".to_string())
+            .map_err(|_| ManagedWsError::Stopped)
     }
 
     /// Gracefully stop the managed WebSocket and its background task.
@@ -188,7 +212,7 @@ impl Client {
     ///
     /// ```ignore
     /// let mut ws = client.connect_ws_managed().call().await?;
-    /// ws.subscribe([Topic::agg_trade("BTC-USD")], None).await?;
+    /// ws.subscribe([Topic::agg_trade("BTC-USD")], None)?;
     ///
     /// while let Some(event) = ws.recv().await {
     ///     match event {
@@ -215,10 +239,9 @@ impl Client {
             .call()
             .await?;
 
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (event_tx, event_rx) = mpsc::channel(config.channel_capacity);
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
-        // Clone what the background task needs
         let client = self.clone_for_managed_ws();
         let config_clone = config.clone();
 
@@ -301,86 +324,56 @@ async fn run_managed_ws(
     client: ManagedWsClient,
     mut ws: super::client::WebsocketHandle,
     config: ManagedWsConfig,
-    event_tx: mpsc::UnboundedSender<WsEvent>,
+    event_tx: mpsc::Sender<WsEvent>,
     mut cmd_rx: mpsc::UnboundedReceiver<WsCommand>,
 ) {
-    // Track active subscriptions for replay
-    let mut active_topics: Vec<String> = Vec::new();
+    let mut active_topics: HashSet<String> = HashSet::new();
 
     loop {
         tokio::select! {
-            // Receive from WebSocket
             result = ws.recv() => {
                 match result {
                     Ok(msg) => {
-                        if event_tx.send(WsEvent::Message(Box::new(msg))).is_err() {
+                        if event_tx.send(WsEvent::Message(Box::new(msg))).await.is_err() {
                             debug!("event receiver dropped, stopping managed ws");
                             return;
                         }
                     }
                     Err(WSErrors::WsClosed { code, reason }) => {
                         warn!(?code, %reason, "WebSocket closed, reconnecting");
-                        if event_tx.send(WsEvent::Reconnecting).is_err() {
+                        if handle_reconnect(&client, &config, &active_topics, &event_tx, &mut ws).await {
                             return;
-                        }
-                        match reconnect(&client, &config, &active_topics).await {
-                            Ok(new_ws) => {
-                                ws = new_ws;
-                                info!("reconnected successfully");
-                            }
-                            Err(reason) => {
-                                let _ = event_tx.send(WsEvent::Disconnected(reason));
-                                return;
-                            }
                         }
                     }
                     Err(WSErrors::WsStreamEnded) => {
                         warn!("WebSocket stream ended, reconnecting");
-                        if event_tx.send(WsEvent::Reconnecting).is_err() {
+                        if handle_reconnect(&client, &config, &active_topics, &event_tx, &mut ws).await {
                             return;
-                        }
-                        match reconnect(&client, &config, &active_topics).await {
-                            Ok(new_ws) => {
-                                ws = new_ws;
-                                info!("reconnected successfully");
-                            }
-                            Err(reason) => {
-                                let _ = event_tx.send(WsEvent::Disconnected(reason));
-                                return;
-                            }
                         }
                     }
                     Err(e) => {
                         error!(?e, "WebSocket error");
-                        let _ = event_tx.send(WsEvent::Disconnected(e.to_string()));
+                        let _ = event_tx.send(WsEvent::Disconnected(e.to_string())).await;
                         return;
                     }
                 }
             }
 
-            // Process commands from the user
             cmd = cmd_rx.recv() => {
                 match cmd {
                     Some(WsCommand::Subscribe(topics, id)) => {
                         let params: Vec<String> = topics.iter().map(|t| t.to_string()).collect();
-                        // Track for replay
                         for p in &params {
-                            if !active_topics.contains(p) {
-                                active_topics.push(p.clone());
-                            }
+                            active_topics.insert(p.clone());
                         }
-                        let _ = ws.send(ClientMessage::Subscribe {
-                            id,
-                            params,
-                        }).await;
+                        let _ = ws.send(ClientMessage::Subscribe { id, params }).await;
                     }
                     Some(WsCommand::Unsubscribe(topics, id)) => {
                         let params: Vec<String> = topics.iter().map(|t| t.to_string()).collect();
-                        active_topics.retain(|t| !params.contains(t));
-                        let _ = ws.send(ClientMessage::Unsubscribe {
-                            id,
-                            params,
-                        }).await;
+                        for p in &params {
+                            active_topics.remove(p);
+                        }
+                        let _ = ws.send(ClientMessage::Unsubscribe { id, params }).await;
                     }
                     Some(WsCommand::Send(msg)) => {
                         let _ = ws.send(msg).await;
@@ -395,11 +388,35 @@ async fn run_managed_ws(
     }
 }
 
-/// Reconnect with exponential backoff and replay subscriptions.
+/// Handle reconnection. Returns `true` if the task should stop.
+async fn handle_reconnect(
+    client: &ManagedWsClient,
+    config: &ManagedWsConfig,
+    active_topics: &HashSet<String>,
+    event_tx: &mpsc::Sender<WsEvent>,
+    ws: &mut super::client::WebsocketHandle,
+) -> bool {
+    if event_tx.send(WsEvent::Reconnecting).await.is_err() {
+        return true;
+    }
+    match reconnect(client, config, active_topics).await {
+        Ok(new_ws) => {
+            *ws = new_ws;
+            info!("reconnected successfully");
+            false
+        }
+        Err(reason) => {
+            let _ = event_tx.send(WsEvent::Disconnected(reason)).await;
+            true
+        }
+    }
+}
+
+/// Reconnect with exponential backoff + jitter and replay subscriptions.
 async fn reconnect(
     client: &ManagedWsClient,
     config: &ManagedWsConfig,
-    active_topics: &[String],
+    active_topics: &HashSet<String>,
 ) -> Result<super::client::WebsocketHandle, String> {
     let mut backoff = config.initial_backoff;
     let mut attempts = 0u32;
@@ -413,23 +430,27 @@ async fn reconnect(
             return Err(format!("exhausted {max} reconnect attempts"));
         }
 
-        info!(attempt = attempts, delay = ?backoff, "attempting reconnect");
-        tokio::time::sleep(backoff).await;
+        // Jitter: add 0..50% of backoff to avoid thundering herd
+        let jitter_ms = rand::random::<u64>() % (backoff.as_millis() as u64 / 2 + 1);
+        let jitter = Duration::from_millis(jitter_ms);
+        let delay = backoff + jitter;
+
+        info!(attempt = attempts, delay = ?delay, "attempting reconnect");
+        tokio::time::sleep(delay).await;
 
         match client.connect(&config.ws_config).await {
             Ok(mut ws) => {
-                // Replay subscriptions
                 if !active_topics.is_empty() {
-                    debug!(count = active_topics.len(), "replaying subscriptions");
+                    let params: Vec<String> = active_topics.iter().cloned().collect();
+                    debug!(count = params.len(), "replaying subscriptions");
                     if let Err(e) = ws
                         .send(ClientMessage::Subscribe {
                             id: None,
-                            params: active_topics.to_vec(),
+                            params,
                         })
                         .await
                     {
                         warn!(?e, "failed to replay subscriptions, retrying");
-                        // Backoff and retry
                         backoff = (backoff * 2).min(config.max_backoff);
                         continue;
                     }
