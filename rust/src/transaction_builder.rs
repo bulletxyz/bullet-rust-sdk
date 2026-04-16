@@ -114,14 +114,14 @@ impl UnsignedTransaction {
             gas_limit,
             max_priority_fee_bips: PriorityFeeBips(priority_fee_bips),
         };
-	
+
         Ok(UnsignedTransaction {
             inner: RawUnsignedTransaction {
                 runtime_call,
                 uniqueness,
                 details,
             },
-            chain_hash: *client.chain_hash(),
+            chain_hash: client.chain_hash(),
         })
     }
 }

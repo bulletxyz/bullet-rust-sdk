@@ -29,14 +29,14 @@ use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::*;
 use bullet_exchange_interface::time::UnixTimestampMicros;
 use bullet_exchange_interface::transaction::{Gas, Transaction};
-use bullet_rust_sdk::UnsignedTransaction;
 use bullet_exchange_interface::types::{
     AdminType, AssetId, ClientOrderId, FeeTier, MarketId, OrderId, OrderType, Side,
     SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
     TriggerPriceCondition, TwapId,
 };
-use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::Transaction as RustTransaction;
+use bullet_rust_sdk::UnsignedTransaction;
+use bullet_rust_sdk::types::CallMessage;
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
@@ -276,12 +276,14 @@ impl WasmTransactionBuilder {
     pub fn build_unsigned(self, client: &WasmTradingApi) -> WasmResult<WasmUnsignedTransaction> {
         let call_message = self.call_message.ok_or("call_message is required")?;
 
-        let max_fee = self.max_fee.map(|f| f as u128)
+        let max_fee = self
+            .max_fee
+            .map(|f| f as u128)
             .unwrap_or_else(|| client.inner.max_fee().0);
-        let priority_fee_bips = self.priority_fee_bips
+        let priority_fee_bips = self
+            .priority_fee_bips
             .unwrap_or_else(|| client.inner.max_priority_fee_bips().0);
-        let gas_limit = self.gas_limit.map(Gas)
-            .or_else(|| client.inner.gas_limit());
+        let gas_limit = self.gas_limit.map(Gas).or_else(|| client.inner.gas_limit());
 
         let unsigned = UnsignedTransaction::builder()
             .call_message(call_message.inner)

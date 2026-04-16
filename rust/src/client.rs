@@ -5,7 +5,7 @@ use std::ops::Deref;
 use std::sync::Mutex;
 
 use crate::generated::Client as GeneratedClient;
-use crate::{CallMessage, Keypair, SDKError, SDKResult};
+use crate::{Keypair, SDKError, SDKResult};
 use url::Url;
 
 /// The main trading API client for REST operations.
@@ -217,7 +217,7 @@ impl Client {
     }
 
     pub async fn update_schema(&self) -> SDKResult<()> {
-        let chain_data = Self::fetch_schema(self.client(), &self.user_actions()).await?;
+        let chain_data = Self::fetch_schema(self.client(), self.user_actions()).await?;
         *self.chain_hash.lock().unwrap() = chain_data.chain_hash;
         Ok(())
     }
@@ -261,17 +261,6 @@ impl Client {
                 true
             }
         }
-    }
-
-    pub fn validate(&self, tx: &CallMessage) -> SDKResult<()> {
-        // Check whether the call-message was part of the schema validation
-        if let Some(user_actions) = self.user_actions()
-            && let CallMessage::User(call) = tx
-            && !user_actions.contains(&call.into())
-        {
-            return Err(SDKError::UnsupportedCallMessage(tx.msg_type()));
-        }
-        Ok(())
     }
 
     /// Connect to the mainnet environment.
