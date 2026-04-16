@@ -107,3 +107,105 @@ impl ExchangeMetadata {
         &self.symbols
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generated::types::Symbol;
+
+    fn mock_symbols() -> Vec<Symbol> {
+        vec![
+            Symbol {
+                symbol: "BTC-USD".into(),
+                market_id: 0,
+                status: "TRADING".into(),
+                base_asset: "BTC".into(),
+                quote_asset: "USD".into(),
+                price_precision: 2,
+                quantity_precision: 3,
+                pair: "BTCUSD".into(),
+                contract_type: "PERPETUAL".into(),
+                delivery_date: 0,
+                onboard_date: 0,
+                margin_asset: "USD".into(),
+                base_asset_precision: 8,
+                quote_precision: 8,
+                underlying_type: "COIN".into(),
+                underlying_sub_type: vec![],
+                settle_plan: 0,
+                trigger_protect: Default::default(),
+                filters: vec![],
+                order_types: vec![],
+                time_in_force: vec![],
+                liquidation_fee: Default::default(),
+                market_take_bound: Default::default(),
+                maker_fee_bps: vec![],
+                taker_fee_bps: vec![],
+            },
+            Symbol {
+                symbol: "ETH-USD".into(),
+                market_id: 1,
+                status: "TRADING".into(),
+                base_asset: "ETH".into(),
+                quote_asset: "USD".into(),
+                price_precision: 2,
+                quantity_precision: 4,
+                pair: "ETHUSD".into(),
+                contract_type: "PERPETUAL".into(),
+                delivery_date: 0,
+                onboard_date: 0,
+                margin_asset: "USD".into(),
+                base_asset_precision: 8,
+                quote_precision: 8,
+                underlying_type: "COIN".into(),
+                underlying_sub_type: vec![],
+                settle_plan: 0,
+                trigger_protect: Default::default(),
+                filters: vec![],
+                order_types: vec![],
+                time_in_force: vec![],
+                liquidation_fee: Default::default(),
+                market_take_bound: Default::default(),
+                maker_fee_bps: vec![],
+                taker_fee_bps: vec![],
+            },
+        ]
+    }
+
+    #[test]
+    fn market_id_lookup() {
+        let meta = ExchangeMetadata::from_symbols(&mock_symbols());
+        assert_eq!(meta.market_id("BTC-USD"), Some(MarketId(0)));
+        assert_eq!(meta.market_id("ETH-USD"), Some(MarketId(1)));
+        assert_eq!(meta.market_id("SOL-USD"), None);
+    }
+
+    #[test]
+    fn symbol_info_by_name_lookup() {
+        let meta = ExchangeMetadata::from_symbols(&mock_symbols());
+        let info = meta.symbol_info_by_name("ETH-USD").unwrap();
+        assert_eq!(info.base_asset, "ETH");
+        assert_eq!(info.quantity_precision, 4);
+    }
+
+    #[test]
+    fn symbol_info_by_id_lookup() {
+        let meta = ExchangeMetadata::from_symbols(&mock_symbols());
+        let info = meta.symbol_info_by_id(MarketId(0)).unwrap();
+        assert_eq!(info.symbol, "BTC-USD");
+        assert!(meta.symbol_info_by_id(MarketId(99)).is_none());
+    }
+
+    #[test]
+    fn symbols_returns_all() {
+        let meta = ExchangeMetadata::from_symbols(&mock_symbols());
+        assert_eq!(meta.symbols().len(), 2);
+    }
+
+    #[test]
+    fn empty_symbols() {
+        let meta = ExchangeMetadata::from_symbols(&[]);
+        assert!(meta.symbols().is_empty());
+        assert_eq!(meta.market_id("BTC-USD"), None);
+    }
+}

@@ -98,7 +98,8 @@ pub struct ManagedWsConfig {
     pub max_retries: Option<u32>,
 
     /// Event channel buffer size. When the buffer is full and the consumer
-    /// isn't keeping up, the oldest events are dropped.
+    /// isn't keeping up, new events are dropped to keep the WebSocket
+    /// connection alive. A warning is logged when this happens.
     ///
     /// Default: 10_000
     #[builder(default = 10_000)]
@@ -343,19 +344,25 @@ async fn run_managed_ws(
             result = ws.recv() => {
                 match result {
                     Ok(msg) => {
-                        if event_tx.send(WsEvent::Message(Box::new(msg))).await.is_err() {
-                            debug!("event receiver dropped, stopping managed ws");
-                            return;
+                        match event_tx.try_send(WsEvent::Message(Box::new(msg))) {
+                            Ok(()) => {}
+                            Err(mpsc::error::TrySendError::Full(_)) => {
+                                warn!("event channel full, dropping message — consumer too slow");
+                            }
+                            Err(mpsc::error::TrySendError::Closed(_)) => {
+                                debug!("event receiver dropped, stopping managed ws");
+                                return;
+                            }
                         }
                     }
                     Err(WSErrors::WsClosed { code, reason }) => {
-                        warn!(?code, %reason, "WebSocket closed, reconnecting");
+                        warn!(?code, %reason, "WebSocket disconnected, reconnecting");
                         if handle_reconnect(&client, &config, &active_topics, &event_tx, &mut ws).await {
                             return;
                         }
                     }
                     Err(WSErrors::WsStreamEnded) => {
-                        warn!("WebSocket stream ended, reconnecting");
+                        warn!("WebSocket disconnected, reconnecting");
                         if handle_reconnect(&client, &config, &active_topics, &event_tx, &mut ws).await {
                             return;
                         }

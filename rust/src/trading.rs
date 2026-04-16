@@ -15,17 +15,10 @@
 //!     .await?;
 //!
 //! // Place a limit buy
+//! let market_id = client.market_id("BTC-USD").unwrap();
 //! let resp = client.place_orders(
-//!     MarketId(0),
-//!     vec![NewOrderArgs {
-//!         price: PositiveDecimal::try_from(price)?,
-//!         size: PositiveDecimal::try_from(qty)?,
-//!         side: Side::Bid,
-//!         order_type: OrderType::PostOnly,
-//!         reduce_only: false,
-//!         client_order_id: None,
-//!         pending_tpsl_pair: None,
-//!     }],
+//!     market_id,
+//!     vec![limit_order(price, size, Side::Bid)],
 //!     false,
 //!     None,
 //! ).await?;
@@ -149,17 +142,12 @@ impl Client {
     /// ```ignore
     /// use bullet_rust_sdk::*;
     ///
+    /// let market_id = client.market_id("BTC-USD").unwrap();
+    /// let price = PositiveDecimal::try_from(rust_decimal::Decimal::from(50000))?;
+    /// let size = PositiveDecimal::try_from(rust_decimal::Decimal::new(1, 3))?;
     /// let resp = client.place_orders(
-    ///     MarketId(0),
-    ///     vec![NewOrderArgs {
-    ///         price: PositiveDecimal::try_from(rust_decimal::Decimal::from(50000))?,
-    ///         size: PositiveDecimal::try_from(rust_decimal::Decimal::new(1, 3))?,
-    ///         side: Side::Bid,
-    ///         order_type: OrderType::Limit,
-    ///         reduce_only: false,
-    ///         client_order_id: None,
-    ///         pending_tpsl_pair: None,
-    ///     }],
+    ///     market_id,
+    ///     vec![limit_order(price, size, Side::Bid)],
     ///     false,
     ///     None,
     /// ).await?;
@@ -280,12 +268,7 @@ impl Client {
     /// ```
     pub fn address(&self) -> SDKResult<String> {
         let kp = self.keypair().ok_or(SDKError::MissingKeypair)?;
-        let pk_bytes: [u8; 32] = kp
-            .public_key()
-            .try_into()
-            .map_err(|_| SDKError::InvalidPublicKeyLength(0))?;
-        let addr = bullet_exchange_interface::address::Address(pk_bytes);
-        Ok(addr.to_string())
+        Ok(kp.public_key_bs58())
     }
 
     /// Query open orders for the client's own account on a symbol.
@@ -378,5 +361,53 @@ impl Client {
             .client(self)
             .build()?;
         self.send_transaction(&signed).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_decimal::Decimal;
+    use std::str::FromStr;
+
+    fn dec(s: &str) -> PositiveDecimal {
+        PositiveDecimal::try_from(Decimal::from_str(s).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn limit_order_defaults() {
+        let order = limit_order(dec("50000"), dec("0.1"), Side::Bid);
+        assert_eq!(order.order_type, OrderType::Limit);
+        assert_eq!(order.side, Side::Bid);
+        assert!(!order.reduce_only);
+        assert!(order.client_order_id.is_none());
+        assert!(order.pending_tpsl_pair.is_none());
+    }
+
+    #[test]
+    fn post_only_order_defaults() {
+        let order = post_only_order(dec("50000"), dec("0.1"), Side::Ask);
+        assert_eq!(order.order_type, OrderType::PostOnly);
+        assert_eq!(order.side, Side::Ask);
+    }
+
+    #[test]
+    fn ioc_order_defaults() {
+        let order = ioc_order(dec("50000"), dec("0.1"), Side::Bid);
+        assert_eq!(order.order_type, OrderType::ImmediateOrCancel);
+    }
+
+    #[test]
+    fn limit_order_with_id_sets_client_id() {
+        let order = limit_order_with_id(dec("50000"), dec("0.1"), Side::Bid, 42);
+        assert_eq!(order.client_order_id, Some(ClientOrderId(42)));
+        assert_eq!(order.order_type, OrderType::Limit);
+    }
+
+    #[test]
+    fn post_only_order_with_id_sets_client_id() {
+        let order = post_only_order_with_id(dec("50000"), dec("0.1"), Side::Ask, 99);
+        assert_eq!(order.client_order_id, Some(ClientOrderId(99)));
+        assert_eq!(order.order_type, OrderType::PostOnly);
     }
 }

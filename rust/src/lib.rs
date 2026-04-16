@@ -49,7 +49,7 @@ pub use metadata::SymbolInfo;
 // Re-export typed parsing helpers.
 pub use parse::{
     AggTradeExt, BookTickerExt, DepthUpdateExt, MarkPriceExt, ParseDecimal, TypedLevel,
-    TypedOrderBook, parse_levels,
+    TypedOrderBook, parse_levels, parse_order_book,
 };
 
 // ── On-chain trading types ──────────────────────────────────────────────────
