@@ -38,9 +38,10 @@ use bullet_exchange_interface::transaction::{
 };
 use web_time::{SystemTime, UNIX_EPOCH};
 
+use crate::codegen::Error::ErrorResponse;
 use crate::generated::types::{SubmitTxRequest, SubmitTxResponse};
 use crate::types::CallMessage;
-use crate::{Client, Keypair, SDKError, SDKResult};
+use crate::{ApiErrorResponse, Client, Keypair, SDKError, SDKResult};
 
 // ── UnsignedTransaction ──────────────────────────────────────────────────────
 
@@ -239,8 +240,24 @@ impl Client {
         signed: &SignedTransaction,
     ) -> SDKResult<SubmitTxResponse> {
         let body = Transaction::to_base64(signed)?;
-        let response = self.client().submit_tx(&SubmitTxRequest { body }).await?;
-        Ok(response.into_inner())
+        let response = self.client().submit_tx(&SubmitTxRequest { body }).await;
+        match response {
+            Err(ErrorResponse(response)) if response.status() == 401 => {
+                let inner = response.into_inner();
+                if inner.message.contains("Invalid signature") {
+                    self.update_schema().await?;
+                    // map the error to 429 to trigger the retry path
+                    return Err(SDKError::ApiError(ApiErrorResponse {
+                        status: 429,
+                        details: None,
+                        message: "Update Schema".to_string(),
+                    }));
+                }
+                Err(SDKError::ApiError(inner))
+            }
+            Ok(r) => Ok(r.into_inner()),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
