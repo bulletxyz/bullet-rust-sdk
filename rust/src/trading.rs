@@ -37,7 +37,7 @@ use bullet_exchange_interface::types::{ClientOrderId, MarketId, OrderType, Side}
 
 use crate::generated::types::SubmitTxResponse;
 use crate::types::{CallMessage, UserAction};
-use crate::{Client, SDKResult, Transaction};
+use crate::{Client, SDKError, SDKResult, Transaction};
 
 // ── Order construction helpers ──────────────────────────────────────────────
 //
@@ -262,6 +262,63 @@ impl Client {
             .build()?;
         self.send_transaction(&signed).await
     }
+
+    // ── Account query convenience methods ─────────────────────────────────
+    //
+    // These derive the account address from the client's keypair so you
+    // don't have to format it manually on every call.
+
+    /// Get the hex address derived from the client's keypair.
+    ///
+    /// Returns `Err(SDKError::MissingKeypair)` if no keypair is configured.
+    pub fn address(&self) -> SDKResult<String> {
+        let kp = self.keypair().ok_or(SDKError::MissingKeypair)?;
+        Ok(format!("0x{}", kp.public_key_hex()))
+    }
+
+    /// Query open orders for the client's own account on a symbol.
+    ///
+    /// Convenience wrapper around `query_open_orders` that derives the
+    /// address from the client's keypair.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let orders = client.my_open_orders("BTC-USD").await?;
+    /// for o in &orders {
+    ///     println!("{}: {} {} @ {}", o.order_id, o.side, o.orig_qty, o.price);
+    /// }
+    /// ```
+    pub async fn my_open_orders(
+        &self,
+        symbol: &str,
+    ) -> SDKResult<Vec<crate::generated::types::BinanceOrder>> {
+        let address = self.address()?;
+        let resp = self.query_open_orders(&address, symbol).await?;
+        Ok(resp.into_inner())
+    }
+
+    /// Query account info (positions, margins) for the client's own account.
+    ///
+    /// Convenience wrapper around `account_info` that derives the address
+    /// from the client's keypair and unwraps the response.
+    pub async fn my_account(&self) -> SDKResult<crate::generated::types::Account> {
+        let address = self.address()?;
+        let resp = self.account_info(&address).await?;
+        Ok(resp.into_inner())
+    }
+
+    /// Query balances for the client's own account.
+    ///
+    /// Convenience wrapper around `account_balance` that derives the address
+    /// from the client's keypair and unwraps the response.
+    pub async fn my_balances(&self) -> SDKResult<Vec<crate::generated::types::Balance>> {
+        let address = self.address()?;
+        let resp = self.account_balance(&address).await?;
+        Ok(resp.into_inner())
+    }
+
+    // ── Order management ────────────────────────────────────────────────
 
     /// Amend (cancel + replace) existing orders. Signs and submits the transaction.
     ///
