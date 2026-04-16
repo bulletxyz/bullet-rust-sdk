@@ -146,6 +146,111 @@ impl WasmTradingApi {
     pub fn has_keypair(&self) -> bool {
         self.inner.keypair().is_some()
     }
+
+    // ── Symbol / Market Lookups ──────────────────────────────────────────
+
+    /// Resolve a symbol string to its numeric MarketId.
+    /// @param {string} symbol - The trading pair (e.g. "BTC-USD").
+    /// @returns {number | undefined}
+    #[wasm_bindgen(js_name = marketId)]
+    pub fn market_id(&self, symbol: &str) -> Option<u16> {
+        self.inner.market_id(symbol).map(|m| m.0)
+    }
+
+    /// Get all available symbols as a JSON array.
+    /// @returns {string} JSON array of `{ symbol, marketId, status, baseAsset, quoteAsset, pricePrecision, quantityPrecision }`
+    pub fn symbols(&self) -> String {
+        let symbols: Vec<serde_json::Value> = self
+            .inner
+            .symbols()
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "symbol": s.symbol,
+                    "marketId": s.market_id.0,
+                    "status": s.status,
+                    "baseAsset": s.base_asset,
+                    "quoteAsset": s.quote_asset,
+                    "pricePrecision": s.price_precision,
+                    "quantityPrecision": s.quantity_precision,
+                })
+            })
+            .collect();
+        serde_json::to_string(&symbols).unwrap_or_else(|_| "[]".to_string())
+    }
+
+    /// Get the base58 address derived from the client's keypair.
+    /// @returns {string}
+    pub fn address(&self) -> WasmResult<String> {
+        Ok(self.inner.address()?)
+    }
+
+    /// Re-fetch exchange metadata from the server.
+    /// Call this in long-running bots to pick up newly listed markets.
+    /// @returns {Promise<void>}
+    #[wasm_bindgen(js_name = refreshMetadata)]
+    pub async fn refresh_metadata(&mut self) -> WasmResult<()> {
+        Ok(self.inner.refresh_metadata().await?)
+    }
+
+    // ── Trading Convenience Methods ──────────────────────────────────────
+
+    /// Query open orders for the client's own account.
+    /// @param {string} symbol - Trading pair symbol.
+    /// @returns {Promise<string>} JSON array of orders.
+    #[wasm_bindgen(js_name = myOpenOrders)]
+    pub async fn my_open_orders(&self, symbol: &str) -> WasmResult<String> {
+        let orders = self.inner.my_open_orders(symbol).await?;
+        Ok(serde_json::to_string(&orders)?)
+    }
+
+    /// Query account info (positions, margins) for the client's own account.
+    /// @returns {Promise<string>} JSON object.
+    #[wasm_bindgen(js_name = myAccount)]
+    pub async fn my_account(&self) -> WasmResult<String> {
+        let account = self.inner.my_account().await?;
+        Ok(serde_json::to_string(&account)?)
+    }
+
+    /// Query balances for the client's own account.
+    /// @returns {Promise<string>} JSON array of balances.
+    #[wasm_bindgen(js_name = myBalances)]
+    pub async fn my_balances(&self) -> WasmResult<String> {
+        let balances = self.inner.my_balances().await?;
+        Ok(serde_json::to_string(&balances)?)
+    }
+
+    /// Cancel all orders on a specific market.
+    /// @param {number} marketId - Numeric market ID.
+    /// @param {number} [subAccountIndex] - Optional sub-account index.
+    /// @returns {Promise<SubmitTxResponse>}
+    #[wasm_bindgen(js_name = cancelMarketOrders)]
+    pub async fn cancel_market_orders(
+        &self,
+        market_id: u16,
+        sub_account_index: Option<u8>,
+    ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
+        let resp = self
+            .inner
+            .cancel_market_orders(
+                bullet_exchange_interface::types::MarketId(market_id),
+                sub_account_index,
+            )
+            .await?;
+        Ok(crate::generated::WasmSubmitTxResponse(resp))
+    }
+
+    /// Cancel all orders across all markets.
+    /// @param {number} [subAccountIndex] - Optional sub-account index.
+    /// @returns {Promise<SubmitTxResponse>}
+    #[wasm_bindgen(js_name = cancelAllOrders)]
+    pub async fn cancel_all_orders(
+        &self,
+        sub_account_index: Option<u8>,
+    ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
+        let resp = self.inner.cancel_all_orders(sub_account_index).await?;
+        Ok(crate::generated::WasmSubmitTxResponse(resp))
+    }
 }
 
 /// Builder for creating a Client with custom configuration.

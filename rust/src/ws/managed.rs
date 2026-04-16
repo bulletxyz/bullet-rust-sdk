@@ -358,7 +358,16 @@ async fn run_managed_ws(
                         let _ = ws.send(ClientMessage::Unsubscribe { id, params }).await;
                     }
                     Some(WsCommand::Send(msg)) => {
-                        let _ = ws.send(msg).await;
+                        if let Err(e) = ws.send(msg).await {
+                            // Order place/cancel send failed — the connection is dead.
+                            // Trigger reconnect so subsequent commands can succeed.
+                            // The caller's order was NOT delivered; they will see
+                            // WsEvent::Reconnecting and should resubmit.
+                            warn!(?e, "failed to send order message, reconnecting");
+                            if handle_reconnect(&client, &config, &active_topics, &event_tx, &mut ws).await {
+                                return;
+                            }
+                        }
                     }
                     Some(WsCommand::Stop) | None => {
                         debug!("stopping managed ws");
