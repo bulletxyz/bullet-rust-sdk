@@ -164,23 +164,10 @@ impl MarkPriceExt for MarkPriceMessage {
 
 /// Extension methods for REST [`BinanceOrder`](crate::codegen::types::BinanceOrder) responses.
 ///
-/// The generated `BinanceOrder` has `side`, `order_type`, and `time_in_force` as strings.
-/// The API follows Binance convention: the Bullet `OrderType` is encoded as a
-/// `(order_type, time_in_force)` pair — e.g. `PostOnly` → `("LIMIT", "GTX")`.
+/// The generated `BinanceOrder` has `side` as a string (`"BUY"` / `"SELL"`).
 pub trait BinanceOrderExt {
     /// Parse side string (`"BUY"` / `"SELL"`) into [`Side`](bullet_exchange_interface::types::Side).
     fn parsed_side(&self) -> Option<bullet_exchange_interface::types::Side>;
-
-    /// Derive the Bullet [`OrderType`](bullet_exchange_interface::types::OrderType) from
-    /// the `order_type` + `time_in_force` string pair.
-    ///
-    /// | order_type | time_in_force | Result |
-    /// |------------|---------------|--------|
-    /// | `"LIMIT"`  | `"GTC"`       | `Limit` |
-    /// | `"LIMIT"`  | `"GTX"`       | `PostOnly` |
-    /// | `"LIMIT"`  | `"IOC"`       | `ImmediateOrCancel` |
-    /// | `"LIMIT"`  | `"FOK"`       | `FillOrKill` |
-    fn parsed_order_type(&self) -> Option<bullet_exchange_interface::types::OrderType>;
 }
 
 impl BinanceOrderExt for crate::generated::types::BinanceOrder {
@@ -188,17 +175,6 @@ impl BinanceOrderExt for crate::generated::types::BinanceOrder {
         match self.side.as_str() {
             "BUY" => Some(bullet_exchange_interface::types::Side::Bid),
             "SELL" => Some(bullet_exchange_interface::types::Side::Ask),
-            _ => None,
-        }
-    }
-
-    fn parsed_order_type(&self) -> Option<bullet_exchange_interface::types::OrderType> {
-        use bullet_exchange_interface::types::OrderType;
-        match (self.order_type.as_str(), self.time_in_force.as_str()) {
-            ("LIMIT", "GTC") => Some(OrderType::Limit),
-            ("LIMIT", "GTX") => Some(OrderType::PostOnly),
-            ("LIMIT", "IOC") => Some(OrderType::ImmediateOrCancel),
-            ("LIMIT", "FOK") => Some(OrderType::FillOrKill),
             _ => None,
         }
     }
