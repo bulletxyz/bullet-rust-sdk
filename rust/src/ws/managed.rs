@@ -35,7 +35,7 @@ use std::time::Duration;
 use bon::bon;
 use thiserror::Error;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use super::client::WebsocketConfig;
 use super::models::ServerMessage;
@@ -331,9 +331,12 @@ async fn run_managed_ws(
                         }
                     }
                     Err(e) => {
-                        error!(?e, "WebSocket error");
-                        let _ = event_tx.try_send(WsEvent::Disconnected(e.to_string()));
-                        return;
+                        // Transport errors (WsUpgradeError, etc.) are transient —
+                        // reconnect instead of permanently disconnecting.
+                        warn!(?e, "WebSocket error, reconnecting");
+                        if handle_reconnect(&client, &config, &active_topics, &event_tx, &mut ws).await {
+                            return;
+                        }
                     }
                 }
             }
@@ -381,7 +384,7 @@ async fn handle_reconnect(
         Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => {}
         Err(mpsc::error::TrySendError::Closed(_)) => return true,
     }
-    match reconnect(client, config, active_topics).await {
+    match reconnect(client, config, active_topics, event_tx).await {
         Ok(new_ws) => {
             *ws = new_ws;
             info!("reconnected successfully");
@@ -396,15 +399,24 @@ async fn handle_reconnect(
 }
 
 /// Reconnect with exponential backoff + jitter and replay subscriptions.
+///
+/// Checks `event_tx.is_closed()` each iteration so the loop stops promptly
+/// when the `ManagedWebsocket` handle is dropped.
 async fn reconnect(
     client: &ManagedWsClient,
     config: &ManagedWsConfig,
     active_topics: &HashSet<String>,
+    event_tx: &mpsc::Sender<WsEvent>,
 ) -> Result<super::client::WebsocketHandle, String> {
     let mut backoff = config.initial_backoff;
     let mut attempts = 0u32;
 
     loop {
+        // Stop if the user handle was dropped.
+        if event_tx.is_closed() {
+            return Err("handle dropped".to_string());
+        }
+
         attempts += 1;
 
         if let Some(max) = config.max_retries
