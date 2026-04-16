@@ -127,6 +127,24 @@ pub fn post_only_order_with_id(
     }
 }
 
+/// Create an immediate-or-cancel order with a client-assigned order ID.
+pub fn ioc_order_with_id(
+    price: PositiveDecimal,
+    size: PositiveDecimal,
+    side: Side,
+    client_order_id: u64,
+) -> NewOrderArgs {
+    NewOrderArgs {
+        price,
+        size,
+        side,
+        order_type: OrderType::ImmediateOrCancel,
+        reduce_only: false,
+        client_order_id: Some(ClientOrderId(client_order_id)),
+        pending_tpsl_pair: None,
+    }
+}
+
 impl Client {
     /// Place orders on a market. Signs and submits the transaction.
     ///

@@ -162,6 +162,38 @@ impl MarkPriceExt for MarkPriceMessage {
     }
 }
 
+/// Extension methods for REST [`BinanceOrder`](crate::codegen::types::BinanceOrder) responses.
+///
+/// The generated `BinanceOrder` type has `side` and `order_type` as `String`.
+/// This trait parses them into the SDK's typed enums.
+pub trait BinanceOrderExt {
+    /// Parse side string ("BUY"/"SELL") into [`Side`](bullet_exchange_interface::types::Side).
+    fn parsed_side(&self) -> Option<bullet_exchange_interface::types::Side>;
+    /// Parse order_type string ("LIMIT"/"POST_ONLY"/"IOC"/"FOK") into [`OrderType`](bullet_exchange_interface::types::OrderType).
+    fn parsed_order_type(&self) -> Option<bullet_exchange_interface::types::OrderType>;
+}
+
+impl BinanceOrderExt for crate::generated::types::BinanceOrder {
+    fn parsed_side(&self) -> Option<bullet_exchange_interface::types::Side> {
+        match self.side.as_str() {
+            "BUY" => Some(bullet_exchange_interface::types::Side::Bid),
+            "SELL" => Some(bullet_exchange_interface::types::Side::Ask),
+            _ => None,
+        }
+    }
+
+    fn parsed_order_type(&self) -> Option<bullet_exchange_interface::types::OrderType> {
+        use bullet_exchange_interface::types::OrderType;
+        match self.order_type.as_str() {
+            "LIMIT" => Some(OrderType::Limit),
+            "POST_ONLY" => Some(OrderType::PostOnly),
+            "IOC" => Some(OrderType::ImmediateOrCancel),
+            "FOK" => Some(OrderType::FillOrKill),
+            _ => None,
+        }
+    }
+}
+
 /// Parse a REST orderbook response (`Vec<Vec<String>>` levels) into typed levels.
 ///
 /// Entries with fewer than 2 elements are silently skipped.

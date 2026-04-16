@@ -6,7 +6,8 @@ mod trading;
 mod transaction_builder;
 
 pub use trading::{
-    ioc_order, limit_order, limit_order_with_id, post_only_order, post_only_order_with_id,
+    ioc_order, ioc_order_with_id, limit_order, limit_order_with_id, post_only_order,
+    post_only_order_with_id,
 };
 
 /// Error types for the SDK.
@@ -48,8 +49,8 @@ pub use metadata::SymbolInfo;
 
 // Re-export typed parsing helpers.
 pub use parse::{
-    AggTradeExt, BookTickerExt, DepthUpdateExt, MarkPriceExt, ParseDecimal, TypedLevel,
-    TypedOrderBook, parse_levels, parse_order_book,
+    AggTradeExt, BinanceOrderExt, BookTickerExt, DepthUpdateExt, MarkPriceExt, ParseDecimal,
+    TypedLevel, TypedOrderBook, parse_levels, parse_order_book,
 };
 
 // ── On-chain trading types ──────────────────────────────────────────────────
