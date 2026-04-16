@@ -31,12 +31,108 @@
 //! ).await?;
 //! ```
 
+use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::{AmendOrderArgs, CancelOrderArgs, NewOrderArgs};
-use bullet_exchange_interface::types::MarketId;
+use bullet_exchange_interface::types::{ClientOrderId, MarketId, OrderType, Side};
 
 use crate::generated::types::SubmitTxResponse;
 use crate::types::{CallMessage, UserAction};
 use crate::{Client, SDKResult, Transaction};
+
+// ── Order construction helpers ──────────────────────────────────────────────
+//
+// These free functions construct `NewOrderArgs` with sensible defaults,
+// removing the 4-field boilerplate from every order.
+
+/// Create a limit order.
+///
+/// Defaults: `reduce_only: false`, no client order ID, no TP/SL.
+///
+/// ```ignore
+/// use bullet_rust_sdk::*;
+///
+/// let order = limit_order(price, size, Side::Bid);
+/// client.place_orders(market_id, vec![order], false, None).await?;
+/// ```
+pub fn limit_order(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> NewOrderArgs {
+    NewOrderArgs {
+        price,
+        size,
+        side,
+        order_type: OrderType::Limit,
+        reduce_only: false,
+        client_order_id: None,
+        pending_tpsl_pair: None,
+    }
+}
+
+/// Create a post-only (maker) order. Rejected if it would cross the book.
+pub fn post_only_order(
+    price: PositiveDecimal,
+    size: PositiveDecimal,
+    side: Side,
+) -> NewOrderArgs {
+    NewOrderArgs {
+        price,
+        size,
+        side,
+        order_type: OrderType::PostOnly,
+        reduce_only: false,
+        client_order_id: None,
+        pending_tpsl_pair: None,
+    }
+}
+
+/// Create an immediate-or-cancel order (market order equivalent).
+///
+/// Fills what it can at the given price, cancels the rest.
+pub fn ioc_order(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> NewOrderArgs {
+    NewOrderArgs {
+        price,
+        size,
+        side,
+        order_type: OrderType::ImmediateOrCancel,
+        reduce_only: false,
+        client_order_id: None,
+        pending_tpsl_pair: None,
+    }
+}
+
+/// Create a limit order with a client-assigned order ID.
+pub fn limit_order_with_id(
+    price: PositiveDecimal,
+    size: PositiveDecimal,
+    side: Side,
+    client_order_id: u64,
+) -> NewOrderArgs {
+    NewOrderArgs {
+        price,
+        size,
+        side,
+        order_type: OrderType::Limit,
+        reduce_only: false,
+        client_order_id: Some(ClientOrderId(client_order_id)),
+        pending_tpsl_pair: None,
+    }
+}
+
+/// Create a post-only order with a client-assigned order ID.
+pub fn post_only_order_with_id(
+    price: PositiveDecimal,
+    size: PositiveDecimal,
+    side: Side,
+    client_order_id: u64,
+) -> NewOrderArgs {
+    NewOrderArgs {
+        price,
+        size,
+        side,
+        order_type: OrderType::PostOnly,
+        reduce_only: false,
+        client_order_id: Some(ClientOrderId(client_order_id)),
+        pending_tpsl_pair: None,
+    }
+}
 
 impl Client {
     /// Place orders on a market. Signs and submits the transaction.
