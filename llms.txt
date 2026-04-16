@@ -86,7 +86,7 @@ use bullet_rust_sdk::{
     // WebSocket
     ManagedWebsocket, WsEvent, ServerMessage, Topic, OrderbookDepth, KlineInterval,
     // Parsing helpers
-    ParseDecimal, BookTickerExt, AggTradeExt, DepthUpdateExt, MarkPriceExt,
+    ParseDecimal, BookTickerExt, AggTradeExt, DepthUpdateExt, MarkPriceExt, BinanceOrderExt,
     // Errors
     SDKError, WSErrors,
 };
@@ -170,6 +170,9 @@ let orders = client.query_open_orders(&address, "BTC-USD").await?.into_inner();
 //   price: Decimal, orig_qty: Decimal, executed_qty: Decimal,
 //   order_type: String ("LIMIT"/"POST_ONLY"/"IOC"/"FOK"),
 //   client_order_id: Option<String>, status: String ("NEW"/"PARTIALLY_FILLED"/"FILLED"/"CANCELED") }
+//
+// Use BinanceOrderExt for typed parsing:
+// order.parsed_side() -> Option<Side>  (Side::Bid / Side::Ask)
 ```
 
 ## Order Operations
@@ -184,11 +187,7 @@ let order = limit_order(price, size, Side::Bid);
 let order = post_only_order(price, size, Side::Ask);
 let order = ioc_order(price, size, Side::Bid);      // market-order equivalent
 
-// With client order IDs for tracking:
-let order = limit_order_with_id(price, size, Side::Bid, 12345);
-let order = post_only_order_with_id(price, size, Side::Ask, 12346);
-
-// For advanced fields (reduce_only, tpsl), use the struct directly:
+// For advanced fields (reduce_only, client_order_id, tpsl), use the struct directly:
 let order = NewOrderArgs {
     price, size, side: Side::Bid,
     order_type: OrderType::Limit,
@@ -225,7 +224,7 @@ client.cancel_all_orders(None).await?;
 // Amend (cancel + replace) atomically
 client.amend_orders(market_id, vec![AmendOrderArgs {
     cancel: CancelOrderArgs { order_id: Some(OrderId(12345)), client_order_id: None },
-    place: limit_order(new_price, new_size, Side::Bid),
+    place: limit_order(new_price, new_size, Side::Bid),  // use helpers for the replacement order
 }], None).await?;
 ```
 
@@ -425,7 +424,7 @@ let client = Client::builder()
 REST and WS responses return prices/quantities as strings (Binance convention). Use the extension traits for lossless `Decimal` parsing:
 
 ```rust
-use bullet_rust_sdk::{ParseDecimal, BookTickerExt, AggTradeExt, DepthUpdateExt, MarkPriceExt, parse_levels};
+use bullet_rust_sdk::{ParseDecimal, BookTickerExt, AggTradeExt, DepthUpdateExt, MarkPriceExt, BinanceOrderExt, parse_levels};
 
 // WS depth updates
 let bids = depth.typed_bids()?;  // Vec<TypedLevel { price: Decimal, qty: Decimal }>
@@ -441,6 +440,9 @@ let funding = mp.parsed_funding_rate()?;
 
 // REST orderbook
 let typed_bids = parse_levels(&book.bids)?;
+
+// REST order side
+let side = order.parsed_side();  // Option<Side>
 ```
 
 ## Networks
