@@ -138,7 +138,7 @@ impl WebsocketHandle {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Builder)]
+#[derive(Builder, Clone, Debug)]
 pub struct WebsocketConfig {
     /// How long to wait for the server's "connected" message during handshake.
     ///

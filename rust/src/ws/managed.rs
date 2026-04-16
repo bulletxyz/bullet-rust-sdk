@@ -36,7 +36,6 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
 use super::client::WebsocketConfig;
-#[allow(unused_imports)]
 use super::models::ServerMessage;
 use super::topics::Topic;
 use crate::errors::WSErrors;
@@ -56,7 +55,7 @@ pub enum WsEvent {
 }
 
 /// Configuration for managed WebSocket reconnection behavior.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ManagedWsConfig {
     /// Initial delay before the first reconnect attempt.
     ///
@@ -75,7 +74,7 @@ pub struct ManagedWsConfig {
     pub max_retries: Option<u32>,
 
     /// Underlying WebSocket connection config (e.g. handshake timeout).
-    pub ws_config: Option<web_time::Duration>,
+    pub ws_config: Option<WebsocketConfig>,
 }
 
 impl Default for ManagedWsConfig {
@@ -209,13 +208,12 @@ impl Client {
     ) -> Result<ManagedWebsocket, WSErrors> {
         let config = config.unwrap_or_default();
 
-        // Build WS config from the managed config's timeout
-        let ws_cfg = config.ws_config.map(|timeout| {
-            WebsocketConfig::builder().connection_timeout(timeout).build()
-        });
-
         // Establish initial connection
-        let ws = self.connect_ws().maybe_config(ws_cfg).call().await?;
+        let ws = self
+            .connect_ws()
+            .maybe_config(config.ws_config.clone())
+            .call()
+            .await?;
 
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
@@ -251,7 +249,7 @@ struct ManagedWsClient {
 impl ManagedWsClient {
     async fn connect(
         &self,
-        connection_timeout: Option<web_time::Duration>,
+        ws_config: &Option<WebsocketConfig>,
     ) -> Result<super::client::WebsocketHandle, WSErrors> {
         use futures::{FutureExt, select};
         use futures_timer::Delay;
@@ -268,7 +266,10 @@ impl ManagedWsClient {
         let websocket = response.into_websocket().await?;
         let mut handle = super::client::WebsocketHandle::new(websocket);
 
-        let timeout = connection_timeout.unwrap_or(web_time::Duration::from_secs(10));
+        let timeout = ws_config
+            .as_ref()
+            .map(|c| c.connection_timeout)
+            .unwrap_or(web_time::Duration::from_secs(10));
 
         // Wait for connected message
         #[allow(clippy::useless_conversion)]
@@ -415,7 +416,7 @@ async fn reconnect(
         info!(attempt = attempts, delay = ?backoff, "attempting reconnect");
         tokio::time::sleep(backoff).await;
 
-        match client.connect(config.ws_config).await {
+        match client.connect(&config.ws_config).await {
             Ok(mut ws) => {
                 // Replay subscriptions
                 if !active_topics.is_empty() {
