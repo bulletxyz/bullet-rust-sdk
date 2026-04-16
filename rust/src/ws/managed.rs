@@ -65,16 +65,30 @@ pub enum WsEvent {
 }
 
 /// Configuration for managed WebSocket reconnection behavior.
-#[derive(Clone, Debug)]
+///
+/// # Example
+///
+/// ```ignore
+/// use bullet_rust_sdk::ManagedWsConfig;
+/// use std::time::Duration;
+///
+/// let config = ManagedWsConfig::builder()
+///     .max_retries(10)
+///     .initial_backoff(Duration::from_millis(500))
+///     .build();
+/// ```
+#[derive(bon::Builder, Clone, Debug)]
 pub struct ManagedWsConfig {
     /// Initial delay before the first reconnect attempt.
     ///
     /// Default: 1 second
+    #[builder(default = Duration::from_secs(1))]
     pub initial_backoff: Duration,
 
     /// Maximum delay between reconnect attempts.
     ///
     /// Default: 30 seconds
+    #[builder(default = Duration::from_secs(30))]
     pub max_backoff: Duration,
 
     /// Maximum number of consecutive reconnect attempts before giving up.
@@ -87,6 +101,7 @@ pub struct ManagedWsConfig {
     /// isn't keeping up, the oldest events are dropped.
     ///
     /// Default: 10_000
+    #[builder(default = 10_000)]
     pub channel_capacity: usize,
 
     /// Underlying WebSocket connection config (e.g. handshake timeout).
@@ -95,13 +110,7 @@ pub struct ManagedWsConfig {
 
 impl Default for ManagedWsConfig {
     fn default() -> Self {
-        Self {
-            initial_backoff: Duration::from_secs(1),
-            max_backoff: Duration::from_secs(30),
-            max_retries: None,
-            channel_capacity: 10_000,
-            ws_config: None,
-        }
+        Self::builder().build()
     }
 }
 
