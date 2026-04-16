@@ -113,9 +113,22 @@ pub struct WebsocketHandle {
 }
 
 impl WebsocketHandle {
-    /// Create a new handle from a raw WebSocket (used internally by managed WS).
-    pub(crate) fn new(socket: reqwest_websocket::WebSocket) -> Self {
-        Self { socket }
+    /// Connect to a WebSocket endpoint and wait for the server's handshake.
+    ///
+    /// Shared by `Client::connect_ws` and `ManagedWsClient::connect`.
+    pub(crate) async fn connect(
+        ws_client: &reqwest::Client,
+        ws_url: &str,
+        timeout: web_time::Duration,
+    ) -> SDKResult<Self, WSErrors> {
+        use reqwest_websocket::Upgrade;
+
+        let response: reqwest_websocket::UpgradeResponse =
+            ws_client.clone().get(ws_url).upgrade().send().await?;
+        let websocket = response.into_websocket().await?;
+        let mut handle = Self { socket: websocket };
+        handle.wait_for_connected(timeout).await?;
+        Ok(handle)
     }
 }
 
@@ -163,32 +176,17 @@ impl Deref for WebsocketHandle {
 
 #[bon]
 impl Client {
-    /// TODO: Fix docs
+    /// Open a raw WebSocket connection.
+    ///
+    /// For production bots, prefer [`connect_ws_managed`](Client::connect_ws_managed)
+    /// which handles reconnection automatically.
     #[builder]
     pub async fn connect_ws(
         &self,
         config: Option<WebsocketConfig>,
     ) -> SDKResult<WebsocketHandle, WSErrors> {
-        use reqwest_websocket::Upgrade;
-
         let config = config.unwrap_or_default();
-
-        let response: reqwest_websocket::UpgradeResponse = self
-            .ws_client
-            .clone()
-            .get(self.ws_url())
-            .upgrade()
-            .send()
-            .await?;
-
-        let websocket = response.into_websocket().await?;
-
-        let mut handle = WebsocketHandle { socket: websocket };
-
-        // Wait for the server's "connected" status message with timeout
-        handle.wait_for_connected(config.connection_timeout).await?;
-
-        Ok(handle)
+        WebsocketHandle::connect(&self.ws_client, self.ws_url(), config.connection_timeout).await
     }
 }
 

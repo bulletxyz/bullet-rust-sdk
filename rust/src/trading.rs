@@ -26,7 +26,7 @@
 
 use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::{AmendOrderArgs, CancelOrderArgs, NewOrderArgs};
-use bullet_exchange_interface::types::{ClientOrderId, MarketId, OrderType, Side};
+use bullet_exchange_interface::types::{MarketId, OrderType, Side};
 
 use crate::generated::types::SubmitTxResponse;
 use crate::types::{CallMessage, UserAction};
@@ -35,7 +35,8 @@ use crate::{Client, SDKError, SDKResult, Transaction};
 // ── Order construction helpers ──────────────────────────────────────────────
 //
 // These free functions construct `NewOrderArgs` with sensible defaults,
-// removing the 4-field boilerplate from every order.
+// removing the 4-field boilerplate from every order. For advanced fields
+// (reduce_only, client_order_id, pending_tpsl_pair), use the struct directly.
 
 /// Create a limit order.
 ///
@@ -87,60 +88,6 @@ pub fn ioc_order(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> N
         order_type: OrderType::ImmediateOrCancel,
         reduce_only: false,
         client_order_id: None,
-        pending_tpsl_pair: None,
-    }
-}
-
-/// Create a limit order with a client-assigned order ID.
-pub fn limit_order_with_id(
-    price: PositiveDecimal,
-    size: PositiveDecimal,
-    side: Side,
-    client_order_id: u64,
-) -> NewOrderArgs {
-    NewOrderArgs {
-        price,
-        size,
-        side,
-        order_type: OrderType::Limit,
-        reduce_only: false,
-        client_order_id: Some(ClientOrderId(client_order_id)),
-        pending_tpsl_pair: None,
-    }
-}
-
-/// Create a post-only order with a client-assigned order ID.
-pub fn post_only_order_with_id(
-    price: PositiveDecimal,
-    size: PositiveDecimal,
-    side: Side,
-    client_order_id: u64,
-) -> NewOrderArgs {
-    NewOrderArgs {
-        price,
-        size,
-        side,
-        order_type: OrderType::PostOnly,
-        reduce_only: false,
-        client_order_id: Some(ClientOrderId(client_order_id)),
-        pending_tpsl_pair: None,
-    }
-}
-
-/// Create an immediate-or-cancel order with a client-assigned order ID.
-pub fn ioc_order_with_id(
-    price: PositiveDecimal,
-    size: PositiveDecimal,
-    side: Side,
-    client_order_id: u64,
-) -> NewOrderArgs {
-    NewOrderArgs {
-        price,
-        size,
-        side,
-        order_type: OrderType::ImmediateOrCancel,
-        reduce_only: false,
-        client_order_id: Some(ClientOrderId(client_order_id)),
         pending_tpsl_pair: None,
     }
 }
@@ -344,21 +291,13 @@ impl Client {
     /// use bullet_rust_sdk::*;
     ///
     /// let resp = client.amend_orders(
-    ///     MarketId(0),
+    ///     market_id,
     ///     vec![AmendOrderArgs {
     ///         cancel: CancelOrderArgs {
     ///             order_id: Some(OrderId(12345)),
     ///             client_order_id: None,
     ///         },
-    ///         place: NewOrderArgs {
-    ///             price: PositiveDecimal::try_from(rust_decimal::Decimal::from(51000))?,
-    ///             size: PositiveDecimal::try_from(rust_decimal::Decimal::new(1, 3))?,
-    ///             side: Side::Bid,
-    ///             order_type: OrderType::Limit,
-    ///             reduce_only: false,
-    ///             client_order_id: None,
-    ///             pending_tpsl_pair: None,
-    ///         },
+    ///         place: limit_order(new_price, new_size, Side::Bid),
     ///     }],
     ///     None,
     /// ).await?;
@@ -407,25 +346,15 @@ mod tests {
         let order = post_only_order(dec("50000"), dec("0.1"), Side::Ask);
         assert_eq!(order.order_type, OrderType::PostOnly);
         assert_eq!(order.side, Side::Ask);
+        assert!(!order.reduce_only);
+        assert!(order.client_order_id.is_none());
     }
 
     #[test]
     fn ioc_order_defaults() {
         let order = ioc_order(dec("50000"), dec("0.1"), Side::Bid);
         assert_eq!(order.order_type, OrderType::ImmediateOrCancel);
-    }
-
-    #[test]
-    fn limit_order_with_id_sets_client_id() {
-        let order = limit_order_with_id(dec("50000"), dec("0.1"), Side::Bid, 42);
-        assert_eq!(order.client_order_id, Some(ClientOrderId(42)));
-        assert_eq!(order.order_type, OrderType::Limit);
-    }
-
-    #[test]
-    fn post_only_order_with_id_sets_client_id() {
-        let order = post_only_order_with_id(dec("50000"), dec("0.1"), Side::Ask, 99);
-        assert_eq!(order.client_order_id, Some(ClientOrderId(99)));
-        assert_eq!(order.order_type, OrderType::PostOnly);
+        assert!(!order.reduce_only);
+        assert!(order.client_order_id.is_none());
     }
 }

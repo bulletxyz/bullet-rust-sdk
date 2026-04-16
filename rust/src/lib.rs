@@ -5,10 +5,7 @@ mod parse;
 mod trading;
 mod transaction_builder;
 
-pub use trading::{
-    ioc_order, ioc_order_with_id, limit_order, limit_order_with_id, post_only_order,
-    post_only_order_with_id,
-};
+pub use trading::{ioc_order, limit_order, post_only_order};
 
 /// Error types for the SDK.
 pub mod errors;

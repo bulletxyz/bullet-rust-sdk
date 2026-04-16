@@ -284,48 +284,11 @@ impl ManagedWsClient {
         &self,
         ws_config: &Option<WebsocketConfig>,
     ) -> Result<super::client::WebsocketHandle, WSErrors> {
-        use futures::{FutureExt, select};
-        use futures_timer::Delay;
-        use reqwest_websocket::Upgrade;
-
-        let response: reqwest_websocket::UpgradeResponse = self
-            .ws_client
-            .clone()
-            .get(&self.ws_url)
-            .upgrade()
-            .send()
-            .await?;
-
-        let websocket = response.into_websocket().await?;
-        let mut handle = super::client::WebsocketHandle::new(websocket);
-
         let timeout = ws_config
             .as_ref()
             .map(|c| c.connection_timeout)
             .unwrap_or(web_time::Duration::from_secs(10));
-
-        // Wait for connected message
-        #[allow(clippy::useless_conversion)]
-        let std_timeout = timeout
-            .try_into()
-            .unwrap_or(std::time::Duration::from_secs(10));
-        let delay = Delay::new(std_timeout);
-
-        select! {
-            result = handle.recv().fuse() => {
-                match result? {
-                    ServerMessage::Tagged(super::models::TaggedMessage::Status(status))
-                        if status.status == "connected" =>
-                    {
-                        Ok(handle)
-                    }
-                    other => Err(WSErrors::WsHandshakeFailed(format!("{other:?}"))),
-                }
-            }
-            _ = delay.fuse() => {
-                Err(WSErrors::WsConnectionTimeout)
-            }
-        }
+        super::client::WebsocketHandle::connect(&self.ws_client, &self.ws_url, timeout).await
     }
 }
 
@@ -369,7 +332,7 @@ async fn run_managed_ws(
                     }
                     Err(e) => {
                         error!(?e, "WebSocket error");
-                        let _ = event_tx.send(WsEvent::Disconnected(e.to_string())).await;
+                        let _ = event_tx.try_send(WsEvent::Disconnected(e.to_string()));
                         return;
                     }
                 }
@@ -412,8 +375,11 @@ async fn handle_reconnect(
     event_tx: &mpsc::Sender<WsEvent>,
     ws: &mut super::client::WebsocketHandle,
 ) -> bool {
-    if event_tx.send(WsEvent::Reconnecting).await.is_err() {
-        return true;
+    // Use try_send — if the consumer is stuck (which is likely during a
+    // disconnect), we don't want to block the reconnect attempt.
+    match event_tx.try_send(WsEvent::Reconnecting) {
+        Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => {}
+        Err(mpsc::error::TrySendError::Closed(_)) => return true,
     }
     match reconnect(client, config, active_topics).await {
         Ok(new_ws) => {
@@ -422,7 +388,8 @@ async fn handle_reconnect(
             false
         }
         Err(reason) => {
-            let _ = event_tx.send(WsEvent::Disconnected(reason)).await;
+            // Best-effort notify; if channel is closed, we're stopping anyway.
+            let _ = event_tx.try_send(WsEvent::Disconnected(reason));
             true
         }
     }
