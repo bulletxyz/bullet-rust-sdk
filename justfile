@@ -152,6 +152,30 @@ ci:
 
     printf '\n\033[1;32m✓ All checks passed\033[0m\n'
 
+# ── Publish ───────────────────────────────────────────────────────────────────
+
+# Bump workspace version, build, and publish to npm (no git ops).
+# Level: patch | minor | major | rc
+publish-wasm level="patch":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{ level }}" in
+        patch|minor|major)
+            cargo set-version --workspace --bump {{ level }}
+            ;;
+        rc)
+            cargo set-version --workspace "$(cargo pkgid -p bullet-rust-sdk-wasm | cut -d@ -f2 | awk -F. '{print $1"."$2"."$3+1"-rc.0"}')"
+            ;;
+        *)
+            echo "Unknown level: {{ level }}" >&2; exit 1
+            ;;
+    esac
+    V=$(cargo pkgid -p bullet-rust-sdk-wasm | cut -d@ -f2)
+    cd wasm && npm version "$V" --no-git-tag-version --allow-same-version && cd ..
+    just build-wasm
+    tag=$([ "{{ level }}" = "rc" ] && echo "rc" || echo "latest")
+    cd wasm && npm publish --tag "$tag" --access public
+
 # ── OpenAPI spec ──────────────────────────────────────────────────────────────
 
 # Fetch and cache the latest OpenAPI spec from mainnet

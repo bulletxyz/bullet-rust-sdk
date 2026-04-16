@@ -87,6 +87,7 @@
             packages = [
               rust
               pkgs.cargo-nextest
+              pkgs.cargo-edit
               pkgs.just
               (makeWasmPack pkgs)
               pkgs.pkg-config

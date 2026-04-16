@@ -1,0 +1,73 @@
+name: "Build"
+description: "Sets up environment and builds the WASM package"
+
+inputs:
+  github-app-token:
+    description: "GitHub App token for private git deps"
+    required: false
+    default: ""
+  configure-git-user:
+    description: "Configure git user for commits"
+    required: false
+    default: "false"
+  node-version:
+    description: "Node.js version to install"
+    required: false
+    default: "24"
+  setup-npm-registry:
+    description: "Setup NPM registry URL"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure git for GitHub App auth (private deps and push)
+      if: ${{ inputs.github-app-token != '' }}
+      shell: bash
+      env:
+        BULLET_APP_TOKEN: ${{ inputs.github-app-token }}
+      run: |
+        git config --global --add url."https://x-access-token:${BULLET_APP_TOKEN}@github.com/".insteadOf "ssh://git@github.com/"
+        git config --global --add url."https://x-access-token:${BULLET_APP_TOKEN}@github.com/".insteadOf "git@github.com:"
+        git config --global --add url."https://x-access-token:${BULLET_APP_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+    - name: Configure Git user
+      if: ${{ inputs.configure-git-user == 'true' }}
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: ${{ inputs.setup-npm-registry == 'true' && 'https://registry.npmjs.org' || '' }}
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Rust cache
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install cargo-binstall
+      uses: cargo-bins/cargo-binstall@main
+
+    - name: Install wasm-pack
+      shell: bash
+      run: cargo binstall wasm-pack -y
+
+    - name: Install just
+      uses: extractions/setup-just@v2
+
+    - name: Install npm dependencies
+      shell: bash
+      working-directory: ./wasm
+      run: npm install
+
+    - name: Build WASM
+      shell: bash
+      run: just build-wasm
