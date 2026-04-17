@@ -218,7 +218,10 @@ impl Client {
 
     pub async fn update_schema(&self) -> SDKResult<()> {
         let chain_data = Self::fetch_schema(self.client(), self.user_actions()).await?;
-        *self.chain_hash.lock().unwrap() = chain_data.chain_hash;
+
+	// The expect is fine here as we just read and write the
+	// object. We never hold a lock in code that can panic.
+        *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.") = chain_data.chain_hash;
         Ok(())
     }
 
@@ -295,7 +298,9 @@ impl Client {
 
     /// Get the current chain hash.
     pub fn chain_hash(&self) -> [u8; 32] {
-        *self.chain_hash.lock().unwrap()
+	// The expect is fine here as we just read and write the
+	// object. We never hold a lock in code that can panic.
+        *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.")
     }
 
     pub fn user_actions(&self) -> &Option<Vec<UserActionDiscriminants>> {
