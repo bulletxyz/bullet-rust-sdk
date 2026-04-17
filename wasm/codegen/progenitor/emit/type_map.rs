@@ -71,9 +71,7 @@ pub fn js_type_string(ty: &RustType, enums: &HashSet<&str>) -> String {
 pub fn param_js_type(ty: &RustType, enums: &HashSet<&str>) -> String {
     match ty {
         // Option<&str> shows as optional string
-        RustType::Option(inner)
-            if matches!(inner.as_ref(), RustType::Ref(r) if matches!(r.as_ref(), RustType::String)) =>
-        {
+        RustType::Option(inner) if matches!(inner.as_ref(), RustType::Ref(r) if matches!(r.as_ref(), RustType::String)) => {
             "string".to_string()
         }
         _ => js_type_string(ty, enums),
