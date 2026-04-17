@@ -38,8 +38,9 @@ impl WasmNetwork {
 
 /// Full Bullet trading API client (REST + WebSocket).
 ///
-/// All REST responses are returned as JSON strings.
-/// Errors are thrown as JavaScript `Error` objects with a `.message` property.
+/// REST responses are returned as typed wrapper objects (use `.toJSON()` for
+/// raw JSON). Errors are thrown as JavaScript `Error` objects with a `.message`
+/// property.
 ///
 /// # Example
 ///
@@ -157,26 +158,37 @@ impl WasmTradingApi {
         self.inner.market_id(symbol).map(|m| m.0)
     }
 
-    /// Get all available symbols as a JSON array.
-    /// @returns {string} JSON array of `{ symbol, marketId, status, baseAsset, quoteAsset, pricePrecision, quantityPrecision }`
-    pub fn symbols(&self) -> String {
-        let symbols: Vec<serde_json::Value> = self
-            .inner
+    /// Get all available symbols as `SymbolInfo` objects.
+    /// @returns {SymbolInfo[]}
+    pub fn symbols(&self) -> Vec<crate::metadata::WasmSymbolInfo> {
+        self.inner
             .symbols()
             .iter()
-            .map(|s| {
-                serde_json::json!({
-                    "symbol": s.symbol,
-                    "marketId": s.market_id.0,
-                    "status": s.status,
-                    "baseAsset": s.base_asset,
-                    "quoteAsset": s.quote_asset,
-                    "pricePrecision": s.price_precision,
-                    "quantityPrecision": s.quantity_precision,
-                })
-            })
-            .collect();
-        serde_json::to_string(&symbols).unwrap_or_else(|_| "[]".to_string())
+            .cloned()
+            .map(crate::metadata::WasmSymbolInfo)
+            .collect()
+    }
+
+    /// Look up symbol info by name.
+    /// @param {string} symbol - The trading pair (e.g. "BTC-USD").
+    /// @returns {SymbolInfo | undefined}
+    #[wasm_bindgen(js_name = symbolInfo)]
+    pub fn symbol_info(&self, symbol: &str) -> Option<crate::metadata::WasmSymbolInfo> {
+        self.inner
+            .symbol_info_by_name(symbol)
+            .cloned()
+            .map(crate::metadata::WasmSymbolInfo)
+    }
+
+    /// Look up symbol info by numeric market ID.
+    /// @param {number} marketId - The numeric market ID.
+    /// @returns {SymbolInfo | undefined}
+    #[wasm_bindgen(js_name = symbolInfoById)]
+    pub fn symbol_info_by_id(&self, market_id: u16) -> Option<crate::metadata::WasmSymbolInfo> {
+        self.inner
+            .symbol_info(bullet_exchange_interface::types::MarketId(market_id))
+            .cloned()
+            .map(crate::metadata::WasmSymbolInfo)
     }
 
     /// Get the base58 address derived from the client's keypair.
@@ -197,27 +209,36 @@ impl WasmTradingApi {
 
     /// Query open orders for the client's own account.
     /// @param {string} symbol - Trading pair symbol.
-    /// @returns {Promise<string>} JSON array of orders.
+    /// @returns {Promise<BinanceOrder[]>}
     #[wasm_bindgen(js_name = myOpenOrders)]
-    pub async fn my_open_orders(&self, symbol: &str) -> WasmResult<String> {
+    pub async fn my_open_orders(
+        &self,
+        symbol: &str,
+    ) -> WasmResult<Vec<crate::generated::WasmBinanceOrder>> {
         let orders = self.inner.my_open_orders(symbol).await?;
-        Ok(serde_json::to_string(&orders)?)
+        Ok(orders
+            .into_iter()
+            .map(crate::generated::WasmBinanceOrder)
+            .collect())
     }
 
     /// Query account info (positions, margins) for the client's own account.
-    /// @returns {Promise<string>} JSON object.
+    /// @returns {Promise<Account>}
     #[wasm_bindgen(js_name = myAccount)]
-    pub async fn my_account(&self) -> WasmResult<String> {
+    pub async fn my_account(&self) -> WasmResult<crate::generated::WasmAccount> {
         let account = self.inner.my_account().await?;
-        Ok(serde_json::to_string(&account)?)
+        Ok(crate::generated::WasmAccount(account))
     }
 
     /// Query balances for the client's own account.
-    /// @returns {Promise<string>} JSON array of balances.
+    /// @returns {Promise<Balance[]>}
     #[wasm_bindgen(js_name = myBalances)]
-    pub async fn my_balances(&self) -> WasmResult<String> {
+    pub async fn my_balances(&self) -> WasmResult<Vec<crate::generated::WasmBalance>> {
         let balances = self.inner.my_balances().await?;
-        Ok(serde_json::to_string(&balances)?)
+        Ok(balances
+            .into_iter()
+            .map(crate::generated::WasmBalance)
+            .collect())
     }
 
     /// Cancel all orders on a specific market.

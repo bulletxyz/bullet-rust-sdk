@@ -8,8 +8,8 @@ This file provides everything an LLM or agent needs to build a trading bot, inte
 
 ```rust
 use bullet_rust_sdk::{
-    Client, Keypair, Network, Side, MarketId, PositiveDecimal,
-    limit_order, ServerMessage, Topic, OrderbookDepth,
+    Client, Keypair, Network, Side, MarketId, NewOrderArgs, NewOrderExt, PositiveDecimal,
+    ServerMessage, Topic, OrderbookDepth,
 };
 
 #[tokio::main]
@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let size = PositiveDecimal::try_from(rust_decimal::Decimal::new(1, 3))?; // 0.001
     let resp = client.place_orders(
         market_id,
-        vec![limit_order(price, size, Side::Bid)],
+        vec![NewOrderArgs::limit(price, size, Side::Bid)],
         false, // replace
         None,  // sub_account_index
     ).await?;
@@ -81,12 +81,9 @@ The SDK requires `edition = "2024"` and uses `tokio` for async.
 // Convenience methods only (most bots):
 use bullet_rust_sdk::{
     Client, Keypair, Network, Side, MarketId, OrderId, ClientOrderId,
-    NewOrderArgs, CancelOrderArgs, PositiveDecimal, SubmitTxResponse,
-    limit_order, post_only_order, ioc_order,
+    NewOrderArgs, NewOrderExt, CancelOrderArgs, PositiveDecimal, SubmitTxResponse,
     // WebSocket
     ManagedWebsocket, WsEvent, ServerMessage, Topic, OrderbookDepth, KlineInterval,
-    // Parsing helpers
-    ParseDecimal, BookTickerExt, AggTradeExt, DepthUpdateExt, MarkPriceExt, BinanceOrderExt,
     // Errors
     SDKError, WSErrors,
 };
@@ -141,7 +138,8 @@ let info = client.exchange_info().await?.into_inner();
 let book = client.order_book(/*limit*/ Some(20), /*symbol*/ "BTC-USD").await?.into_inner();
 // book.bids: Vec<Vec<String>> -- [[price, qty], ...]
 // book.asks: Vec<Vec<String>> -- [[price, qty], ...]
-// Use parse_levels(&book.bids) to get Vec<TypedLevel> with Decimal values
+// Prices/qtys are strings; parse into your preferred numeric type:
+//   let price: rust_decimal::Decimal = book.bids[0][0].parse()?;
 
 // Ticker price -- args: (symbol)
 let price = client.ticker_price(/*symbol*/ "BTC-USD").await?.into_inner();
@@ -170,9 +168,6 @@ let orders = client.query_open_orders(&address, "BTC-USD").await?.into_inner();
 //   price: Decimal, orig_qty: Decimal, executed_qty: Decimal,
 //   order_type: String ("LIMIT"/"POST_ONLY"/"IOC"/"FOK"),
 //   client_order_id: Option<String>, status: String ("NEW"/"PARTIALLY_FILLED"/"FILLED"/"CANCELED") }
-//
-// Use BinanceOrderExt for typed parsing:
-// order.parsed_side() -> Option<Side>  (Side::Bid / Side::Ask)
 ```
 
 ## Order Operations
@@ -183,9 +178,10 @@ let orders = client.query_open_orders(&address, "BTC-USD").await?.into_inner();
 use bullet_rust_sdk::*;
 
 // One-liners: fill in order_type + defaults (reduce_only=false, no client_id, no tpsl)
-let order = limit_order(price, size, Side::Bid);
-let order = post_only_order(price, size, Side::Ask);
-let order = ioc_order(price, size, Side::Bid);      // market-order equivalent
+// (Requires `use bullet_rust_sdk::NewOrderExt;` for the associated fns)
+let order = NewOrderArgs::limit(price, size, Side::Bid);
+let order = NewOrderArgs::post_only(price, size, Side::Ask);
+let order = NewOrderArgs::ioc(price, size, Side::Bid);      // market-order equivalent
 
 // For advanced fields (reduce_only, client_order_id, tpsl), use the struct directly:
 let order = NewOrderArgs {
@@ -206,7 +202,7 @@ let market_id = client.market_id("BTC-USD").unwrap();
 
 // Place orders
 let resp = client.place_orders(market_id, vec![
-    limit_order(price, size, Side::Bid),
+    NewOrderArgs::limit(price, size, Side::Bid),
 ], false, None).await?;
 
 // Cancel specific orders
@@ -224,7 +220,7 @@ client.cancel_all_orders(None).await?;
 // Amend (cancel + replace) atomically
 client.amend_orders(market_id, vec![AmendOrderArgs {
     cancel: CancelOrderArgs { order_id: Some(OrderId(12345)), client_order_id: None },
-    place: limit_order(new_price, new_size, Side::Bid),  // use helpers for the replacement order
+    place: NewOrderArgs::limit(new_price, new_size, Side::Bid),  // use helpers for the replacement order
 }], None).await?;
 ```
 
@@ -238,7 +234,7 @@ For full control over transaction parameters (custom max_fee, explicit signer, e
 use bullet_rust_sdk::{CallMessage, UserAction, Transaction};
 
 let call_msg = CallMessage::User(UserAction::PlaceOrders {
-    market_id, orders: vec![limit_order(price, size, Side::Bid)],
+    market_id, orders: vec![NewOrderArgs::limit(price, size, Side::Bid)],
     replace: false, sub_account_index: None,
 });
 
@@ -275,24 +271,19 @@ while let Some(event) = ws.recv().await {
     match event {
         WsEvent::Message(msg) => match *msg {
             ServerMessage::DepthUpdate(d) => {
-                // Use extension traits for typed parsing:
-                let bids = d.typed_bids()?;  // Vec<TypedLevel { price: Decimal, qty: Decimal }>
-                let asks = d.typed_asks()?;
+                // Prices/qtys are strings; parse into your preferred numeric type:
+                // let price: rust_decimal::Decimal = d.bids[0].0.parse()?;
+                // let qty: f64 = d.bids[0].1.parse()?;
             }
             ServerMessage::BookTicker(bt) => {
-                let (bid_px, bid_qty) = bt.best_bid()?;   // (Decimal, Decimal)
-                let (ask_px, ask_qty) = bt.best_ask()?;
+                // bt.best_bid_price / best_bid_qty / best_ask_price / best_ask_qty are Strings
             }
             ServerMessage::AggTrade(t) => {
-                let price = t.parsed_price()?;     // Decimal
-                let qty = t.parsed_quantity()?;
-                // t.side: String ("BUY" or "SELL")
-                // t.is_buyer_maker: bool
+                // t.price / t.quantity are Strings
+                // t.side: String ("BUY" or "SELL"), t.is_buyer_maker: bool
             }
             ServerMessage::MarkPrice(mp) => {
-                let mark = mp.parsed_mark_price()?;       // Decimal
-                let index = mp.parsed_index_price()?;
-                let funding = mp.parsed_funding_rate()?;
+                // mp.mark_price / mp.index_price / mp.funding_rate are Strings
             }
             ServerMessage::OrderUpdate(ou) => {
                 // ou.order: OrderUpdateData enum:
@@ -398,10 +389,12 @@ let client = Client::builder()
 
 | Variant | Value | Use Case | Helper |
 |---|---|---|---|
-| `Limit` | 0 | Standard limit order | `limit_order(price, size, side)` |
-| `PostOnly` | 1 | Maker-only, rejected if it would take | `post_only_order(price, size, side)` |
-| `FillOrKill` | 2 | Fill entirely or cancel | Use `NewOrderArgs` directly |
-| `ImmediateOrCancel` | 3 | Fill what you can, cancel rest. Market order equivalent | `ioc_order(price, size, side)` |
+| `Limit` | 0 | Standard limit order | `NewOrderArgs::limit(price, size, side)` |
+| `PostOnly` | 1 | Maker-only, rejected if it would take | `NewOrderArgs::post_only(price, size, side)` |
+| `FillOrKill` | 2 | Fill entirely or cancel | Use `NewOrderArgs { .. }` struct literal |
+| `ImmediateOrCancel` | 3 | Fill what you can, cancel rest. Market order equivalent | `NewOrderArgs::ioc(price, size, side)` |
+
+(`limit` / `post_only` / `ioc` live on `NewOrderExt` — `use bullet_rust_sdk::NewOrderExt;`.)
 
 ## Available WebSocket Topics
 
@@ -419,30 +412,29 @@ let client = Client::builder()
 `OrderbookDepth` variants: `D5`, `D10`, `D20`.
 `KlineInterval` variants: `M1`, `M5`, `M15`, `M30`, `H1`, `H4`, `D1`.
 
-## Parsing Helpers
+## Parsing Prices and Quantities
 
-REST and WS responses return prices/quantities as strings (Binance convention). Use the extension traits for lossless `Decimal` parsing:
+REST and WS responses return prices/quantities as strings (Binance convention). The SDK does not opine on a numeric type — parse into whatever you use:
 
 ```rust
-use bullet_rust_sdk::{ParseDecimal, BookTickerExt, AggTradeExt, DepthUpdateExt, MarkPriceExt, BinanceOrderExt, parse_levels};
+use rust_decimal::Decimal;
 
-// WS depth updates
-let bids = depth.typed_bids()?;  // Vec<TypedLevel { price: Decimal, qty: Decimal }>
+// WS depth update (PriceLevel is a tuple struct of two Strings)
+let price: Decimal = depth.bids[0].0.parse()?;
+let qty: Decimal   = depth.bids[0].1.parse()?;
 
-// WS book ticker
-let (bid_px, bid_qty) = bt.best_bid()?;
+// WS book ticker (Strings on the struct)
+let bid_px: Decimal = bt.best_bid_price.parse()?;
 
-// WS trades
-let price = trade.parsed_price()?;
+// WS trade (Strings on the struct)
+let trade_px: f64 = trade.price.parse()?;
 
-// WS mark price
-let funding = mp.parsed_funding_rate()?;
-
-// REST orderbook
-let typed_bids = parse_levels(&book.bids)?;
-
-// REST order side
-let side = order.parsed_side();  // Option<Side>
+// REST BinanceOrder.side is a String "BUY" / "SELL" — match or map as needed
+let side = match order.side.as_str() {
+    "BUY" => Side::Bid,
+    "SELL" => Side::Ask,
+    _ => panic!(),
+};
 ```
 
 ## Networks

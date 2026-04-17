@@ -1,11 +1,10 @@
 mod client;
 mod keypair;
 mod metadata;
-mod parse;
 mod trading;
 mod transaction_builder;
 
-pub use trading::{ioc_order, limit_order, post_only_order};
+pub use trading::NewOrderExt;
 
 /// Error types for the SDK.
 pub mod errors;
@@ -43,12 +42,6 @@ pub use generated::types::SubmitTxResponse;
 
 // Re-export metadata types for symbol lookups.
 pub use metadata::SymbolInfo;
-
-// Re-export typed parsing helpers.
-pub use parse::{
-    AggTradeExt, BinanceOrderExt, BookTickerExt, DepthUpdateExt, MarkPriceExt, ParseDecimal,
-    TypedLevel, TypedOrderBook, parse_levels, parse_order_book,
-};
 
 // ── On-chain trading types ──────────────────────────────────────────────────
 //

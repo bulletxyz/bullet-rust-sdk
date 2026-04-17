@@ -18,7 +18,7 @@
 //! let market_id = client.market_id("BTC-USD").unwrap();
 //! let resp = client.place_orders(
 //!     market_id,
-//!     vec![limit_order(price, size, Side::Bid)],
+//!     vec![NewOrderArgs::limit(price, size, Side::Bid)],
 //!     false,
 //!     None,
 //! ).await?;
@@ -33,59 +33,55 @@ use crate::types::{CallMessage, UserAction};
 use crate::{Client, SDKError, SDKResult, Transaction};
 
 // ── Order construction helpers ──────────────────────────────────────────────
-//
-// These free functions construct `NewOrderArgs` with sensible defaults,
-// removing the 4-field boilerplate from every order. For advanced fields
-// (reduce_only, client_order_id, pending_tpsl_pair), use the struct directly.
 
-/// Create a limit order.
+/// Extension constructors for [`NewOrderArgs`].
 ///
-/// Defaults: `reduce_only: false`, no client order ID, no TP/SL.
+/// Removes the 4-field boilerplate from simple orders. For advanced fields
+/// (`reduce_only`, `client_order_id`, `pending_tpsl_pair`), construct
+/// `NewOrderArgs` directly.
 ///
 /// ```ignore
 /// use bullet_rust_sdk::*;
 ///
-/// let order = limit_order(price, size, Side::Bid);
+/// let order = NewOrderArgs::limit(price, size, Side::Bid);
 /// client.place_orders(market_id, vec![order], false, None).await?;
 /// ```
-pub fn limit_order(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> NewOrderArgs {
-    NewOrderArgs {
-        price,
-        size,
-        side,
-        order_type: OrderType::Limit,
-        reduce_only: false,
-        client_order_id: None,
-        pending_tpsl_pair: None,
+pub trait NewOrderExt {
+    /// Create a limit order. Defaults: `reduce_only: false`, no client order ID, no TP/SL.
+    fn limit(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> Self;
+    /// Create a post-only (maker) order. Rejected if it would cross the book.
+    fn post_only(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> Self;
+    /// Create an immediate-or-cancel order (market-order equivalent).
+    ///
+    /// Fills what it can at the given price, cancels the rest.
+    fn ioc(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> Self;
+}
+
+impl NewOrderExt for NewOrderArgs {
+    fn limit(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> Self {
+        new_order(price, size, side, OrderType::Limit)
+    }
+
+    fn post_only(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> Self {
+        new_order(price, size, side, OrderType::PostOnly)
+    }
+
+    fn ioc(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> Self {
+        new_order(price, size, side, OrderType::ImmediateOrCancel)
     }
 }
 
-/// Create a post-only (maker) order. Rejected if it would cross the book.
-pub fn post_only_order(
+fn new_order(
     price: PositiveDecimal,
     size: PositiveDecimal,
     side: Side,
+    order_type: OrderType,
 ) -> NewOrderArgs {
     NewOrderArgs {
         price,
         size,
         side,
-        order_type: OrderType::PostOnly,
-        reduce_only: false,
-        client_order_id: None,
-        pending_tpsl_pair: None,
-    }
-}
-
-/// Create an immediate-or-cancel order (market order equivalent).
-///
-/// Fills what it can at the given price, cancels the rest.
-pub fn ioc_order(price: PositiveDecimal, size: PositiveDecimal, side: Side) -> NewOrderArgs {
-    NewOrderArgs {
-        price,
-        size,
-        side,
-        order_type: OrderType::ImmediateOrCancel,
+        order_type,
         reduce_only: false,
         client_order_id: None,
         pending_tpsl_pair: None,
@@ -112,7 +108,7 @@ impl Client {
     /// let size = PositiveDecimal::try_from(rust_decimal::Decimal::new(1, 3))?;
     /// let resp = client.place_orders(
     ///     market_id,
-    ///     vec![limit_order(price, size, Side::Bid)],
+    ///     vec![NewOrderArgs::limit(price, size, Side::Bid)],
     ///     false,
     ///     None,
     /// ).await?;
@@ -297,7 +293,7 @@ impl Client {
     ///             order_id: Some(OrderId(12345)),
     ///             client_order_id: None,
     ///         },
-    ///         place: limit_order(new_price, new_size, Side::Bid),
+    ///         place: NewOrderArgs::limit(new_price, new_size, Side::Bid),
     ///     }],
     ///     None,
     /// ).await?;
@@ -333,7 +329,7 @@ mod tests {
 
     #[test]
     fn limit_order_defaults() {
-        let order = limit_order(dec("50000"), dec("0.1"), Side::Bid);
+        let order = NewOrderArgs::limit(dec("50000"), dec("0.1"), Side::Bid);
         assert_eq!(order.order_type, OrderType::Limit);
         assert_eq!(order.side, Side::Bid);
         assert!(!order.reduce_only);
@@ -343,7 +339,7 @@ mod tests {
 
     #[test]
     fn post_only_order_defaults() {
-        let order = post_only_order(dec("50000"), dec("0.1"), Side::Ask);
+        let order = NewOrderArgs::post_only(dec("50000"), dec("0.1"), Side::Ask);
         assert_eq!(order.order_type, OrderType::PostOnly);
         assert_eq!(order.side, Side::Ask);
         assert!(!order.reduce_only);
@@ -352,7 +348,7 @@ mod tests {
 
     #[test]
     fn ioc_order_defaults() {
-        let order = ioc_order(dec("50000"), dec("0.1"), Side::Bid);
+        let order = NewOrderArgs::ioc(dec("50000"), dec("0.1"), Side::Bid);
         assert_eq!(order.order_type, OrderType::ImmediateOrCancel);
         assert!(!order.reduce_only);
         assert!(order.client_order_id.is_none());
