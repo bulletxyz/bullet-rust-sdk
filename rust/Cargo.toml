@@ -1,10 +1,10 @@
 [package]
 name = "bullet-rust-sdk"
-version = "0.0.4"
-edition = "2024"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Rust SDK for the Bullet trading platform"
-repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 links = "bullet_rust_codegen"
 
 [lib]
