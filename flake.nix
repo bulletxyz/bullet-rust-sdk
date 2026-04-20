@@ -91,6 +91,7 @@
               (makeWasmPack pkgs)
               pkgs.pkg-config
               pkgs.openssl
+              pkgs.jq
             ]
             ++ darwinDeps;
 
