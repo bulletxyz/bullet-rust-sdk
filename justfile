@@ -156,4 +156,4 @@ ci:
 
 # Fetch and cache the latest OpenAPI spec from mainnet
 fetch-spec endpoint="https://tradingapi.bullet.xyz":
-    curl -sSf {{ endpoint }}/docs/rest/openapi.json | nix run nixpkgs#jq -- . > rust/openapi.json
+    curl -sSf {{ endpoint }}/docs/rest/openapi.json | jq -- . > rust/openapi.json
