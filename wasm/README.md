@@ -194,6 +194,40 @@ const tx = Transaction.builder()
 await ws.orderPlace(tx.toBase64());
 ```
 
+### Managed WebSocket (auto-reconnect)
+
+For long-running bots, prefer `connectWsManaged` — it handles reconnection with
+exponential backoff and replays your subscriptions automatically. It mirrors
+the Rust `ManagedWebsocket` 1:1.
+
+```typescript
+const ws = await client.connectWsManaged(
+    // optional — all fields optional
+    new ManagedWsConfig(
+        /* initialBackoffMs */ 500,
+        /* maxBackoffMs */ 30_000,
+        /* maxRetries */ undefined,     // infinite
+        /* channelCapacity */ 10_000,
+    ),
+);
+
+ws.subscribe([Topic.depth('BTC-USD', OrderbookDepth.D20)]);
+
+while (true) {
+    const evt = await ws.recv();
+    if (!evt) break;
+    switch (evt.type) {
+        case 'message':       handleMessage(evt.message); break;
+        case 'reconnecting':  console.log('reconnecting...'); break;
+        case 'disconnected':  console.error(evt.reason); return;
+    }
+}
+
+// Order submission — fire-and-forget; acks arrive as 'message' events
+ws.placeOrder(tx);
+ws.cancelOrder(cancelTx);
+```
+
 ### Decimal
 
 Arbitrary-precision decimal type for prices and quantities:

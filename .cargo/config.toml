@@ -1,0 +1,5 @@
+[alias]
+# Route `cargo t` through nextest (requires `cargo install cargo-nextest --locked`).
+# `cargo test` remains the built-in runner for doctests (nextest doesn't run them).
+t = "nextest run"
+nt = "nextest run"

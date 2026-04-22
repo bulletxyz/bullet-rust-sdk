@@ -34,6 +34,7 @@ When the WASM SDK's public API surface changes (new methods, renamed methods, re
 | `keypair.rs`               | `keypair.rs`                     |
 | `errors.rs`                | `errors.rs`                      |
 | `ws/client.rs`             | `ws/client.rs`                   |
+| `ws/managed.rs`            | `ws/client.rs` (WasmManagedWebsocket) |
 | `ws/topics.rs`             | `ws/topics.rs`                   |
 
 ### WASM Error Handling
@@ -96,6 +97,14 @@ Generated code is written to `$OUT_DIR/call_message_factories.rs` and included v
 Use `just` for all common development tasks. Run `just` to see available recipes.
 
 ### Testing
+
+The project uses [cargo-nextest](https://nexte.st/) for Rust tests. Install once:
+
+```bash
+cargo install cargo-nextest --locked
+```
+
+A `.cargo/config.toml` alias routes `cargo t` through nextest. Prefer `just test` or `cargo t`; `cargo test --doc` is still used for doctests (nextest doesn't run them).
 
 ```bash
 # Run Rust unit tests

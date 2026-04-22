@@ -387,4 +387,30 @@ impl WasmManagedWebsocket {
         self.inner.order_cancel(tx.to_string(), id.map(RequestId::new))?;
         Ok(())
     }
+
+    /// Place an order using a signed transaction object. Handles base64 internally.
+    /// @param {Transaction} tx
+    /// @param {number} [id]
+    #[wasm_bindgen(js_name = placeOrder)]
+    pub fn place_order(
+        &self,
+        tx: &crate::transaction_builder::WasmTransaction,
+        id: Option<u64>,
+    ) -> WasmResult<()> {
+        self.inner.place_order(&tx.inner, id.map(RequestId::new))?;
+        Ok(())
+    }
+
+    /// Cancel an order using a signed transaction object. Handles base64 internally.
+    /// @param {Transaction} tx
+    /// @param {number} [id]
+    #[wasm_bindgen(js_name = cancelOrder)]
+    pub fn cancel_order(
+        &self,
+        tx: &crate::transaction_builder::WasmTransaction,
+        id: Option<u64>,
+    ) -> WasmResult<()> {
+        self.inner.cancel_order(&tx.inner, id.map(RequestId::new))?;
+        Ok(())
+    }
 }

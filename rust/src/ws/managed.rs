@@ -315,6 +315,37 @@ impl ManagedWebsocket {
         }))
     }
 
+    /// Place an order using a signed [`Transaction`]. Base64-encodes internally.
+    ///
+    /// Returns a `SDKResult`-style error instead of `ManagedWsError` because
+    /// encoding can fail independently of the channel state.
+    ///
+    /// [`Transaction`]: bullet_exchange_interface::transaction::Transaction
+    pub fn place_order(
+        &self,
+        signed: &bullet_exchange_interface::transaction::Transaction,
+        id: Option<RequestId>,
+    ) -> Result<(), WSErrors> {
+        let base64 = crate::Transaction::to_base64(signed)
+            .map_err(|e| WSErrors::WsError(e.to_string()))?;
+        self.order_place(base64, id)
+            .map_err(|e| WSErrors::WsError(e.to_string()))
+    }
+
+    /// Cancel an order using a signed [`Transaction`]. Base64-encodes internally.
+    ///
+    /// [`Transaction`]: bullet_exchange_interface::transaction::Transaction
+    pub fn cancel_order(
+        &self,
+        signed: &bullet_exchange_interface::transaction::Transaction,
+        id: Option<RequestId>,
+    ) -> Result<(), WSErrors> {
+        let base64 = crate::Transaction::to_base64(signed)
+            .map_err(|e| WSErrors::WsError(e.to_string()))?;
+        self.order_cancel(base64, id)
+            .map_err(|e| WSErrors::WsError(e.to_string()))
+    }
+
     /// Stop the managed WebSocket and its background task.
     ///
     /// After this returns the background task has been signaled; it will

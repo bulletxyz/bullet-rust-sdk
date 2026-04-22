@@ -252,7 +252,17 @@ let resp = client.send_transaction(&signed).await?;
 
 ### Managed WebSocket (recommended)
 
-`ManagedWebsocket` auto-reconnects with exponential backoff + jitter and replays subscriptions after reconnect. It's `Send + Sync` (channel-based, no Mutex needed).
+`ManagedWebsocket` auto-reconnects with exponential backoff + jitter and replays subscriptions after reconnect. It's `Send + Sync` (channel-based, no Mutex needed) and works on both native and wasm32 targets.
+
+Two equivalent factories:
+
+```rust
+// Fluent convenience (bon builder)
+let mut ws = client.connect_ws_managed().call().await?;
+
+// Or direct — mirrors what the WASM bindings use
+let mut ws = ManagedWebsocket::connect(&client).await?;
+```
 
 ```rust
 use bullet_rust_sdk::*;
@@ -331,14 +341,25 @@ let signed = Transaction::builder()
     .client(&client)
     .build()?;
 
-// Handles base64 encoding internally
-ws.place_order(&signed, None).await?;
-ws.cancel_order(&cancel_signed, None).await?;
+// Handles base64 encoding internally. Fire-and-forget — the send is queued
+// to the background task; server acks arrive as WsEvent::Message.
+ws.place_order(&signed, None)?;
+ws.cancel_order(&cancel_signed, None)?;
+
+// If you already have a base64 string:
+// ws.order_place(&b64_tx, None)?;
+// ws.order_cancel(&b64_tx, None)?;
 ```
 
 ### Raw WebSocket (advanced)
 
 `WebsocketHandle` gives direct socket access but requires manual reconnection. It is `Send` but NOT `Sync`. Use `ManagedWebsocket` for production bots.
+
+### Managed WebSocket errors
+
+`ManagedWebsocket` calls return `Result<(), ManagedWsError>`:
+- `Stopped` — background task has terminated (disconnected or handle dropped)
+- `Busy` — the internal command channel is full. Indicates a stuck task; treat as backpressure, retry with a small delay, or reconnect.
 
 ## Error Handling
 

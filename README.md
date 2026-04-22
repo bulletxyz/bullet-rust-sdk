@@ -14,7 +14,7 @@ bullet-rust-sdk/
 ## Features
 
 - **REST API Client**: Type-safe client generated from OpenAPI spec using Progenitor
-- **WebSocket Support**: Real-time market data and order submission
+- **WebSocket Support**: Real-time market data and order submission — including a portable `ManagedWebsocket` (auto-reconnect, exponential backoff, subscription replay) that works on both native and WASM
 - **Transaction Building**: Fluent builder pattern for constructing and signing transactions
 - **Cross-platform**: Works on native Rust and WASM (browser/Node.js)
 - **Client Defaults**: Configure keypair, max fee, etc. once on the client
