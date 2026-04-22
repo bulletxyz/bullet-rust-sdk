@@ -22,7 +22,6 @@ pub use types::CallMessage;
 // Re-export WebSocket module and types
 pub mod ws;
 pub use ws::client::{WebsocketConfig, WebsocketHandle};
-#[cfg(not(target_arch = "wasm32"))]
 pub use ws::managed::{ManagedWebsocket, ManagedWsConfig, ManagedWsError, WsEvent};
 pub use ws::models::ServerMessage;
 pub use ws::topics::{KlineInterval, OrderbookDepth, Topic};
