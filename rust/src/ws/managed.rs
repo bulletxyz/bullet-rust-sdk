@@ -38,11 +38,12 @@ use std::time::Duration;
 
 use bon::bon;
 use futures::channel::{mpsc, oneshot};
-use futures::future::{self, Either};
+use futures::future::{self, Either, pending};
 use futures::{FutureExt, StreamExt};
 use futures_timer::Delay;
 use thiserror::Error;
 use tracing::{debug, info, warn};
+use web_time::Instant;
 
 use super::client::{WebsocketConfig, WebsocketHandle};
 use super::models::ServerMessage;
@@ -146,6 +147,32 @@ pub struct ManagedWsConfig {
 
     /// Underlying WebSocket connection config (e.g. handshake timeout).
     pub ws_config: Option<WebsocketConfig>,
+
+    /// Force a reconnect if no server message arrives within this window.
+    ///
+    /// Protects against zombie connections — TCP keepalives and WebSocket
+    /// ping/pong keep the socket nominally alive, but the server can stop
+    /// sending data without closing. Without this, the handle sits on a dead
+    /// stream indefinitely.
+    ///
+    /// `Duration::ZERO` disables the timer. Cmd-path acks (subscribe, order
+    /// responses) DO count as server-pushed messages and reset the clock.
+    ///
+    /// Default: 60 seconds
+    #[builder(default = Duration::from_secs(60))]
+    pub idle_timeout: Duration,
+
+    /// How long a connection must stay up before the backoff state is
+    /// considered "stable" and the next disconnect starts from
+    /// [`initial_backoff`](Self::initial_backoff) again.
+    ///
+    /// Without this, a zombie that accepts connections and immediately drops
+    /// would be hammered at `initial_backoff` forever — the server never gets
+    /// the exponential-backoff relief.
+    ///
+    /// Default: 30 seconds
+    #[builder(default = Duration::from_secs(30))]
+    pub backoff_reset_after: Duration,
 }
 
 impl Default for ManagedWsConfig {
@@ -439,6 +466,21 @@ where
     wasm_bindgen_futures::spawn_local(fut);
 }
 
+/// Persistent state carried across reconnect cycles.
+///
+/// The backoff duration persists across disconnect cycles so a zombie that
+/// accepts connections and immediately drops gets proper exponential relief
+/// instead of being hammered at `initial_backoff` forever. It resets to
+/// `initial_backoff` only after a connection has stayed up for
+/// `backoff_reset_after`.
+struct ReconnectState {
+    backoff: Duration,
+    /// When the *current* connection was established. `None` only before the
+    /// very first successful reconnect (the initial connect sets this on
+    /// entry to [`run_managed_ws`]).
+    connected_since: Option<Instant>,
+}
+
 /// Background task that manages the WebSocket lifecycle.
 async fn run_managed_ws(
     client: ManagedWsClient,
@@ -449,6 +491,11 @@ async fn run_managed_ws(
     mut shutdown_rx: oneshot::Receiver<()>,
 ) {
     let mut active_topics: HashSet<String> = HashSet::new();
+    let mut last_msg = Instant::now();
+    let mut state = ReconnectState {
+        backoff: config.initial_backoff.max(MIN_BACKOFF),
+        connected_since: Some(Instant::now()),
+    };
 
     /// One completed branch of the per-iteration select.
     ///
@@ -458,26 +505,36 @@ async fn run_managed_ws(
         Shutdown,
         Recv(Result<Box<ServerMessage>, WSErrors>),
         Cmd(Option<WsCommand>),
+        Idle,
     }
 
     loop {
+        // Idle-timeout future: fires if no server-pushed message arrives within
+        // the window. `Duration::ZERO` disables the timer.
+        let idle_remaining = if config.idle_timeout.is_zero() {
+            None
+        } else {
+            Some(config.idle_timeout.saturating_sub(last_msg.elapsed()))
+        };
+
         // Run the select in its own scope so the fused recv/cmd futures (which
         // hold `&mut ws` / `&mut cmd_rx`) are dropped before we touch those
-        // receivers again in the match arms below. This mirrors what
-        // `tokio::select!` does internally but has to be explicit with
-        // `futures::select!` + `pin_mut!`.
-        //
-        // `WebsocketHandle::recv` and `cmd_rx.next()` are both cancel-safe
-        // (stream polls), so re-creating them each iteration is fine.
+        // receivers again in the match arms below.
         let branch = {
             let recv_fut = ws.recv().fuse();
             let cmd_fut = cmd_rx.next().fuse();
-            futures::pin_mut!(recv_fut, cmd_fut);
+            let idle_fut = match idle_remaining {
+                Some(d) => Either::Left(Delay::new(d)),
+                None => Either::Right(pending::<()>()),
+            }
+            .fuse();
+            futures::pin_mut!(recv_fut, cmd_fut, idle_fut);
 
             futures::select! {
                 _ = (&mut shutdown_rx).fuse() => Branch::Shutdown,
                 r = recv_fut => Branch::Recv(r.map(Box::new)),
                 c = cmd_fut => Branch::Cmd(c),
+                _ = idle_fut => Branch::Idle,
             }
         };
 
@@ -486,16 +543,20 @@ async fn run_managed_ws(
                 debug!("shutdown signaled, stopping managed ws");
                 return;
             }
-            Branch::Recv(Ok(msg)) => match event_tx.try_send(WsEvent::Message(msg)) {
-                Ok(()) => {}
-                Err(e) if e.is_full() => {
-                    warn!("event channel full, dropping message — consumer too slow");
+            Branch::Recv(Ok(msg)) => {
+                // Server proved it's alive — reset the idle timer.
+                last_msg = Instant::now();
+                match event_tx.try_send(WsEvent::Message(msg)) {
+                    Ok(()) => {}
+                    Err(e) if e.is_full() => {
+                        warn!("event channel full, dropping message — consumer too slow");
+                    }
+                    Err(_) => {
+                        debug!("event receiver dropped, stopping managed ws");
+                        return;
+                    }
                 }
-                Err(_) => {
-                    debug!("event receiver dropped, stopping managed ws");
-                    return;
-                }
-            },
+            }
             Branch::Recv(Err(e)) => {
                 match &e {
                     WSErrors::WsClosed { code, reason } => {
@@ -505,57 +566,92 @@ async fn run_managed_ws(
                         warn!("WebSocket stream ended, reconnecting");
                     }
                     _ => {
-                        // Transport errors (WsUpgradeError, etc.) are transient.
                         warn!(?e, "WebSocket error, reconnecting");
                     }
                 }
-                if handle_reconnect(
+                if do_reconnect(
                     &client,
                     &config,
                     &active_topics,
                     &mut event_tx,
                     &mut ws,
                     &mut shutdown_rx,
+                    &mut state,
                 )
                 .await
                 {
                     return;
                 }
+                last_msg = Instant::now();
+            }
+            Branch::Idle => {
+                let elapsed = last_msg.elapsed();
+                warn!(
+                    ?elapsed,
+                    "no server messages within idle timeout, forcing reconnect"
+                );
+                if do_reconnect(
+                    &client,
+                    &config,
+                    &active_topics,
+                    &mut event_tx,
+                    &mut ws,
+                    &mut shutdown_rx,
+                    &mut state,
+                )
+                .await
+                {
+                    return;
+                }
+                last_msg = Instant::now();
             }
             Branch::Cmd(Some(WsCommand::Subscribe(params, id))) => {
-                for p in &params {
-                    active_topics.insert(p.clone());
-                }
-                if let Err(e) = ws.send(ClientMessage::Subscribe { id, params }).await {
+                // Dedup: only send for topics we aren't already subscribed to.
+                // The server may reject duplicates with an unhelpful error, and
+                // the topic set is the source of truth for replay.
+                let new_params: Vec<String> = params
+                    .into_iter()
+                    .filter(|p| active_topics.insert(p.clone()))
+                    .collect();
+                if new_params.is_empty() {
+                    debug!("subscribe: all topics already active, skipping wire send");
+                } else if let Err(e) =
+                    ws.send(ClientMessage::Subscribe { id, params: new_params }).await
+                {
                     debug!(?e, "subscribe send failed, will replay after reconnect");
                 }
             }
             Branch::Cmd(Some(WsCommand::Unsubscribe(params, id))) => {
-                for p in &params {
-                    active_topics.remove(p);
-                }
-                if let Err(e) = ws.send(ClientMessage::Unsubscribe { id, params }).await {
+                // Dedup: only send for topics we're actually subscribed to.
+                let to_send: Vec<String> = params
+                    .into_iter()
+                    .filter(|p| active_topics.remove(p))
+                    .collect();
+                if to_send.is_empty() {
+                    debug!("unsubscribe: no matching active topics, skipping wire send");
+                } else if let Err(e) =
+                    ws.send(ClientMessage::Unsubscribe { id, params: to_send }).await
+                {
                     debug!(?e, "unsubscribe send failed");
                 }
             }
             Branch::Cmd(Some(WsCommand::Send(msg))) => {
                 if let Err(e) = ws.send(msg).await {
-                    // Order place/cancel send failed — the connection is dead.
-                    // Caller's order was NOT delivered; they will see
-                    // WsEvent::Reconnecting and should resubmit.
                     warn!(?e, "failed to send order message, reconnecting");
-                    if handle_reconnect(
+                    if do_reconnect(
                         &client,
                         &config,
                         &active_topics,
                         &mut event_tx,
                         &mut ws,
                         &mut shutdown_rx,
+                        &mut state,
                     )
                     .await
                     {
                         return;
                     }
+                    last_msg = Instant::now();
                 }
             }
             Branch::Cmd(None) => {
@@ -567,22 +663,43 @@ async fn run_managed_ws(
 }
 
 /// Handle reconnection. Returns `true` if the task should stop.
-async fn handle_reconnect(
+///
+/// Emits `WsEvent::Reconnecting`, reuses/resets backoff per
+/// [`ReconnectState`], and on success updates `state.connected_since` and
+/// replaces `*ws` with the new handle.
+async fn do_reconnect(
     client: &ManagedWsClient,
     config: &ManagedWsConfig,
     active_topics: &HashSet<String>,
     event_tx: &mut mpsc::Sender<WsEvent>,
     ws: &mut WebsocketHandle,
     shutdown_rx: &mut oneshot::Receiver<()>,
+    state: &mut ReconnectState,
 ) -> bool {
     match event_tx.try_send(WsEvent::Reconnecting) {
         Ok(()) => {}
         Err(e) if e.is_full() => {}
         Err(_) => return true,
     }
-    match reconnect(client, config, active_topics, event_tx, shutdown_rx).await {
+
+    // If the previous connection was stable for long enough, reset the
+    // exponential backoff. Otherwise carry it forward so we don't hammer a
+    // zombie that accepts-then-drops at `initial_backoff` forever.
+    if let Some(t) = state.connected_since
+        && t.elapsed() >= config.backoff_reset_after
+    {
+        debug!(
+            uptime = ?t.elapsed(),
+            "previous connection was stable; resetting backoff"
+        );
+        state.backoff = config.initial_backoff.max(MIN_BACKOFF);
+    }
+    state.connected_since = None;
+
+    match reconnect(client, config, active_topics, event_tx, shutdown_rx, state).await {
         Ok(new_ws) => {
             *ws = new_ws;
+            state.connected_since = Some(Instant::now());
             info!("reconnected successfully");
             false
         }
@@ -597,16 +714,16 @@ async fn handle_reconnect(
 /// Reconnect with exponential backoff + jitter and replay subscriptions.
 ///
 /// Observes `shutdown_rx` during every sleep and between connect attempts so
-/// dropping the handle terminates the loop promptly.
+/// dropping the handle terminates the loop promptly. `state.backoff` is
+/// mutated in place so growth persists across calls (see [`do_reconnect`]).
 async fn reconnect(
     client: &ManagedWsClient,
     config: &ManagedWsConfig,
     active_topics: &HashSet<String>,
     event_tx: &mpsc::Sender<WsEvent>,
     shutdown_rx: &mut oneshot::Receiver<()>,
+    state: &mut ReconnectState,
 ) -> Result<WebsocketHandle, ReconnectError> {
-    // Floor so a misconfigured zero doesn't produce a tight spin loop.
-    let mut backoff = config.initial_backoff.max(MIN_BACKOFF);
     let max_backoff = config.max_backoff.max(MIN_BACKOFF);
     let mut attempts = 0u32;
 
@@ -623,10 +740,10 @@ async fn reconnect(
         }
 
         // Jitter: add 0..50% of backoff to avoid thundering herd.
-        let jitter_ms = rand::random::<u64>() % (backoff.as_millis() as u64 / 2 + 1);
-        let delay = backoff + Duration::from_millis(jitter_ms);
+        let jitter_ms = rand::random::<u64>() % (state.backoff.as_millis() as u64 / 2 + 1);
+        let delay = state.backoff + Duration::from_millis(jitter_ms);
 
-        info!(attempt = attempts, delay = ?delay, "attempting reconnect");
+        info!(attempt = attempts, delay = ?delay, backoff = ?state.backoff, "attempting reconnect");
 
         match future::select(Delay::new(delay), &mut *shutdown_rx).await {
             Either::Left(_) => {}
@@ -649,7 +766,7 @@ async fn reconnect(
                         // transport errors (connection died mid-replay).
                         if matches!(&e, WSErrors::WsStreamEnded | WSErrors::WsClosed { .. }) {
                             warn!(?e, "replay send lost connection, retrying");
-                            backoff = (backoff * 2).min(max_backoff);
+                            state.backoff = (state.backoff * 2).min(max_backoff);
                             continue;
                         }
                         return Err(ReconnectError::ReplayFailed(e));
@@ -659,7 +776,7 @@ async fn reconnect(
             }
             Err(e) => {
                 warn!(?e, attempt = attempts, "reconnect failed");
-                backoff = (backoff * 2).min(max_backoff);
+                state.backoff = (state.backoff * 2).min(max_backoff);
             }
         }
     }

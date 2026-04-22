@@ -266,6 +266,8 @@ impl WasmManagedWsConfig {
     /// @param {number} [maxBackoffMs] - Maximum backoff ceiling, in milliseconds (default 30000).
     /// @param {number} [maxRetries] - Maximum reconnect attempts before giving up (default: infinite).
     /// @param {number} [channelCapacity] - Event buffer size (default 10000).
+    /// @param {number} [idleTimeoutMs] - Force a reconnect if no server message arrives in this window (default 60000; pass 0 to disable).
+    /// @param {number} [backoffResetAfterMs] - Reset exponential backoff after the connection has been up for this long (default 30000).
     /// @returns {ManagedWsConfig}
     #[wasm_bindgen(constructor)]
     pub fn new(
@@ -273,6 +275,8 @@ impl WasmManagedWsConfig {
         max_backoff_ms: Option<u64>,
         max_retries: Option<u32>,
         channel_capacity: Option<usize>,
+        idle_timeout_ms: Option<u64>,
+        backoff_reset_after_ms: Option<u64>,
     ) -> Self {
         let mut b = ManagedWsConfig::builder();
         if let Some(ms) = initial_backoff_ms {
@@ -286,6 +290,12 @@ impl WasmManagedWsConfig {
         }
         if let Some(n) = channel_capacity {
             b = b.channel_capacity(n);
+        }
+        if let Some(ms) = idle_timeout_ms {
+            b = b.idle_timeout(StdDuration::from_millis(ms));
+        }
+        if let Some(ms) = backoff_reset_after_ms {
+            b = b.backoff_reset_after(StdDuration::from_millis(ms));
         }
         Self { inner: b.build() }
     }

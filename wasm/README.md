@@ -206,8 +206,10 @@ const ws = await client.connectWsManaged(
     new ManagedWsConfig(
         /* initialBackoffMs */ 500,
         /* maxBackoffMs */ 30_000,
-        /* maxRetries */ undefined,     // infinite
+        /* maxRetries */ undefined,          // infinite
         /* channelCapacity */ 10_000,
+        /* idleTimeoutMs */ 60_000,          // force reconnect on zombie connections
+        /* backoffResetAfterMs */ 30_000,    // reset backoff once connection is stable
     ),
 );
 
