@@ -66,24 +66,25 @@ impl Keypair {
         self.signing_key.verifying_key().as_bytes().to_vec()
     }
 
-    /// Get the public key as a hex string.
-    pub fn public_key_hex(&self) -> String {
-        hex::encode(self.public_key())
-    }
-
-    /// Get the public key as a base58 address string.
+    /// The on-chain address (base58-encoded public key).
     ///
-    /// This is the standard address format used by the Bullet exchange.
-    pub fn public_key_bs58(&self) -> String {
+    /// This is the canonical address format used by the Bullet exchange.
+    /// For the hex-encoded raw public key, see [`address_hex`](Self::address_hex).
+    pub fn address(&self) -> String {
         let pk_bytes: [u8; 32] = self.signing_key.verifying_key().to_bytes();
         bullet_exchange_interface::address::Address(pk_bytes).to_string()
+    }
+
+    /// The public key as a hex string (32 bytes → 64 hex chars).
+    pub fn address_hex(&self) -> String {
+        hex::encode(self.public_key())
     }
 }
 
 impl std::fmt::Debug for Keypair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Keypair")
-            .field("public_key", &self.public_key_hex())
+            .field("address", &self.address())
             .finish_non_exhaustive()
     }
 }

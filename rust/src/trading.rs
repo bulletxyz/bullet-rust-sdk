@@ -229,7 +229,7 @@ impl Client {
     /// ```
     pub fn address(&self) -> SDKResult<String> {
         let kp = self.keypair().ok_or(SDKError::MissingKeypair)?;
-        Ok(kp.public_key_bs58())
+        Ok(kp.address())
     }
 
     /// Query open orders for the client's own account on a symbol.
