@@ -52,6 +52,22 @@ pub enum ManagedWsError {
     Stopped,
 }
 
+/// Why a reconnect attempt gave up.
+#[derive(Debug, Error)]
+enum ReconnectError {
+    /// The user-facing handle was dropped while reconnecting.
+    #[error("managed websocket handle dropped")]
+    HandleDropped,
+    /// Ran out of retry attempts.
+    #[error("exhausted {0} reconnect attempts")]
+    RetriesExhausted(u32),
+    /// Subscription replay failed after reconnect. The underlying transport
+    /// error is preserved so callers can distinguish transient network
+    /// failures from protocol-level problems (bad topic, too many topics).
+    #[error("subscription replay failed: {0}")]
+    ReplayFailed(#[source] WSErrors),
+}
+
 /// Events delivered to the user from the managed WebSocket.
 #[derive(Debug)]
 pub enum WsEvent {
@@ -63,6 +79,10 @@ pub enum WsEvent {
     /// The connection was permanently lost after exhausting retries.
     Disconnected(String),
 }
+
+/// Minimum backoff floor. A zero `initial_backoff` would otherwise make
+/// `backoff * 2` stay zero forever, producing a tight reconnect spin loop.
+const MIN_BACKOFF: Duration = Duration::from_millis(10);
 
 /// Configuration for managed WebSocket reconnection behavior.
 ///
@@ -348,14 +368,19 @@ async fn run_managed_ws(
                         for p in &params {
                             active_topics.insert(p.clone());
                         }
-                        let _ = ws.send(ClientMessage::Subscribe { id, params }).await;
+                        if let Err(e) = ws.send(ClientMessage::Subscribe { id, params }).await {
+                            // Topics are already tracked — replay on reconnect covers us.
+                            debug!(?e, "subscribe send failed, will replay after reconnect");
+                        }
                     }
                     Some(WsCommand::Unsubscribe(topics, id)) => {
                         let params: Vec<String> = topics.iter().map(|t| t.to_string()).collect();
                         for p in &params {
                             active_topics.remove(p);
                         }
-                        let _ = ws.send(ClientMessage::Unsubscribe { id, params }).await;
+                        if let Err(e) = ws.send(ClientMessage::Unsubscribe { id, params }).await {
+                            debug!(?e, "unsubscribe send failed");
+                        }
                     }
                     Some(WsCommand::Send(msg)) => {
                         if let Err(e) = ws.send(msg).await {
@@ -399,9 +424,10 @@ async fn handle_reconnect(
             info!("reconnected successfully");
             false
         }
-        Err(reason) => {
+        Err(ReconnectError::HandleDropped) => true,
+        Err(err) => {
             // Best-effort notify; if channel is closed, we're stopping anyway.
-            let _ = event_tx.try_send(WsEvent::Disconnected(reason));
+            let _ = event_tx.try_send(WsEvent::Disconnected(err.to_string()));
             true
         }
     }
@@ -416,14 +442,15 @@ async fn reconnect(
     config: &ManagedWsConfig,
     active_topics: &HashSet<String>,
     event_tx: &mpsc::Sender<WsEvent>,
-) -> Result<super::client::WebsocketHandle, String> {
-    let mut backoff = config.initial_backoff;
+) -> Result<super::client::WebsocketHandle, ReconnectError> {
+    // Floor the backoff so a misconfigured zero doesn't produce a tight spin loop.
+    let mut backoff = config.initial_backoff.max(MIN_BACKOFF);
+    let max_backoff = config.max_backoff.max(MIN_BACKOFF);
     let mut attempts = 0u32;
 
     loop {
-        // Stop if the user handle was dropped.
         if event_tx.is_closed() {
-            return Err("handle dropped".to_string());
+            return Err(ReconnectError::HandleDropped);
         }
 
         attempts += 1;
@@ -431,13 +458,12 @@ async fn reconnect(
         if let Some(max) = config.max_retries
             && attempts > max
         {
-            return Err(format!("exhausted {max} reconnect attempts"));
+            return Err(ReconnectError::RetriesExhausted(max));
         }
 
-        // Jitter: add 0..50% of backoff to avoid thundering herd
+        // Jitter: add 0..50% of backoff to avoid thundering herd.
         let jitter_ms = rand::random::<u64>() % (backoff.as_millis() as u64 / 2 + 1);
-        let jitter = Duration::from_millis(jitter_ms);
-        let delay = backoff + jitter;
+        let delay = backoff + Duration::from_millis(jitter_ms);
 
         info!(attempt = attempts, delay = ?delay, "attempting reconnect");
         tokio::time::sleep(delay).await;
@@ -448,22 +474,24 @@ async fn reconnect(
                     let params: Vec<String> = active_topics.iter().cloned().collect();
                     debug!(count = params.len(), "replaying subscriptions");
                     if let Err(e) = ws
-                        .send(ClientMessage::Subscribe {
-                            id: None,
-                            params,
-                        })
+                        .send(ClientMessage::Subscribe { id: None, params })
                         .await
                     {
-                        warn!(?e, "failed to replay subscriptions, retrying");
-                        backoff = (backoff * 2).min(config.max_backoff);
-                        continue;
+                        // Distinguish protocol errors (bad topic, oversize) from
+                        // transport errors (connection died mid-replay).
+                        if matches!(&e, WSErrors::WsStreamEnded | WSErrors::WsClosed { .. }) {
+                            warn!(?e, "replay send lost connection, retrying");
+                            backoff = (backoff * 2).min(max_backoff);
+                            continue;
+                        }
+                        return Err(ReconnectError::ReplayFailed(e));
                     }
                 }
                 return Ok(ws);
             }
             Err(e) => {
                 warn!(?e, attempt = attempts, "reconnect failed");
-                backoff = (backoff * 2).min(config.max_backoff);
+                backoff = (backoff * 2).min(max_backoff);
             }
         }
     }
