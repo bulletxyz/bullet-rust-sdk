@@ -35,18 +35,6 @@ impl WasmKeypair {
         })
     }
 
-    /// 32-byte secret key as `Uint8Array`.
-    #[wasm_bindgen(js_name = toBytes)]
-    pub fn to_bytes(&self) -> Vec<u8> {
-        self.inner.to_bytes()
-    }
-
-    /// Secret key as a lowercase hex string.
-    #[wasm_bindgen(js_name = toHex)]
-    pub fn to_hex(&self) -> String {
-        self.inner.to_hex()
-    }
-
     /// 32-byte public key as `Uint8Array`.
     #[wasm_bindgen(js_name = publicKey)]
     pub fn public_key(&self) -> Vec<u8> {
