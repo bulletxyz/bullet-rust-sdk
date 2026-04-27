@@ -13,10 +13,7 @@ use super::type_map;
 const SKIP_METHODS: &[&str] = &["new", "new_with_client", "api_version"];
 
 /// Emit the full `impl WasmTradingApi` block.
-pub fn emit_client_impl(
-    methods: &[&MethodDetails],
-    enum_names: &HashSet<&str>,
-) -> TokenStream {
+pub fn emit_client_impl(methods: &[&MethodDetails], enum_names: &HashSet<&str>) -> TokenStream {
     let method_tokens: Vec<TokenStream> = methods
         .iter()
         .filter(|m| m.is_async && !SKIP_METHODS.contains(&m.name.as_str()))

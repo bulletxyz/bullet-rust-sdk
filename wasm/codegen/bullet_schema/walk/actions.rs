@@ -31,7 +31,7 @@ pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
     call_message_enum
         .variants
         .iter()
-        .map(|variant| {
+        .filter_map(|variant| {
             let tuple_index = match variant
                 .value
                 .as_ref()
@@ -45,6 +45,9 @@ pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
             };
 
             // Unwrap the Tuple wrapper to get the action enum index.
+            // Skip variants that don't follow the Tuple(ActionEnum) pattern
+            // (e.g. wallet-level operations like TransferWithMemo).
+            // TODO: This should be handled at some point by the schema @nick
             let action_enum_index = match &types[tuple_index] {
                 Ty::Tuple(t) => {
                     assert_eq!(t.fields.len(), 1);
@@ -53,7 +56,7 @@ pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
                         _ => panic!("Expected ByIndex in tuple wrapper"),
                     }
                 }
-                _ => panic!("Expected Tuple at index {tuple_index}"),
+                _ => return None,
             };
 
             // Action enums: User, Keeper, Admin, etc.
@@ -68,11 +71,11 @@ pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
                 .map(|av| extract_variant(av, types))
                 .collect();
 
-            RawActionGroup {
+            Some(RawActionGroup {
                 call_message_variant: variant.name.clone(),
                 action_enum: action_enum.type_name.clone(),
                 variants,
-            }
+            })
         })
         .collect()
 }

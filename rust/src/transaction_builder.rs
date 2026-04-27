@@ -38,6 +38,7 @@ use bullet_exchange_interface::transaction::{
 };
 use web_time::{SystemTime, UNIX_EPOCH};
 
+use crate::codegen::Error::ErrorResponse;
 use crate::generated::types::{SubmitTxRequest, SubmitTxResponse};
 use crate::types::CallMessage;
 use crate::{Client, Keypair, SDKError, SDKResult};
@@ -94,6 +95,14 @@ impl UnsignedTransaction {
         gas_limit: Option<Gas>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
+        // Check whether the call-message was part of the schema validation
+        if let Some(user_actions) = client.user_actions()
+            && let CallMessage::User(ref call) = call_message
+            && !user_actions.contains(&call.into())
+        {
+            return Err(SDKError::UnsupportedCallMessage(call_message.msg_type()));
+        }
+
         let runtime_call = RuntimeCall::Exchange(call_message);
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -113,7 +122,7 @@ impl UnsignedTransaction {
                 uniqueness,
                 details,
             },
-            chain_hash: *client.chain_hash(),
+            chain_hash: client.chain_hash(),
         })
     }
 }
@@ -222,7 +231,6 @@ impl Transaction {
 }
 
 // ── Client methods ───────────────────────────────────────────────────────────
-
 impl Client {
     /// Send a signed transaction to the network.
     ///
@@ -232,8 +240,20 @@ impl Client {
         signed: &SignedTransaction,
     ) -> SDKResult<SubmitTxResponse> {
         let body = Transaction::to_base64(signed)?;
-        let response = self.client().submit_tx(&SubmitTxRequest { body }).await?;
-        Ok(response.into_inner())
+        let response = self.client().submit_tx(&SubmitTxRequest { body }).await;
+        match response {
+            Err(ErrorResponse(response)) if response.status() == 401 => {
+                let inner = response.into_inner();
+                if inner.message.contains("Invalid signature") {
+                    self.update_schema().await?;
+                    // indicate that a the transaction must be re-signed and can not be simply retried
+                    return Err(SDKError::TransactionOutdated);
+                }
+                Err(SDKError::ApiError(inner))
+            }
+            Ok(r) => Ok(r.into_inner()),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 

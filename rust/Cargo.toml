@@ -11,7 +11,7 @@ links = "bullet_rust_codegen"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bullet-exchange-interface = { git = "https://github.com/bulletxyz/bullet-exchange-interface.git" }
+bullet-exchange-interface.workspace = true
 bullet-ws-interface = { git = "https://github.com/bulletxyz/bullet-ws-interface.git" }
 
 progenitor-client = "0.13"

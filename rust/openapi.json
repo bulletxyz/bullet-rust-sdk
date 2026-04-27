@@ -58,7 +58,7 @@
     "/fapi/v1/allOrders": {
       "get": {
         "tags": [
-          "Trading"
+          "User Data (Beta)"
         ],
         "summary": "All Orders (order history from ClickHouse)",
         "operationId": "all_orders",
@@ -66,10 +66,13 @@
           {
             "name": "address",
             "in": "query",
-            "description": "Account address",
-            "required": true,
+            "description": "Account address (required on first request, encoded in cursor for subsequent)",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -101,7 +104,7 @@
           {
             "name": "startTime",
             "in": "query",
-            "description": "Start time in microseconds. Defaults to now - 24h. Max range with endTime is 24h",
+            "description": "Start time in microseconds",
             "required": false,
             "schema": {
               "type": [
@@ -114,7 +117,7 @@
           {
             "name": "endTime",
             "in": "query",
-            "description": "End time in microseconds. Defaults to startTime + 24h",
+            "description": "End time in microseconds",
             "required": false,
             "schema": {
               "type": [
@@ -134,7 +137,7 @@
                 "integer",
                 "null"
               ],
-              "format": "int32"
+              "minimum": 0
             }
           }
         ],
@@ -144,10 +147,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/HistoricalOrder"
-                  }
+                  "$ref": "#/components/schemas/PaginatedResponse_HistoricalOrder"
                 }
               }
             }
@@ -1184,7 +1184,7 @@
     "/fapi/v1/userDeposits": {
       "get": {
         "tags": [
-          "Trading"
+          "User Data (Beta)"
         ],
         "summary": "User Deposit History",
         "operationId": "user_deposits",
@@ -1192,16 +1192,19 @@
           {
             "name": "address",
             "in": "query",
-            "description": "Account address",
-            "required": true,
+            "description": "Account address (required on first request, encoded in cursor for subsequent)",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
             "name": "startTime",
             "in": "query",
-            "description": "Start time in microseconds. Defaults to now - 24h. Max range with endTime is 24h",
+            "description": "Start time in microseconds",
             "required": false,
             "schema": {
               "type": [
@@ -1214,7 +1217,7 @@
           {
             "name": "endTime",
             "in": "query",
-            "description": "End time in microseconds. Defaults to startTime + 24h",
+            "description": "End time in microseconds",
             "required": false,
             "schema": {
               "type": [
@@ -1234,7 +1237,7 @@
                 "integer",
                 "null"
               ],
-              "format": "int32"
+              "minimum": 0
             }
           }
         ],
@@ -1244,10 +1247,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserDeposit"
-                  }
+                  "$ref": "#/components/schemas/PaginatedResponse_UserDeposit"
                 }
               }
             }
@@ -1285,21 +1285,24 @@
         }
       }
     },
-    "/fapi/v1/userLiquidations": {
+    "/fapi/v1/userFundingPayments": {
       "get": {
         "tags": [
-          "Trading"
+          "User Data (Beta)"
         ],
-        "summary": "User Liquidation History",
-        "operationId": "user_liquidations",
+        "summary": "User Funding Payment History",
+        "operationId": "user_funding_payments",
         "parameters": [
           {
             "name": "address",
             "in": "query",
-            "description": "Account address",
-            "required": true,
+            "description": "Account address (required on first request, encoded in cursor for subsequent)",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -1317,7 +1320,7 @@
           {
             "name": "startTime",
             "in": "query",
-            "description": "Start time in microseconds. Defaults to now - 24h. Max range with endTime is 24h",
+            "description": "Start time in microseconds (optional filter)",
             "required": false,
             "schema": {
               "type": [
@@ -1330,7 +1333,7 @@
           {
             "name": "endTime",
             "in": "query",
-            "description": "End time in microseconds. Defaults to startTime + 24h",
+            "description": "End time in microseconds (optional filter)",
             "required": false,
             "schema": {
               "type": [
@@ -1350,7 +1353,133 @@
                 "integer",
                 "null"
               ],
-              "format": "int32"
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of user funding payments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_UserFundingPayment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Historical data service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fapi/v1/userLiquidations": {
+      "get": {
+        "tags": [
+          "User Data (Beta)"
+        ],
+        "summary": "User Liquidation History",
+        "operationId": "user_liquidations",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "description": "Account address (required on first request, encoded in cursor for subsequent)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "symbol",
+            "in": "query",
+            "description": "Trading pair symbol (optional filter)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Start time in microseconds (optional filter)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "endTime",
+            "in": "query",
+            "description": "End time in microseconds (optional filter)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of results (default 500, max 1000)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
             }
           }
         ],
@@ -1360,10 +1489,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserLiquidation"
-                  }
+                  "$ref": "#/components/schemas/PaginatedResponse_UserLiquidation"
                 }
               }
             }
@@ -1414,7 +1540,7 @@
     "/fapi/v1/userTrades": {
       "get": {
         "tags": [
-          "Trading"
+          "User Data (Beta)"
         ],
         "summary": "Account Trade List",
         "operationId": "user_trades",
@@ -1422,10 +1548,13 @@
           {
             "name": "address",
             "in": "query",
-            "description": "Account address",
-            "required": true,
+            "description": "Account address (required on first request, encoded in cursor for subsequent)",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -1443,7 +1572,7 @@
           {
             "name": "startTime",
             "in": "query",
-            "description": "Start time in microseconds. Defaults to now - 24h. Max range with endTime is 24h",
+            "description": "Start time in microseconds (optional filter)",
             "required": false,
             "schema": {
               "type": [
@@ -1456,7 +1585,7 @@
           {
             "name": "endTime",
             "in": "query",
-            "description": "End time in microseconds. Defaults to startTime + 24h",
+            "description": "End time in microseconds (optional filter)",
             "required": false,
             "schema": {
               "type": [
@@ -1476,7 +1605,7 @@
                 "integer",
                 "null"
               ],
-              "format": "int32"
+              "minimum": 0
             }
           }
         ],
@@ -1486,10 +1615,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserTrade"
-                  }
+                  "$ref": "#/components/schemas/PaginatedResponse_UserTrade"
                 }
               }
             }
@@ -1540,7 +1666,7 @@
     "/fapi/v1/userWithdrawals": {
       "get": {
         "tags": [
-          "Trading"
+          "User Data (Beta)"
         ],
         "summary": "User Withdrawal History",
         "operationId": "user_withdrawals",
@@ -1548,16 +1674,19 @@
           {
             "name": "address",
             "in": "query",
-            "description": "Account address",
-            "required": true,
+            "description": "Account address (required on first request, encoded in cursor for subsequent)",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
             "name": "startTime",
             "in": "query",
-            "description": "Start time in microseconds. Defaults to now - 24h. Max range with endTime is 24h",
+            "description": "Start time in microseconds",
             "required": false,
             "schema": {
               "type": [
@@ -1570,7 +1699,7 @@
           {
             "name": "endTime",
             "in": "query",
-            "description": "End time in microseconds. Defaults to startTime + 24h",
+            "description": "End time in microseconds",
             "required": false,
             "schema": {
               "type": [
@@ -1590,7 +1719,7 @@
                 "integer",
                 "null"
               ],
-              "format": "int32"
+              "minimum": 0
             }
           }
         ],
@@ -1600,10 +1729,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserWithdrawal"
-                  }
+                  "$ref": "#/components/schemas/PaginatedResponse_UserWithdrawal"
                 }
               }
             }
@@ -2826,6 +2952,465 @@
           }
         }
       },
+      "PaginatedResponse_HistoricalOrder": {
+        "type": "object",
+        "description": "paginated response wrapper with optional cursor for next page",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "historical order for /fapi/v1/allOrders",
+              "required": [
+                "orderId",
+                "symbol",
+                "status",
+                "price",
+                "origQty",
+                "executedQty",
+                "avgPrice",
+                "side",
+                "type",
+                "time",
+                "updateTime",
+                "reduceOnly",
+                "closePosition",
+                "positionSide",
+                "txHashes"
+              ],
+              "properties": {
+                "avgPrice": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "closePosition": {
+                  "type": "boolean"
+                },
+                "executedQty": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "orderId": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "origQty": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "positionSide": {
+                  "type": "string"
+                },
+                "price": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "reduceOnly": {
+                  "type": "boolean"
+                },
+                "side": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "symbol": {
+                  "type": "string"
+                },
+                "time": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "txHashes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "type": {
+                  "type": "string"
+                },
+                "updateTime": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PaginatedResponse_UserDeposit": {
+        "type": "object",
+        "description": "paginated response wrapper with optional cursor for next page",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "asset",
+                "assetId",
+                "amount",
+                "amountNotional",
+                "txHash",
+                "eventNumber",
+                "time"
+              ],
+              "properties": {
+                "amount": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "amountNotional": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "asset": {
+                  "type": "string"
+                },
+                "assetId": {
+                  "type": "integer",
+                  "format": "uint16",
+                  "minimum": 0
+                },
+                "eventNumber": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "time": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "txHash": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PaginatedResponse_UserFundingPayment": {
+        "type": "object",
+        "description": "paginated response wrapper with optional cursor for next page",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "user funding payment history",
+              "required": [
+                "symbol",
+                "marketId",
+                "fundingApplied",
+                "txHash",
+                "eventNumber",
+                "time"
+              ],
+              "properties": {
+                "eventNumber": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "fundingApplied": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "marketId": {
+                  "type": "integer",
+                  "format": "uint16",
+                  "minimum": 0
+                },
+                "symbol": {
+                  "type": "string"
+                },
+                "time": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "txHash": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PaginatedResponse_UserLiquidation": {
+        "type": "object",
+        "description": "paginated response wrapper with optional cursor for next page",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "symbol",
+                "liquidateeAddress",
+                "liquidatorAddress",
+                "marketId",
+                "markPrice",
+                "size",
+                "side",
+                "liquidatorReward",
+                "realizedPnl",
+                "txHash",
+                "eventNumber",
+                "time"
+              ],
+              "properties": {
+                "eventNumber": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "liquidateeAddress": {
+                  "type": "string"
+                },
+                "liquidatorAddress": {
+                  "type": "string"
+                },
+                "liquidatorReward": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "markPrice": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "marketId": {
+                  "type": "integer",
+                  "format": "uint16",
+                  "minimum": 0
+                },
+                "realizedPnl": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "side": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "symbol": {
+                  "type": "string"
+                },
+                "time": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "txHash": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PaginatedResponse_UserTrade": {
+        "type": "object",
+        "description": "paginated response wrapper with optional cursor for next page",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "symbol",
+                "id",
+                "orderId",
+                "side",
+                "price",
+                "qty",
+                "quoteQty",
+                "realizedPnl",
+                "commission",
+                "commissionAsset",
+                "time",
+                "positionSide",
+                "buyer",
+                "maker",
+                "address",
+                "txHash"
+              ],
+              "properties": {
+                "address": {
+                  "type": "string"
+                },
+                "buyer": {
+                  "type": "boolean"
+                },
+                "commission": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "commissionAsset": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "maker": {
+                  "type": "boolean"
+                },
+                "orderId": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "positionSide": {
+                  "type": "string"
+                },
+                "price": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "qty": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "quoteQty": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "realizedPnl": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "side": {
+                  "type": "string"
+                },
+                "symbol": {
+                  "type": "string"
+                },
+                "time": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "txHash": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PaginatedResponse_UserWithdrawal": {
+        "type": "object",
+        "description": "paginated response wrapper with optional cursor for next page",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "asset",
+                "assetId",
+                "amount",
+                "amountNotional",
+                "fee",
+                "txHash",
+                "eventNumber",
+                "time"
+              ],
+              "properties": {
+                "amount": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "amountNotional": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "asset": {
+                  "type": "string"
+                },
+                "assetId": {
+                  "type": "integer",
+                  "format": "uint16",
+                  "minimum": 0
+                },
+                "eventNumber": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "fee": {
+                  "type": "string",
+                  "format": "decimal"
+                },
+                "time": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "txHash": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "PingResponse": {
         "type": "object"
       },
@@ -3328,6 +3913,44 @@
             "type": "integer",
             "format": "uint64",
             "minimum": 0
+          },
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "txHash": {
+            "type": "string"
+          }
+        }
+      },
+      "UserFundingPayment": {
+        "type": "object",
+        "description": "user funding payment history",
+        "required": [
+          "symbol",
+          "marketId",
+          "fundingApplied",
+          "txHash",
+          "eventNumber",
+          "time"
+        ],
+        "properties": {
+          "eventNumber": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "fundingApplied": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "marketId": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0
+          },
+          "symbol": {
+            "type": "string"
           },
           "time": {
             "type": "integer",
