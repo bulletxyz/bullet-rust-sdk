@@ -636,7 +636,7 @@ async fn run_managed_ws(
                 }
             }
             Branch::Cmd(Some(WsCommand::Send(msg))) => {
-                if let Err(e) = ws.send(msg).await {
+                if let Err(e) = ws.send(msg.clone()).await {
                     warn!(?e, "failed to send order message, reconnecting");
                     if do_reconnect(
                         &client,
@@ -650,6 +650,12 @@ async fn run_managed_ws(
                     .await
                     {
                         return;
+                    }
+                    // Retry the message once on the new connection. If it fails
+                    // again the connection is still broken and do_reconnect will
+                    // run again on the next loop iteration.
+                    if let Err(e) = ws.send(msg).await {
+                        warn!(?e, "retry after reconnect also failed");
                     }
                     last_msg = Instant::now();
                 }
