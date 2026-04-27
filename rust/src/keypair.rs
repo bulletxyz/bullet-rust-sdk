@@ -51,31 +51,65 @@ impl Keypair {
         signature.to_bytes().to_vec()
     }
 
-    /// Get the 32-byte secret key.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        self.signing_key.to_bytes().to_vec()
-    }
-
-    /// Get the secret key as a lowercase hex string.
-    pub fn to_hex(&self) -> String {
-        hex::encode(self.to_bytes())
-    }
-
     /// Get the 32-byte public key.
     pub fn public_key(&self) -> Vec<u8> {
         self.signing_key.verifying_key().as_bytes().to_vec()
     }
 
-    /// Get the public key as hex string.
-    pub fn public_key_hex(&self) -> String {
+    /// The on-chain address (base58-encoded public key).
+    ///
+    /// This is the canonical address format used by the Bullet exchange.
+    /// For the hex-encoded raw public key, see [`address_hex`](Self::address_hex).
+    pub fn address(&self) -> String {
+        let pk_bytes: [u8; 32] = self.signing_key.verifying_key().to_bytes();
+        bullet_exchange_interface::address::Address(pk_bytes).to_string()
+    }
+
+    /// The public key as a hex string (32 bytes → 64 hex chars).
+    pub fn address_hex(&self) -> String {
         hex::encode(self.public_key())
+    }
+
+    /// Write to a Solana-compatible JSON keystore file.
+    ///
+    /// Format: a JSON array of 64 integers — the 32-byte secret key followed
+    /// by the 32-byte public key. Compatible with `solana-keygen` and Phantom.
+    pub fn write_to_file(&self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+        let secret = self.signing_key.to_bytes();
+        let public = self.signing_key.verifying_key().to_bytes();
+        let mut bytes = [0u8; 64];
+        bytes[..32].copy_from_slice(&secret);
+        bytes[32..].copy_from_slice(&public);
+        let json = serde_json::to_string(&bytes.as_slice())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(path, json)
+    }
+
+    /// Read a Solana-compatible JSON keystore file.
+    ///
+    /// Accepts either a 64-byte array (secret + public) or a 32-byte array
+    /// (secret only). Returns an error if the file is missing or malformed.
+    pub fn read_from_file(path: impl AsRef<std::path::Path>) -> std::io::Result<Self> {
+        let path = path.as_ref();
+        let data = std::fs::read_to_string(path)?;
+        let bytes: Vec<u8> = serde_json::from_str(&data)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        if bytes.len() < 32 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("keystore too short: {} bytes (need ≥32)", bytes.len()),
+            ));
+        }
+        let mut secret = [0u8; 32];
+        secret.copy_from_slice(&bytes[..32]);
+        Ok(Self::from_bytes(secret))
     }
 }
 
 impl std::fmt::Debug for Keypair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Keypair")
-            .field("public_key", &self.public_key_hex())
+            .field("address", &self.address())
             .finish_non_exhaustive()
     }
 }

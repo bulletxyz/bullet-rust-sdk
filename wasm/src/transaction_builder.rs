@@ -349,4 +349,30 @@ impl WasmTradingApi {
         let resp = self.inner.send_transaction(&tx.inner).await?;
         Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
+
+    /// Sign and submit a call message in one step.
+    ///
+    /// This is a convenience method that wraps `Transaction.builder().callMessage(msg).send(client)`
+    /// into a single call using the client's default keypair, max fee, and gas settings.
+    ///
+    /// @param {CallMessage} msg - A call message (e.g. from `User.placeOrders(...)`)
+    /// @returns {Promise<SubmitTxResponse>}
+    ///
+    /// @example
+    /// ```js
+    /// const order = new NewOrderArgs('50000.0', '0.1', Side.Bid, OrderType.Limit, false);
+    /// const resp = await client.sendCallMessage(User.placeOrders(0, [order], false));
+    /// ```
+    #[wasm_bindgen(js_name = sendCallMessage)]
+    pub async fn send_call_message(
+        &self,
+        msg: WasmCallMessage,
+    ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
+        let signed = RustTransaction::builder()
+            .call_message(msg.inner)
+            .client(&self.inner)
+            .build()?;
+        let resp = self.inner.send_transaction(&signed).await?;
+        Ok(crate::generated::WasmSubmitTxResponse(resp))
+    }
 }

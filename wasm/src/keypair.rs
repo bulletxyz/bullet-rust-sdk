@@ -35,28 +35,25 @@ impl WasmKeypair {
         })
     }
 
-    /// 32-byte secret key as `Uint8Array`.
-    #[wasm_bindgen(js_name = toBytes)]
-    pub fn to_bytes(&self) -> Vec<u8> {
-        self.inner.to_bytes()
-    }
-
-    /// Secret key as a lowercase hex string.
-    #[wasm_bindgen(js_name = toHex)]
-    pub fn to_hex(&self) -> String {
-        self.inner.to_hex()
-    }
-
     /// 32-byte public key as `Uint8Array`.
     #[wasm_bindgen(js_name = publicKey)]
     pub fn public_key(&self) -> Vec<u8> {
         self.inner.public_key()
     }
 
-    /// Public key as a lowercase hex string.
-    #[wasm_bindgen(js_name = publicKeyHex)]
-    pub fn public_key_hex(&self) -> String {
-        self.inner.public_key_hex()
+    /// The on-chain address (base58-encoded public key).
+    ///
+    /// This is the canonical address format used by the Bullet exchange.
+    /// @returns {string}
+    pub fn address(&self) -> String {
+        self.inner.address()
+    }
+
+    /// The public key as a lowercase hex string (64 chars).
+    /// @returns {string}
+    #[wasm_bindgen(js_name = addressHex)]
+    pub fn address_hex(&self) -> String {
+        self.inner.address_hex()
     }
 
     /// Sign `message` and return the 64-byte Ed25519 signature as `Uint8Array`.
