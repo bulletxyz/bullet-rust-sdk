@@ -152,6 +152,23 @@ ci:
 
     printf '\n\033[1;32m✓ All checks passed\033[0m\n'
 
+# ── Publish ───────────────────────────────────────────────────────────────────
+
+# Bump workspace version, build, and publish to npm (no git ops).
+# Level: patch | minor | major | rc | release
+#   - patch/minor/major: standard semver bumps
+#   - rc: 1.2.3 → 1.2.4-rc.0, 1.2.4-rc.0 → 1.2.4-rc.1 (preserves version line)
+#   - release: 1.2.4-rc.N → 1.2.4 (strip pre-release)
+publish-wasm level="patch":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo set-version --workspace --bump {{ level }}
+    V=$(cargo pkgid -p bullet-rust-sdk-wasm | cut -d@ -f2)
+    cd wasm && npm version "$V" --no-git-tag-version --allow-same-version && cd ..
+    just build-wasm
+    tag=$(echo "$V" | grep -q '-' && echo "rc" || echo "latest")
+    cd wasm && npm publish --tag "$tag" --access public
+
 # ── OpenAPI spec ──────────────────────────────────────────────────────────────
 
 # Fetch and cache the latest OpenAPI spec from mainnet

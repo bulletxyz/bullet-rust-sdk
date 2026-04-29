@@ -1,0 +1,84 @@
+# NPM publishing uses OIDC Trusted Publishers for authentication (no NPM_TOKEN needed).
+# Configure the Trusted Publisher at https://www.npmjs.com/package/@bulletxyz/sdk-wasm/access
+# See: https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
+
+name: NPM Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to build and publish from"
+        required: true
+        default: "main"
+        type: string
+      level:
+        description: "Release level"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - rc
+          - release
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+  CI: 1
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Create GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.BULLET_DEPLOY_APP_ID }}
+          private-key: ${{ secrets.BULLET_DEPLOY_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Configure git
+        env:
+          GITHUB_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config user.name "bullet-deploy[bot]"
+          git config user.email "${{ vars.BULLET_DEPLOY_APP_ID }}+bullet-deploy[bot]@users.noreply.github.com"
+          git config --global url."https://x-access-token:${GITHUB_APP_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Build
+        uses: ./.github/actions/build
+        with:
+          github-app-token: ${{ steps.app-token.outputs.token }}
+          setup-npm-registry: "true"
+
+      - name: Install cargo-edit
+        run: cargo binstall cargo-edit -y
+
+      - name: Bump + publish to npm
+        run: just publish-wasm ${{ inputs.level }}
+
+      - name: Commit, tag, and push
+        run: |
+          V=$(cargo pkgid -p bullet-rust-sdk-wasm | cut -d@ -f2)
+          git add Cargo.toml rust/Cargo.toml wasm/Cargo.toml wasm/package.json
+          git commit -m "v${V} [skip ci]"
+          git tag -m "v${V}" "v${V}"
+          git push --follow-tags

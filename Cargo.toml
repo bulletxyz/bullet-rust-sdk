@@ -2,6 +2,12 @@
 members = ["rust", "wasm"]
 resolver = "2"
 
+[workspace.package]
+version = "0.0.9"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/bulletxyz/bullet-rust-sdk"
+
 [workspace.dependencies]
 bon = "3.9.0"
 bullet-exchange-interface = { git = "https://github.com/bulletxyz/bullet-exchange-interface.git", rev = "7636c2d00c665002e7af858051568d33863389b6" }
