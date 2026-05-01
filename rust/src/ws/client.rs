@@ -524,8 +524,8 @@ impl WebsocketHandle {
         signed: &bullet_exchange_interface::transaction::Transaction,
         id: Option<RequestId>,
     ) -> SDKResult<(), WSErrors> {
-        let base64 = crate::Transaction::to_base64(signed)
-            .map_err(|e| WSErrors::WsError(e.to_string()))?;
+        let base64 =
+            crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
         self.order_place(base64, id).await
     }
 
@@ -551,8 +551,8 @@ impl WebsocketHandle {
         signed: &bullet_exchange_interface::transaction::Transaction,
         id: Option<RequestId>,
     ) -> SDKResult<(), WSErrors> {
-        let base64 = crate::Transaction::to_base64(signed)
-            .map_err(|e| WSErrors::WsError(e.to_string()))?;
+        let base64 =
+            crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
         self.order_cancel(base64, id).await
     }
 }

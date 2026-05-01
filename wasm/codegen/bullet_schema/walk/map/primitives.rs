@@ -7,6 +7,7 @@ use super::ParamMapping;
 pub fn map_primitive(prim: &Primitive) -> ParamMapping {
     let (param_type, conversion) = match prim {
         Primitive::Bool => ("bool", "{v}"),
+        Primitive::ByteVec => ("Vec<u8>", "{v}"),
         Primitive::U8 => ("u8", "{v}"),
         Primitive::U16 => ("u16", "{v}"),
         Primitive::U32 => ("u32", "{v}"),
@@ -29,8 +30,19 @@ pub fn map_immediate(prim: &sov_universal_wallet::schema::Primitive) -> ParamMap
     use sov_universal_wallet::schema::Primitive as P;
     use sov_universal_wallet::ty::IntegerType;
 
+    if let P::ByteArray { len, .. } = prim {
+        return ParamMapping {
+            param_type: "Vec<u8>".into(),
+            conversion: format!(
+                "{{v}}.try_into().map_err(|v: Vec<u8>| format!(\"expected {len}-byte array, got {{}}\", v.len()))?"
+            ),
+            is_optional: false,
+        };
+    }
+
     let (param_type, conversion) = match prim {
         P::Boolean => ("bool", "{v}"),
+        P::ByteVec { .. } => ("Vec<u8>", "{v}"),
         P::String => ("&str", "{v}.into()"),
         P::Integer(IntegerType::u8, _) => ("u8", "{v}"),
         P::Integer(IntegerType::u16, _) => ("u16", "{v}"),

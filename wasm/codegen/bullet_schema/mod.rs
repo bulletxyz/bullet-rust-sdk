@@ -261,6 +261,7 @@ pub(crate) struct FieldInfo {
 #[derive(Debug, Clone)]
 pub(crate) enum Primitive {
     Bool,
+    ByteVec,
     U8,
     U16,
     U32,
