@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.dependencies]
 bon = "3.9.0"
-bullet-exchange-interface = { git = "https://github.com/bulletxyz/bullet-exchange-interface.git", rev = "7636c2d00c665002e7af858051568d33863389b6" }
+bullet-exchange-interface = { git = "https://github.com/bulletxyz/bullet-exchange-interface.git", rev = "8074f2657a61ae582fd0c66313076b7110bf6e55", features = ["schema"] }
 # Optimize WASM binary size without affecting the rust crate
 [profile.release]
 lto = true
@@ -12,4 +12,3 @@ lto = true
 [profile.release.package.bullet-rust-sdk-wasm]
 opt-level = "z"
 codegen-units = 1
-

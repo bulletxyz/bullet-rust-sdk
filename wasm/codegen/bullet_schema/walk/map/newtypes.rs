@@ -9,17 +9,17 @@ use super::ParamMapping;
 /// Try to map a known newtype index. Returns `None` if the index is not a known newtype.
 pub fn try_map_newtype(idx: usize) -> Option<ParamMapping> {
     let (param_type, conversion) = match idx {
-        9 => ("u16", "AssetId({v})"),                           // AssetId(u16)
-        10 => ("&str", "parse_dec({v})?"),                      // PositiveDecimal
-        11 => ("&str", "parse_surrogate_dec({v})?"),            // SurrogateDecimal
-        22 => ("&str", "parse_addr({v})?"),                     // Address(Base58)
-        25 => ("u16", "MarketId({v})"),                         // MarketId(u16)
-        33 => ("u64", "ClientOrderId({v})"),                    // ClientOrderId(u64)
-        45 => ("u64", "OrderId({v})"),                          // OrderId(u64)
-        57 => ("u64", "TriggerOrderId({v})"),                   // TriggerOrderId(u64)
-        61 => ("u64", "TwapId({v})"),                           // TwapId(u64)
-        94 => ("i64", "UnixTimestampMicros::from_micros({v})"), // UnixTimestampMicros(i64)
-        147 => ("&str", "TokenId::from_str({v}).unwrap()"),     // TokenId(CustomString)
+        7 => ("&str", "parse_addr({v})?"),           // Address(Base58)
+        15 => ("u16", "AssetId({v})"),               // AssetId(u16)
+        16 => ("&str", "parse_dec({v})?"),           // PositiveDecimal
+        17 => ("&str", "parse_surrogate_dec({v})?"), // SurrogateDecimal
+        30 => ("u16", "MarketId({v})"),              // MarketId(u16)
+        40 => ("i64", "UnixTimestampMicros::from_micros({v})"), // UnixTimestampMicros(i64)
+        47 => ("u64", "ClientOrderId({v})"),         // ClientOrderId(u64)
+        59 => ("u64", "OrderId({v})"),               // OrderId(u64)
+        71 => ("u64", "TriggerOrderId({v})"),        // TriggerOrderId(u64)
+        75 => ("u64", "TwapId({v})"),                // TwapId(u64)
+        168 => ("&str", "TokenId::from_str({v}).unwrap()"), // TokenId(CustomString)
         _ => return None,
     };
 

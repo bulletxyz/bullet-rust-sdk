@@ -90,9 +90,7 @@ impl ExchangeMetadata {
     }
 
     pub(crate) fn market_id(&self, symbol: &str) -> Option<MarketId> {
-        self.by_name
-            .get(symbol)
-            .map(|&i| self.symbols[i].market_id)
+        self.by_name.get(symbol).map(|&i| self.symbols[i].market_id)
     }
 
     pub(crate) fn symbol_info_by_name(&self, symbol: &str) -> Option<&SymbolInfo> {

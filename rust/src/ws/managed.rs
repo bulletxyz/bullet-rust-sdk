@@ -225,7 +225,10 @@ impl ManagedWebsocket {
     /// let mut ws = ManagedWebsocket::connect(&client).call().await?;
     /// ws.subscribe([Topic::agg_trade("BTC-USD")], None)?;
     /// ```
-    #[cfg_attr(not(target_arch = "wasm32"), doc = "Uses [`tokio::spawn`] on native targets.")]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        doc = "Uses [`tokio::spawn`] on native targets."
+    )]
     #[cfg_attr(
         target_arch = "wasm32",
         doc = "Uses [`wasm_bindgen_futures::spawn_local`] on wasm targets."
@@ -239,7 +242,6 @@ impl ManagedWebsocket {
         client: &Client,
         config: ManagedWsConfig,
     ) -> Result<ManagedWebsocket, WSErrors> {
-
         let ws = client
             .connect_ws()
             .maybe_config(config.ws_config.clone())
@@ -353,8 +355,8 @@ impl ManagedWebsocket {
         signed: &bullet_exchange_interface::transaction::Transaction,
         id: Option<RequestId>,
     ) -> Result<(), WSErrors> {
-        let base64 = crate::Transaction::to_base64(signed)
-            .map_err(|e| WSErrors::WsError(e.to_string()))?;
+        let base64 =
+            crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
         self.order_place(base64, id)
             .map_err(|e| WSErrors::WsError(e.to_string()))
     }
@@ -367,8 +369,8 @@ impl ManagedWebsocket {
         signed: &bullet_exchange_interface::transaction::Transaction,
         id: Option<RequestId>,
     ) -> Result<(), WSErrors> {
-        let base64 = crate::Transaction::to_base64(signed)
-            .map_err(|e| WSErrors::WsError(e.to_string()))?;
+        let base64 =
+            crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
         self.order_cancel(base64, id)
             .map_err(|e| WSErrors::WsError(e.to_string()))
     }
@@ -436,7 +438,10 @@ impl ManagedWsClient {
         }
     }
 
-    async fn connect(&self, ws_config: &Option<WebsocketConfig>) -> Result<WebsocketHandle, WSErrors> {
+    async fn connect(
+        &self,
+        ws_config: &Option<WebsocketConfig>,
+    ) -> Result<WebsocketHandle, WSErrors> {
         let timeout = ws_config
             .as_ref()
             .map(|c| c.connection_timeout)
@@ -615,8 +620,12 @@ async fn run_managed_ws(
                     .collect();
                 if new_params.is_empty() {
                     debug!("subscribe: all topics already active, skipping wire send");
-                } else if let Err(e) =
-                    ws.send(ClientMessage::Subscribe { id, params: new_params }).await
+                } else if let Err(e) = ws
+                    .send(ClientMessage::Subscribe {
+                        id,
+                        params: new_params,
+                    })
+                    .await
                 {
                     debug!(?e, "subscribe send failed, will replay after reconnect");
                 }
@@ -629,8 +638,12 @@ async fn run_managed_ws(
                     .collect();
                 if to_send.is_empty() {
                     debug!("unsubscribe: no matching active topics, skipping wire send");
-                } else if let Err(e) =
-                    ws.send(ClientMessage::Unsubscribe { id, params: to_send }).await
+                } else if let Err(e) = ws
+                    .send(ClientMessage::Unsubscribe {
+                        id,
+                        params: to_send,
+                    })
+                    .await
                 {
                     debug!(?e, "unsubscribe send failed");
                 }

@@ -23,10 +23,10 @@ pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
     let call_message_enum = types
         .iter()
         .find_map(|ty| match ty {
-            Ty::Enum(e) if e.type_name == "CallMessage" => Some(e),
+            Ty::Enum(e) if is_exchange_call_message(e) => Some(e),
             _ => None,
         })
-        .expect("CallMessage enum not found in schema");
+        .expect("exchange CallMessage enum not found in schema");
 
     call_message_enum
         .variants
@@ -78,6 +78,15 @@ pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
             })
         })
         .collect()
+}
+
+fn is_exchange_call_message(
+    enum_ty: &sov_universal_wallet::ty::Enum<sov_universal_wallet::schema::IndexLinking>,
+) -> bool {
+    enum_ty.type_name == "CallMessage"
+        && ["User", "Vault", "Keeper", "Public", "Admin"]
+            .iter()
+            .all(|name| enum_ty.variants.iter().any(|variant| variant.name == *name))
 }
 
 fn extract_variant(

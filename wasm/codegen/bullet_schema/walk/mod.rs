@@ -120,6 +120,7 @@ fn convert_primitive(prim: &sov_universal_wallet::schema::Primitive) -> Primitiv
     use sov_universal_wallet::ty::IntegerType;
     match prim {
         P::Boolean => Primitive::Bool,
+        P::ByteVec { .. } => Primitive::ByteVec,
         P::String => Primitive::String,
         P::Integer(IntegerType::u8, _) => Primitive::U8,
         P::Integer(IntegerType::u16, _) => Primitive::U16,

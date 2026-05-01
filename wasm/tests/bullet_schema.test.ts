@@ -22,7 +22,7 @@ import {
   NewTriggerOrderArgs, NewTwapOrderArgs,
   TpslPair, Tpsl, PendingTpslPair,
   UpdateVaultConfigArgs,
-  OraclePriceUpdateArgs, MarkPriceUpdateArgs,
+  OraclePriceUpdateArgs, OraclePriceUpdateWithPythProofArgs, MarkPriceUpdateArgs,
   BackstopLiquidatePerpPositionArgs,
   // Enums
   Side, OrderType, TriggerDirection, TriggerPriceCondition,
@@ -72,6 +72,7 @@ describe('namespace modules exist', () => {
 
   test('Keeper namespace has keeper methods', () => {
     expect(typeof Keeper.updateOraclePrices).toBe('function');
+    expect(typeof Keeper.updateOraclePricesWithPythProofs).toBe('function');
     expect(typeof Keeper.updateMarkPrices).toBe('function');
     expect(typeof Keeper.updateFunding).toBe('function');
     expect(typeof Keeper.updateUserFeeTier).toBe('function');
@@ -287,6 +288,15 @@ describe('struct wrapper constructors', () => {
     expect(update).toBeDefined();
   });
 
+  test('OraclePriceUpdateWithPythProofArgs', () => {
+    const update = new OraclePriceUpdateWithPythProofArgs(
+      0,
+      new Uint8Array([1, 2, 3]),
+      new Uint8Array([4, 5, 6]),
+    );
+    expect(update).toBeDefined();
+  });
+
   test('MarkPriceUpdateArgs', () => {
     const update = new MarkPriceUpdateArgs(0, '50000.0', '0.001');
     expect(update).toBeDefined();
@@ -351,6 +361,18 @@ describe('array params with struct wrappers', () => {
     expect(msg).toBeDefined();
   });
 
+  test('Keeper.updateOraclePricesWithPythProofs — array of proof args', () => {
+    const p = new OraclePriceUpdateWithPythProofArgs(
+      0,
+      new Uint8Array([1, 2, 3]),
+    );
+    const msg = Keeper.updateOraclePricesWithPythProofs(
+      [p],
+      BigInt(Date.now()) * 1000n,
+    );
+    expect(msg).toBeDefined();
+  });
+
   test('Keeper.updateMarkPrices — array of MarkPriceUpdateArgs', () => {
     const m = new MarkPriceUpdateArgs(0, '50000.0', '0.001');
     const msg = Keeper.updateMarkPrices([m], BigInt(Date.now()) * 1000n);
@@ -409,5 +431,4 @@ describe('no name collisions across namespaces', () => {
     expect(adminMsg).toBeDefined();
   });
 });
-
 
