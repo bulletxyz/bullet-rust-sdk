@@ -54,8 +54,9 @@ test-doc:
 test-integration endpoint="https://tradingapi.bullet.xyz":
     BULLET_API_ENDPOINT={{ endpoint }} cargo nextest run --features integration
 
-# Run WASM Jest tests (requires build-wasm-node first)
+# Run WASM Jest tests (requires build-wasm first)
 test-wasm:
+    if [ ! -x wasm/node_modules/.bin/jest ]; then cd wasm && corepack pnpm install --frozen-lockfile; fi
     cd wasm && npm test
 
 # Run all tests (Rust unit + doc + WASM)
@@ -91,7 +92,7 @@ example-node: build-wasm
 
 # Run the Deno WASM example
 example-deno: build-wasm
-    cd examples/deno && deno task start
+    cd examples/deno && (command -v deno >/dev/null 2>&1 && deno task start || npx --yes deno task start)
 
 # Run the web WASM example (Next.js)
 example-web: build-wasm
@@ -103,7 +104,7 @@ test-example-node: build-wasm
 
 # Run Deno WASM example tests
 test-example-deno: build-wasm
-    cd examples/deno && deno task test
+    cd examples/deno && (command -v deno >/dev/null 2>&1 && deno task test || npx --yes deno task test)
 
 # Run all example tests (Node + Deno)
 test-examples: test-example-node test-example-deno
@@ -114,41 +115,49 @@ test-examples: test-example-node test-example-deno
 ci:
     #!/usr/bin/env bash
     set -euo pipefail
+    export npm_config_cache="${TMPDIR:-/tmp}/bullet-rust-sdk-npm-cache"
 
     step() { printf '\n\033[1;34m══ %s\033[0m\n' "$1"; }
+    run_deno() {
+        if command -v deno >/dev/null 2>&1; then
+            deno "$@"
+        else
+            npx --yes deno "$@"
+        fi
+    }
 
     step "Rust: format check"
-    cargo fmt -- --check
+    just fmt-check
 
     step "Rust: clippy"
-    cargo clippy --all-targets -- -D warnings
+    just lint
 
     step "Rust: build"
-    cargo build
+    just build
 
     step "Rust: unit tests"
-    cargo nextest run
+    just test
 
     step "Rust: doc tests"
-    cargo test --doc
+    just test-doc
 
     step "WASM: build"
     just build-wasm
 
     step "WASM: Jest tests"
-    cd wasm && npm test && cd ..
+    just test-wasm
 
     step "Examples: install"
-    cd examples && npm install && cd ..
+    (cd examples && npm ci --install-links)
 
     step "Examples: Node.js tests"
-    cd examples/node && npm test && cd ../..
+    (cd examples/node && npm test)
 
     step "Examples: Deno tests"
-    cd examples/deno && deno task test && cd ../..
+    (cd examples/deno && run_deno task test)
 
     step "Examples: Next.js build"
-    cd examples/web && npm install --install-links && npx next build && cd ../..
+    (cd examples/web && npx next build)
 
     printf '\n\033[1;32m✓ All checks passed\033[0m\n'
 

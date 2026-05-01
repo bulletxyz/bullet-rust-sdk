@@ -21,8 +21,15 @@ await init();
 const ENDPOINT =
   Deno.env.get("BULLET_API_ENDPOINT") ?? "https://tradingapi.bullet.xyz";
 
+async function connectForUserActions(actions: string[]) {
+  return Client.builder()
+    .network(ENDPOINT)
+    .userActions(actions)
+    .build();
+}
+
 Deno.test("REST API — connects and fetches exchange info", async () => {
-  const client = await Client.connect(ENDPOINT);
+  const client = await connectForUserActions([]);
   const info = await client.exchangeInfo();
 
   assertEquals(Array.isArray(info.symbols), true);
@@ -32,7 +39,7 @@ Deno.test("REST API — connects and fetches exchange info", async () => {
 });
 
 Deno.test("REST API — fetches ticker price", async () => {
-  const client = await Client.connect(ENDPOINT);
+  const client = await connectForUserActions([]);
   const info = await client.exchangeInfo();
   const symbol = info.symbols[0].symbol;
   const [ticker] = await client.tickerPrice(symbol);
@@ -42,7 +49,7 @@ Deno.test("REST API — fetches ticker price", async () => {
 });
 
 Deno.test("Transaction — constructs and signs via builder", async () => {
-  const client = await Client.connect(ENDPOINT);
+  const client = await connectForUserActions(["PlaceOrders"]);
 
   const order = new NewOrderArgs(
     "50000.0",
@@ -66,7 +73,7 @@ Deno.test("Transaction — constructs and signs via builder", async () => {
 
 Deno.test("Keypair — hex round-trip", () => {
   const kp = Keypair.generate();
-  const hex = kp.publicKeyHex();
+  const hex = kp.addressHex();
   assertEquals(typeof hex, "string");
   assertEquals(hex.length, 64);
 });

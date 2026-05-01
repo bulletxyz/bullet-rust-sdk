@@ -225,7 +225,10 @@ impl ManagedWebsocket {
     /// let mut ws = ManagedWebsocket::connect(&client).call().await?;
     /// ws.subscribe([Topic::agg_trade("BTC-USD")], None)?;
     /// ```
-    #[cfg_attr(not(target_arch = "wasm32"), doc = "Uses [`tokio::spawn`] on native targets.")]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        doc = "Uses [`tokio::spawn`] on native targets."
+    )]
     #[cfg_attr(
         target_arch = "wasm32",
         doc = "Uses [`wasm_bindgen_futures::spawn_local`] on wasm targets."
@@ -239,7 +242,11 @@ impl ManagedWebsocket {
         client: &Client,
         config: ManagedWsConfig,
     ) -> Result<ManagedWebsocket, WSErrors> {
-        let ws = client.connect_ws().maybe_config(config.ws_config.clone()).call().await?;
+        let ws = client
+            .connect_ws()
+            .maybe_config(config.ws_config.clone())
+            .call()
+            .await?;
 
         let (event_tx, event_rx) = mpsc::channel(config.channel_capacity);
         let (cmd_tx, cmd_rx) = mpsc::channel(CMD_CHANNEL_CAPACITY);
@@ -251,7 +258,11 @@ impl ManagedWebsocket {
             run_managed_ws(inner, ws, config, event_tx, cmd_rx, shutdown_rx).await;
         });
 
-        Ok(ManagedWebsocket { event_rx, cmd_tx, _shutdown_tx: shutdown_tx })
+        Ok(ManagedWebsocket {
+            event_rx,
+            cmd_tx,
+            _shutdown_tx: shutdown_tx,
+        })
     }
 
     /// Receive the next event from the WebSocket.
@@ -346,7 +357,8 @@ impl ManagedWebsocket {
     ) -> Result<(), WSErrors> {
         let base64 =
             crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
-        self.order_place(base64, id).map_err(|e| WSErrors::WsError(e.to_string()))
+        self.order_place(base64, id)
+            .map_err(|e| WSErrors::WsError(e.to_string()))
     }
 
     /// Cancel an order using a signed [`Transaction`]. Base64-encodes internally.
@@ -359,7 +371,8 @@ impl ManagedWebsocket {
     ) -> Result<(), WSErrors> {
         let base64 =
             crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
-        self.order_cancel(base64, id).map_err(|e| WSErrors::WsError(e.to_string()))
+        self.order_cancel(base64, id)
+            .map_err(|e| WSErrors::WsError(e.to_string()))
     }
 
     /// Stop the managed WebSocket and its background task.
@@ -376,8 +389,13 @@ impl ManagedWebsocket {
         // `Sender::clone` is an Arc bump, so try_send (which needs &mut self)
         // can be called without requiring `&mut self` on the public API.
         let mut tx = self.cmd_tx.clone();
-        tx.try_send(cmd)
-            .map_err(|e| if e.is_full() { ManagedWsError::Busy } else { ManagedWsError::Stopped })
+        tx.try_send(cmd).map_err(|e| {
+            if e.is_full() {
+                ManagedWsError::Busy
+            } else {
+                ManagedWsError::Stopped
+            }
+        })
     }
 }
 
@@ -414,7 +432,10 @@ struct ManagedWsClient {
 
 impl ManagedWsClient {
     fn from_client(client: &Client) -> Self {
-        Self { ws_client: client.ws_client.clone(), ws_url: client.ws_url().to_string() }
+        Self {
+            ws_client: client.ws_client.clone(),
+            ws_url: client.ws_url().to_string(),
+        }
     }
 
     async fn connect(
@@ -570,7 +591,10 @@ async fn run_managed_ws(
             }
             Branch::Idle => {
                 let elapsed = last_msg.elapsed();
-                warn!(?elapsed, "no server messages within idle timeout, forcing reconnect");
+                warn!(
+                    ?elapsed,
+                    "no server messages within idle timeout, forcing reconnect"
+                );
                 if do_reconnect(
                     &client,
                     &config,
@@ -590,24 +614,36 @@ async fn run_managed_ws(
                 // Dedup: only send for topics we aren't already subscribed to.
                 // The server may reject duplicates with an unhelpful error, and
                 // the topic set is the source of truth for replay.
-                let new_params: Vec<String> =
-                    params.into_iter().filter(|p| active_topics.insert(p.clone())).collect();
+                let new_params: Vec<String> = params
+                    .into_iter()
+                    .filter(|p| active_topics.insert(p.clone()))
+                    .collect();
                 if new_params.is_empty() {
                     debug!("subscribe: all topics already active, skipping wire send");
-                } else if let Err(e) =
-                    ws.send(ClientMessage::Subscribe { id, params: new_params }).await
+                } else if let Err(e) = ws
+                    .send(ClientMessage::Subscribe {
+                        id,
+                        params: new_params,
+                    })
+                    .await
                 {
                     debug!(?e, "subscribe send failed, will replay after reconnect");
                 }
             }
             Branch::Cmd(Some(WsCommand::Unsubscribe(params, id))) => {
                 // Dedup: only send for topics we're actually subscribed to.
-                let to_send: Vec<String> =
-                    params.into_iter().filter(|p| active_topics.remove(p)).collect();
+                let to_send: Vec<String> = params
+                    .into_iter()
+                    .filter(|p| active_topics.remove(p))
+                    .collect();
                 if to_send.is_empty() {
                     debug!("unsubscribe: no matching active topics, skipping wire send");
-                } else if let Err(e) =
-                    ws.send(ClientMessage::Unsubscribe { id, params: to_send }).await
+                } else if let Err(e) = ws
+                    .send(ClientMessage::Unsubscribe {
+                        id,
+                        params: to_send,
+                    })
+                    .await
                 {
                     debug!(?e, "unsubscribe send failed");
                 }

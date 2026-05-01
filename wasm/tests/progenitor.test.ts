@@ -27,9 +27,7 @@ import {
   LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
   ReadinessStatus,
 } from '../pkg/node';
-
-const ENDPOINT =
-  process.env.BULLET_API_ENDPOINT ?? 'https://tradingapi.bullet.xyz';
+import { connectReadOnlyClient } from './helpers';
 
 jest.setTimeout(30_000);
 
@@ -128,7 +126,7 @@ describe('struct getters via live API', () => {
   let client: any;
 
   beforeAll(async () => {
-    client = await Client.connect(ENDPOINT);
+    client = await connectReadOnlyClient();
   });
 
   test('ping returns PingResponse with toJSON', async () => {

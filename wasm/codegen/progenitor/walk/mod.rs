@@ -7,10 +7,10 @@
 //!
 //! # Adding new type support
 //!
-//! 1. If it's a structural type that changes codegen shape (like `Option`, `Vec`),
-//!    add a variant to `RustType` and handle it in `utils::parse_rust_type`.
-//! 2. Otherwise, it falls through to `Named { name, args }` automatically.
-//!    Handle it in `emit/type_map.rs` by matching on the name.
+//! 1. If it's a structural type that changes codegen shape (like `Option`, `Vec`), add a variant to
+//!    `RustType` and handle it in `utils::parse_rust_type`.
+//! 2. Otherwise, it falls through to `Named { name, args }` automatically. Handle it in
+//!    `emit/type_map.rs` by matching on the name.
 
 mod extractions;
 mod utils;
@@ -18,11 +18,11 @@ mod utils;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use extractions::{extract_enum, extract_impl, extract_struct};
 use syn::Item;
+use utils::impl_target_name;
 
 use super::{CodeModel, TypeInfo};
-use extractions::{extract_enum, extract_impl, extract_struct};
-use utils::impl_target_name;
 
 // ── Entry Point ──────────────────────────────────────────────────────────────
 
