@@ -9,22 +9,22 @@ importers:
   .:
     devDependencies:
       '@jest/globals':
-        specifier: ^30.3.0
+        specifier: 30.3.0
         version: 30.3.0
       '@types/jest':
-        specifier: ^30.0.0
+        specifier: 30.0.0
         version: 30.0.0
       '@types/node':
-        specifier: ^25.5.0
+        specifier: 25.5.0
         version: 25.5.0
       jest:
-        specifier: ^29.0.0
+        specifier: 29.7.0
         version: 29.7.0(@types/node@25.5.0)
       ts-jest:
-        specifier: ^29.4.6
+        specifier: 29.4.6
         version: 29.4.6(@babel/core@7.29.0)(@jest/transform@30.3.0)(@jest/types@30.3.0)(babel-jest@29.7.0(@babel/core@7.29.0))(jest-util@30.3.0)(jest@29.7.0(@types/node@25.5.0))(typescript@5.9.3)
       typescript:
-        specifier: ^5.9.3
+        specifier: 5.9.3
         version: 5.9.3
 
 packages:
