@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices"],
+  "vulnerabilityAlerts": {
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "description": "Group cargo patch updates and automerge — patches are non-breaking under Cargo's left-most-non-zero rule",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "rust-crate-deps-patches",
+      "minimumReleaseAge": "7 days",
+      "internalChecksFilter": "strict",
+      "automerge": true
+    },
+    {
+      "description": "Group cargo minor/major bumps for weekly manual review — 0.x minor is breaking in Cargo so eyes are required",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["minor", "major"],
+      "groupName": "rust-crate-deps-bumps",
+      "schedule": ["before 8am on monday"],
+      "minimumReleaseAge": "7 days",
+      "internalChecksFilter": "strict",
+      "automerge": false
+    },
+    {
+      "description": "Group GitHub Actions digest/patch updates and automerge when CI passes",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "digest"],
+      "groupName": "github-actions-deps",
+      "minimumReleaseAge": "7 days",
+      "internalChecksFilter": "strict",
+      "automerge": true
+    }
+  ]
+}
