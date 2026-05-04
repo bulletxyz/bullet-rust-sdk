@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+
+jobs:
+  test:
+    name: Test (rust crate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      # Scope to bullet-rust-sdk only — bullet-rust-sdk-wasm has its own
+      # build pipeline (npm publish workflow) and is not crates.io-bound.
+      - run: cargo fmt --package bullet-rust-sdk -- --check
+      - run: cargo clippy --package bullet-rust-sdk --all-targets --all-features -- -D warnings
+      - run: cargo test --package bullet-rust-sdk --all-features

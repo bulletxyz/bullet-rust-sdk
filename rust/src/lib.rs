@@ -104,9 +104,8 @@ pub mod types {
     >;
 
     /// User-facing trading action (placing orders, withdrawals, etc.).
-    pub type UserAction = bullet_exchange_interface::message::UserAction<
-        bullet_exchange_interface::address::Address,
-    >;
+    pub type UserAction =
+        bullet_exchange_interface::message::UserAction<bullet_exchange_interface::address::Address>;
 
     /// Permissionless action anyone can call (e.g. `ApplyFunding`).
     pub type PublicAction = bullet_exchange_interface::message::PublicAction<

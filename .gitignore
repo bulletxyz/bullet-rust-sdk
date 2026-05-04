@@ -1,5 +1,6 @@
 target/
-Cargo.lock
 node_modules/
 .direnv
 wasm/pkg/
+.claude/settings.local.json
+.claude/worktrees/

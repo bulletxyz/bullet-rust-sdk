@@ -5,6 +5,7 @@ edition = "2024"
 license = "MIT"
 description = "WebAssembly bindings for the Bullet trading SDK"
 repository = "https://github.com/bulletxyz/bullet-rust-sdk"
+publish = false # ships to npm as @bulletxyz/sdk-wasm, not crates.io
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -29,8 +30,8 @@ bon.workspace        = true
 getrandom = { version = "0.2", features = ["js"] }
 
 [build-dependencies]
-bullet-exchange-interface.workspace = true
-sov-universal-wallet = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", rev = "1c0d743b302b0101d67b6aaef64f8ed3c8004965", features = ["serde"] }
+bullet-exchange-interface = { workspace = true, features = ["schema"] }
+sov-universal-wallet = { version = "0.3", features = ["serde"] }
 heck = "0.5"
 quote = "1"
 proc-macro2 = "1"
