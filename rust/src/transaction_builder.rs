@@ -117,11 +117,7 @@ impl UnsignedTransaction {
         };
 
         Ok(UnsignedTransaction {
-            inner: RawUnsignedTransaction {
-                runtime_call,
-                uniqueness,
-                details,
-            },
+            inner: RawUnsignedTransaction { runtime_call, uniqueness, details },
             chain_hash: client.chain_hash(),
         })
     }
@@ -163,9 +159,7 @@ impl Transaction {
         signer: Option<&Keypair>,
         client: &Client,
     ) -> SDKResult<SignedTransaction> {
-        let signer = signer
-            .or_else(|| client.keypair())
-            .ok_or(SDKError::MissingKeypair)?;
+        let signer = signer.or_else(|| client.keypair()).ok_or(SDKError::MissingKeypair)?;
 
         let max_fee = max_fee.unwrap_or_else(|| client.max_fee().0);
         let priority_fee_bips =
@@ -202,18 +196,8 @@ impl Transaction {
         signature: [u8; 64],
         pub_key: [u8; 32],
     ) -> SignedTransaction {
-        let RawUnsignedTransaction {
-            runtime_call,
-            uniqueness,
-            details,
-        } = tx.inner;
-        SignedTransaction::V0(Version0 {
-            runtime_call,
-            uniqueness,
-            details,
-            pub_key,
-            signature,
-        })
+        let RawUnsignedTransaction { runtime_call, uniqueness, details } = tx.inner;
+        SignedTransaction::V0(Version0 { runtime_call, uniqueness, details, pub_key, signature })
     }
 
     /// Borsh-serialize a signed transaction to bytes.
@@ -246,7 +230,8 @@ impl Client {
                 let inner = response.into_inner();
                 if inner.message.contains("Invalid signature") {
                     self.update_schema().await?;
-                    // indicate that a the transaction must be re-signed and can not be simply retried
+                    // indicate that a the transaction must be re-signed and can not be simply
+                    // retried
                     return Err(SDKError::TransactionOutdated);
                 }
                 Err(SDKError::ApiError(inner))
@@ -261,11 +246,12 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bullet_exchange_interface::message::PublicAction;
     use bullet_exchange_interface::transaction::{
         Amount, PriorityFeeBips, RuntimeCall, TxDetails, UniquenessData,
     };
+
+    use super::*;
 
     fn test_unsigned_tx() -> UnsignedTransaction {
         let inner = RawUnsignedTransaction {
@@ -280,10 +266,7 @@ mod tests {
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
         };
-        UnsignedTransaction {
-            inner,
-            chain_hash: [42u8; 32],
-        }
+        UnsignedTransaction { inner, chain_hash: [42u8; 32] }
     }
 
     #[test]
@@ -366,9 +349,10 @@ mod tests {
 
     #[cfg(feature = "integration")]
     mod integration {
+        use bullet_exchange_interface::message::PublicAction;
+
         use super::*;
         use crate::Network;
-        use bullet_exchange_interface::message::PublicAction;
 
         #[tokio::test]
         async fn test_builder_build() {
@@ -376,11 +360,8 @@ mod tests {
                 .map(|e| Network::from(e.as_str()))
                 .unwrap_or(Network::Mainnet);
 
-            let client = Client::builder()
-                .network(network)
-                .build()
-                .await
-                .expect("could not connect");
+            let client =
+                Client::builder().network(network).build().await.expect("could not connect");
             let keypair = Keypair::generate();
 
             let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });

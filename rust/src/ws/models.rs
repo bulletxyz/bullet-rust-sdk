@@ -9,11 +9,12 @@
 //! IMPORTANT: When new message types are added to the server, they must be manually
 //! added to the `ServerMessage` enum below.
 
+use serde::{Deserialize, Serialize};
+
 use crate::types::{
     AggTradeMessage, BookTickerMessage, DepthUpdate, ErrorMessage, ForceOrderMessage,
     MarkPriceMessage, OrderUpdateMessage, PongMessage, RequestId, StatusMessage,
 };
-use serde::{Deserialize, Serialize};
 
 /// Result message for subscribe/unsubscribe success
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -80,10 +81,7 @@ pub enum ServerMessage {
 impl ServerMessage {
     /// Returns true if this is an error message
     pub fn is_error(&self) -> bool {
-        matches!(
-            self,
-            ServerMessage::Tagged(TaggedMessage::Error(_)) | ServerMessage::Error(_)
-        )
+        matches!(self, ServerMessage::Tagged(TaggedMessage::Error(_)) | ServerMessage::Error(_))
     }
 
     /// Returns the request ID if present
@@ -283,10 +281,7 @@ mod tests {
         }"#;
 
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(
-            msg,
-            ServerMessage::Tagged(TaggedMessage::Status(_))
-        ));
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::Status(_))));
 
         if let ServerMessage::Tagged(TaggedMessage::Status(s)) = msg {
             assert_eq!(s.status, "connected");
@@ -353,10 +348,7 @@ mod tests {
         }"#;
 
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(
-            msg,
-            ServerMessage::Tagged(TaggedMessage::Subscribe(_))
-        ));
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::Subscribe(_))));
         assert_eq!(msg.request_id(), Some(RequestId::from(5)));
 
         if let ServerMessage::Tagged(TaggedMessage::Subscribe(s)) = msg {
@@ -374,10 +366,7 @@ mod tests {
         }"#;
 
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(
-            msg,
-            ServerMessage::Tagged(TaggedMessage::Unsubscribe(_))
-        ));
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::Unsubscribe(_))));
         assert_eq!(msg.request_id(), Some(RequestId::from(6)));
     }
 
@@ -391,10 +380,7 @@ mod tests {
         }"#;
 
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(
-            msg,
-            ServerMessage::Tagged(TaggedMessage::ListSubscriptions(_))
-        ));
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::ListSubscriptions(_))));
 
         if let ServerMessage::Tagged(TaggedMessage::ListSubscriptions(l)) = msg {
             assert_eq!(l.result.len(), 2);
