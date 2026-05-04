@@ -1,5 +1,9 @@
 # Bullet Rust SDK
 
+[![Crates.io](https://img.shields.io/crates/v/bullet-rust-sdk.svg)](https://crates.io/crates/bullet-rust-sdk)
+[![Documentation](https://docs.rs/bullet-rust-sdk/badge.svg)](https://docs.rs/bullet-rust-sdk)
+[![License: MIT](https://img.shields.io/crates/l/bullet-rust-sdk.svg)](LICENSE)
+
 A Rust SDK for interacting with the Bullet trading API, with WASM bindings for JavaScript/TypeScript.
 
 ## Project Structure
@@ -25,8 +29,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-bullet-rust-sdk = { git = "https://github.com/bulletxyz/bullet-rust-sdk.git" }
+bullet-rust-sdk = "0.0"
 tokio = { version = "1", features = ["full"] }
+```
+
+Or with `cargo add`:
+
+```sh
+cargo add bullet-rust-sdk
 ```
 
 ### Basic Usage
