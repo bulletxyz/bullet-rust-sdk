@@ -1,5 +1,5 @@
 target/
-Cargo.lock
 node_modules/
 .direnv
 wasm/pkg/
+.claude/

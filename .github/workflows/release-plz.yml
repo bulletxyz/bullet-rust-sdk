@@ -1,0 +1,44 @@
+name: Release-plz
+
+on:
+  push:
+    branches: [main]
+
+env:
+  # Use the system git CLI for fetching git deps; libgit2 can fail on private/auth flows.
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+
+permissions:
+  pull-requests: write
+  contents: write
+  # id-token: write will be required when this workflow switches to OIDC
+  # trusted publishing (after the first publish + crates.io publisher config).
+
+jobs:
+  release-plz:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Generate App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: release-plz/action@v0.5.128
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Token-based for first publish; switch to OIDC after configuring
+          # trusted publishing on crates.io.
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

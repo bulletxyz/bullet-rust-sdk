@@ -171,24 +171,24 @@ async fn test_websocket_subscribe_unsubscribe() {
     for _ in 0..10 {
         let msg = ws.recv().await.expect("Failed to receive message");
 
-        if let Some(response_id) = msg.request_id() {
-            if response_id == subscribe_request_id {
-                match &msg {
-                    ServerMessage::Tagged(TaggedMessage::Subscribe(result)) => {
-                        assert_eq!(result.result, "success");
-                        subscribe_confirmed = true;
-                        println!("✓ Subscribe confirmed (id: {})", response_id);
-                        break;
-                    }
-                    ServerMessage::Tagged(TaggedMessage::Error(err)) => {
-                        panic!(
-                            "Subscribe failed with error: {} (code: {})",
-                            err.error.message(),
-                            err.error.code()
-                        );
-                    }
-                    _ => {}
+        if let Some(response_id) = msg.request_id()
+            && response_id == subscribe_request_id
+        {
+            match &msg {
+                ServerMessage::Tagged(TaggedMessage::Subscribe(result)) => {
+                    assert_eq!(result.result, "success");
+                    subscribe_confirmed = true;
+                    println!("✓ Subscribe confirmed (id: {})", response_id);
+                    break;
                 }
+                ServerMessage::Tagged(TaggedMessage::Error(err)) => {
+                    panic!(
+                        "Subscribe failed with error: {} (code: {})",
+                        err.error.message(),
+                        err.error.code()
+                    );
+                }
+                _ => {}
             }
         }
 
@@ -219,24 +219,24 @@ async fn test_websocket_subscribe_unsubscribe() {
     for _ in 0..10 {
         let msg = ws.recv().await.expect("Failed to receive message");
 
-        if let Some(response_id) = msg.request_id() {
-            if response_id == unsubscribe_request_id {
-                match &msg {
-                    ServerMessage::Tagged(TaggedMessage::Unsubscribe(result)) => {
-                        assert_eq!(result.result, "success");
-                        unsubscribe_confirmed = true;
-                        println!("✓ Unsubscribe confirmed (id: {})", response_id);
-                        break;
-                    }
-                    ServerMessage::Tagged(TaggedMessage::Error(err)) => {
-                        panic!(
-                            "Unsubscribe failed with error: {} (code: {})",
-                            err.error.message(),
-                            err.error.code()
-                        );
-                    }
-                    _ => {}
+        if let Some(response_id) = msg.request_id()
+            && response_id == unsubscribe_request_id
+        {
+            match &msg {
+                ServerMessage::Tagged(TaggedMessage::Unsubscribe(result)) => {
+                    assert_eq!(result.result, "success");
+                    unsubscribe_confirmed = true;
+                    println!("✓ Unsubscribe confirmed (id: {})", response_id);
+                    break;
                 }
+                ServerMessage::Tagged(TaggedMessage::Error(err)) => {
+                    panic!(
+                        "Unsubscribe failed with error: {} (code: {})",
+                        err.error.message(),
+                        err.error.code()
+                    );
+                }
+                _ => {}
             }
         }
     }
@@ -337,16 +337,16 @@ async fn test_websocket_list_subscriptions() {
     for _ in 0..10 {
         let msg = ws.recv().await.expect("Failed to receive message");
 
-        if msg.request_id() == Some(list_id) {
-            if let ServerMessage::Tagged(TaggedMessage::ListSubscriptions(result)) = msg {
-                println!("✓ Active subscriptions: {:?}", result.result);
-                assert!(
-                    result.result.len() >= 2,
-                    "Expected at least 2 subscriptions, got: {:?}",
-                    result.result
-                );
-                break;
-            }
+        if msg.request_id() == Some(list_id)
+            && let ServerMessage::Tagged(TaggedMessage::ListSubscriptions(result)) = msg
+        {
+            println!("✓ Active subscriptions: {:?}", result.result);
+            assert!(
+                result.result.len() >= 2,
+                "Expected at least 2 subscriptions, got: {:?}",
+                result.result
+            );
+            break;
         }
     }
 
