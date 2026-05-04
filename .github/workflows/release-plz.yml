@@ -11,8 +11,7 @@ env:
 permissions:
   pull-requests: write
   contents: write
-  # id-token: write will be required when this workflow switches to OIDC
-  # trusted publishing (after the first publish + crates.io publisher config).
+  id-token: write # required for crates.io OIDC trusted publishing
 
 jobs:
   release-plz:
@@ -36,9 +35,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Authenticate with crates.io
+        id: cargo-auth
+        uses: rust-lang/crates-io-auth-action@v1.0.4
+
       - uses: release-plz/action@v0.5.128
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Token-based for first publish; switch to OIDC after configuring
-          # trusted publishing on crates.io.
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.cargo-auth.outputs.token }}
