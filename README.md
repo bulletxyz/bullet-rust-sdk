@@ -25,18 +25,9 @@ bullet-rust-sdk/
 
 ## Quick Start (Rust)
 
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-bullet-rust-sdk = "0.0.4"
-tokio = { version = "1", features = ["full"] }
-```
-
-Or with `cargo add`:
-
 ```sh
 cargo add bullet-rust-sdk
+cargo add tokio --features full
 ```
 
 ### Basic Usage
