@@ -179,6 +179,7 @@ await ws.subscribe([
     Topic.depth('ETH-USD', OrderbookDepth.D10),
     Topic.bookTicker('SOL-USD'),
     Topic.kline('BTC-USD', KlineInterval.H1),
+    Topic.userOrders('0xabc'),
     Topic.allTickers(),
 ]);
 

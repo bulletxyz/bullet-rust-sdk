@@ -428,6 +428,81 @@
         }
       }
     },
+    "/fapi/v1/fundingInfo": {
+      "get": {
+        "tags": [
+          "Market-Data"
+        ],
+        "summary": "Funding rate metadata (caps, intervals) per symbol",
+        "operationId": "funding_info",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "query",
+            "description": "Symbol",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Funding info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FundingInfo"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/fapi/v1/fundingRate": {
       "get": {
         "tags": [
@@ -2639,6 +2714,34 @@
             "items": {
               "$ref": "#/components/schemas/Symbol"
             }
+          }
+        }
+      },
+      "FundingInfo": {
+        "type": "object",
+        "description": "funding rate metadata per symbol",
+        "required": [
+          "symbol",
+          "adjustedFundingRateCap",
+          "adjustedFundingRateFloor",
+          "fundingIntervalHours"
+        ],
+        "properties": {
+          "adjustedFundingRateCap": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "adjustedFundingRateFloor": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "fundingIntervalHours": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "symbol": {
+            "type": "string"
           }
         }
       },
