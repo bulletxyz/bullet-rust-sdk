@@ -5,11 +5,11 @@
 //!
 //! # Features
 //!
-//! - **Protocol-level keepalive**: The server handles keepalive via WebSocket
-//!   protocol-level ping/pong frames (managed automatically by the transport).
+//! - **Protocol-level keepalive**: The server handles keepalive via WebSocket protocol-level
+//!   ping/pong frames (managed automatically by the transport).
 //! - **Cross-platform**: Works on both native Rust and WASM targets.
-//! - **Graceful error handling**: Parse failures return `ServerMessage::Unknown`
-//!   with the error and raw message text for debugging.
+//! - **Graceful error handling**: Parse failures return `ServerMessage::Unknown` with the error and
+//!   raw message text for debugging.
 //!
 //! # Example
 //!
@@ -27,7 +27,8 @@
 //!     ws.send(ClientMessage::Subscribe {
 //!         id: Some(1.into()),
 //!         params: vec!["BTC-USD@aggTrade".to_string()],
-//!     }).await?;
+//!     })
+//!     .await?;
 //!
 //!     loop {
 //!         match ws.recv().await {
@@ -54,7 +55,6 @@
 
 use std::ops::Deref;
 
-use crate::types::{ClientMessage, OrderParams, RequestId};
 use bon::{Builder, bon};
 use futures::{FutureExt, SinkExt, StreamExt, select};
 use futures_timer::Delay;
@@ -64,6 +64,7 @@ use web_time::Duration;
 use super::models::{ServerMessage, TaggedMessage};
 use super::topics::Topic;
 use crate::errors::WSErrors;
+use crate::types::{ClientMessage, OrderParams, RequestId};
 use crate::{Client, SDKResult};
 
 /// Default connection timeout in seconds.
@@ -137,16 +138,15 @@ impl WebsocketHandle {
 /// # Example
 ///
 /// ```no_run
-/// use bullet_rust_sdk::{Client, ws::WebsocketConfig};
+/// use bullet_rust_sdk::Client;
+/// use bullet_rust_sdk::ws::WebsocketConfig;
 /// use web_time::Duration;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let api = Client::mainnet().await?;
 ///
 /// // Use a longer connection timeout
-/// let config = WebsocketConfig {
-///     connection_timeout: Duration::from_secs(30),
-/// };
+/// let config = WebsocketConfig { connection_timeout: Duration::from_secs(30) };
 /// let mut ws = api.connect_ws().config(config).call().await?;
 /// # Ok(())
 /// # }
@@ -199,9 +199,11 @@ impl WebsocketHandle {
         // Note: web_time::Duration is std::time::Duration on native, but different on WASM.
         // The try_into() is needed for WASM compatibility.
         #[allow(clippy::useless_conversion)]
-        let timeout = Delay::new(timeout.try_into().unwrap_or(std::time::Duration::from_secs(
-            DEFAULT_CONNECTION_TIMEOUT_SECS,
-        )));
+        let timeout = Delay::new(
+            timeout
+                .try_into()
+                .unwrap_or(std::time::Duration::from_secs(DEFAULT_CONNECTION_TIMEOUT_SECS)),
+        );
 
         debug!("Waiting for connected message from websocket.");
 
@@ -247,21 +249,21 @@ impl WebsocketHandle {
     /// ws.send(ClientMessage::Subscribe {
     ///     id: Some(1.into()),
     ///     params: vec!["BTC-USD@aggTrade".to_string()],
-    /// }).await?;
+    /// })
+    /// .await?;
     ///
     /// // Unsubscribe later
     /// ws.send(ClientMessage::Unsubscribe {
     ///     id: Some(2.into()),
     ///     params: vec!["BTC-USD@aggTrade".to_string()],
-    /// }).await?;
+    /// })
+    /// .await?;
     /// # Ok(())
     /// # }
     /// ```
     pub async fn send(&mut self, msg: ClientMessage) -> SDKResult<(), WSErrors> {
         let string_msg = serde_json::to_string(&msg)?;
-        self.socket
-            .send(reqwest_websocket::Message::Text(string_msg))
-            .await?;
+        self.socket.send(reqwest_websocket::Message::Text(string_msg)).await?;
         Ok(())
     }
 
@@ -282,9 +284,9 @@ impl WebsocketHandle {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::ws::models::{ServerMessage, TaggedMessage};
     /// use bullet_rust_sdk::errors::WSErrors;
     /// use bullet_rust_sdk::types::ClientMessage;
+    /// use bullet_rust_sdk::ws::models::{ServerMessage, TaggedMessage};
     /// # use bullet_rust_sdk::Client;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -296,7 +298,8 @@ impl WebsocketHandle {
     ///     ws.send(ClientMessage::Subscribe {
     ///         id: Some(1.into()),
     ///         params: vec!["BTC-USD@aggTrade".to_string()],
-    ///     }).await?;
+    ///     })
+    ///     .await?;
     ///
     ///     loop {
     ///         match ws.recv().await {
@@ -370,19 +373,23 @@ impl WebsocketHandle {
     /// # Example
     ///
     /// ```no_run
-    /// use bullet_rust_sdk::{Client, Topic, OrderbookDepth};
     /// use bullet_rust_sdk::types::RequestId;
+    /// use bullet_rust_sdk::{Client, OrderbookDepth, Topic};
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let api = Client::mainnet().await?;
     /// let mut ws = api.connect_ws().call().await?;
     ///
     /// // Subscribe to multiple topics using type-safe builders
-    /// ws.subscribe([
-    ///     Topic::agg_trade("BTC-USD"),
-    ///     Topic::depth("ETH-USD", OrderbookDepth::D10),
-    ///     Topic::book_ticker("SOL-USD"),
-    /// ], Some(RequestId::new(1))).await?;
+    /// ws.subscribe(
+    ///     [
+    ///         Topic::agg_trade("BTC-USD"),
+    ///         Topic::depth("ETH-USD", OrderbookDepth::D10),
+    ///         Topic::book_ticker("SOL-USD"),
+    ///     ],
+    ///     Some(RequestId::new(1)),
+    /// )
+    /// .await?;
     ///
     /// // Now receive market data
     /// loop {
@@ -460,11 +467,7 @@ impl WebsocketHandle {
         tx: impl Into<String>,
         id: Option<RequestId>,
     ) -> SDKResult<(), WSErrors> {
-        self.send(ClientMessage::OrderPlace {
-            id,
-            params: OrderParams { tx: tx.into() },
-        })
-        .await
+        self.send(ClientMessage::OrderPlace { id, params: OrderParams { tx: tx.into() } }).await
     }
 
     /// Cancel an order via WebSocket.
@@ -495,11 +498,7 @@ impl WebsocketHandle {
         tx: impl Into<String>,
         id: Option<RequestId>,
     ) -> SDKResult<(), WSErrors> {
-        self.send(ClientMessage::OrderCancel {
-            id,
-            params: OrderParams { tx: tx.into() },
-        })
-        .await
+        self.send(ClientMessage::OrderCancel { id, params: OrderParams { tx: tx.into() } }).await
     }
 
     /// Place an order via WebSocket using a signed transaction.

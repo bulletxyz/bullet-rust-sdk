@@ -1,14 +1,15 @@
+use std::ops::Deref;
+use std::sync::Mutex;
+
 use bon::bon;
 use bullet_exchange_interface::message::UserActionDiscriminants;
 use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
-use std::ops::Deref;
-use std::sync::Mutex;
+use bullet_exchange_interface::types::MarketId;
+use url::Url;
 
 use crate::generated::Client as GeneratedClient;
 use crate::metadata::{ExchangeMetadata, SymbolInfo};
 use crate::{Keypair, SDKError, SDKResult};
-use bullet_exchange_interface::types::MarketId;
-use url::Url;
 
 /// The main trading API client for REST operations.
 ///
@@ -219,10 +220,7 @@ impl Client {
             SDKError::InvalidChainHash(format!("expected 32 bytes, got {}", v.len()))
         })?;
         let chain_id = schema_file.schema.chain_data().chain_id;
-        Ok(ChainData {
-            chain_hash,
-            chain_id,
-        })
+        Ok(ChainData { chain_hash, chain_id })
     }
 
     pub async fn update_schema(&self) -> SDKResult<()> {
@@ -230,10 +228,8 @@ impl Client {
 
         // The expect is fine here as we just read and write the
         // object. We never hold a lock in code that can panic.
-        *self
-            .chain_hash
-            .lock()
-            .expect("Taking the chain-hash lock can never fail.") = chain_data.chain_hash;
+        *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.") =
+            chain_data.chain_hash;
         Ok(())
     }
 
@@ -250,8 +246,8 @@ impl Client {
     ///
     /// For `UserAction`, the behaviour depends on `user_actions`:
     /// - `None` — include every variant known to this binary (full check).
-    /// - `Some(&[PlaceOrders, CancelOrders])` — only include those two;
-    ///   schema changes to other actions (e.g. `Withdraw`) are ignored.
+    /// - `Some(&[PlaceOrders, CancelOrders])` — only include those two; schema changes to other
+    ///   actions (e.g. `Withdraw`) are ignored.
     ///
     /// Unknown enum names default to `true` so any new enums in the schema
     /// are kept, ensuring the diff still catches unexpected additions.
@@ -312,10 +308,7 @@ impl Client {
     pub fn chain_hash(&self) -> [u8; 32] {
         // The expect is fine here as we just read and write the
         // object. We never hold a lock in code that can panic.
-        *self
-            .chain_hash
-            .lock()
-            .expect("Taking the chain-hash lock can never fail.")
+        *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.")
     }
 
     pub fn user_actions(&self) -> &Option<Vec<UserActionDiscriminants>> {

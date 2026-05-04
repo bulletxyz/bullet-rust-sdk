@@ -17,10 +17,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: clippy
+      - name: Install nightly rustfmt
+        run: rustup toolchain install nightly --component rustfmt
       - uses: Swatinem/rust-cache@v2
       # Scope to bullet-rust-sdk only — bullet-rust-sdk-wasm has its own
       # build pipeline (npm publish workflow) and is not crates.io-bound.
-      - run: cargo fmt --package bullet-rust-sdk -- --check
+      - run: cargo +nightly fmt --package bullet-rust-sdk -- --check --config-path rustfmt.nightly.toml
       - run: cargo clippy --package bullet-rust-sdk --all-targets --all-features -- -D warnings
       - run: cargo test --package bullet-rust-sdk --all-features
