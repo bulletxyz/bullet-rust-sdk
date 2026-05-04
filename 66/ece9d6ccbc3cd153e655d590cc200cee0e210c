@@ -1,0 +1,23 @@
+release-plz.toml
+  0f2588ded88bff93 22,26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "66ece9d6ccbc3cd153e655d590cc200cee0e210c",
+  "prompts": {
+    "0f2588ded88bff93": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "21977663-774a-4211-b589-4b44e4798d1d",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Tristan",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 0,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
