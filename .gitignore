@@ -2,4 +2,5 @@ target/
 node_modules/
 .direnv
 wasm/pkg/
-.claude/
+.claude/settings.local.json
+.claude/worktrees/
