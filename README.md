@@ -29,7 +29,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-bullet-rust-sdk = "0.0"
+bullet-rust-sdk = "0.0.4"
 tokio = { version = "1", features = ["full"] }
 ```
 

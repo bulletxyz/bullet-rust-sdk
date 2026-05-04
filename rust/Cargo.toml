@@ -11,6 +11,9 @@ keywords = ["bullet", "trading", "exchange", "sdk"]
 categories = ["api-bindings", "cryptography::cryptocurrencies"]
 links = "bullet_rust_codegen"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
