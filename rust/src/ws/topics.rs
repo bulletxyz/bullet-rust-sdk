@@ -236,9 +236,7 @@ impl Topic {
     /// assert_eq!(topic.to_string(), "0xabc@user.orders");
     /// ```
     pub fn user_orders(address: impl Into<String>) -> Self {
-        Self::UserOrders {
-            address: address.into(),
-        }
+        Self::UserOrders { address: address.into() }
     }
 
     /// Subscribe to mini ticker updates for all symbols.
