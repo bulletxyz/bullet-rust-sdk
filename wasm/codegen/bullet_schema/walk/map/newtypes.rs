@@ -10,7 +10,7 @@ use super::ParamMapping;
 pub fn try_map_newtype(idx: usize) -> Option<ParamMapping> {
     let (param_type, conversion) = match idx {
         7 => ("&str", "parse_addr({v})?"), // Address(Base58)
-        9 => ("&str", "TokenId::from_str({v}).unwrap()"), // TokenId(Bech32m)
+        9 => ("&str", "TokenId::from_str({v}).map_err(|e| format!(\"{e:?}\"))?"), // TokenId(Bech32m)
         15 => ("u16", "AssetId({v})"),     // AssetId(u16)
         16 => ("&str", "parse_dec({v})?"), // PositiveDecimal
         17 => ("&str", "parse_surrogate_dec({v})?"), // SurrogateDecimal
