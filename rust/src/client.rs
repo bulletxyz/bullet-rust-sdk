@@ -234,11 +234,7 @@ impl Client {
         })?;
         let chain_id = schema_file.schema.chain_data().chain_id;
         let chain_name = schema_file.schema.chain_data().chain_name.clone();
-        Ok(ChainData {
-            chain_hash,
-            chain_id,
-            chain_name,
-        })
+        Ok(ChainData { chain_hash, chain_id, chain_name })
     }
 
     pub async fn update_schema(&self) -> SDKResult<()> {

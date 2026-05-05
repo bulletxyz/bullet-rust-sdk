@@ -89,9 +89,7 @@ impl UnsignedTransaction {
             .map_err(|e| SDKError::SerializationError(e.to_string()))?;
         let bytes =
             borsh::to_vec(&self.inner).map_err(|e| SDKError::SerializationError(e.to_string()))?;
-        schema
-            .display(0, &bytes)
-            .map_err(|e| SDKError::SerializationError(e.to_string()))
+        schema.display(0, &bytes).map_err(|e| SDKError::SerializationError(e.to_string()))
     }
 
     /// Serialize into the human-readable JSON bytes for offchain signing.
@@ -449,11 +447,7 @@ mod tests {
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
         };
-        UnsignedTransaction {
-            inner,
-            chain_hash: [42u8; 32],
-            chain_name: "TestChain".to_string(),
-        }
+        UnsignedTransaction { inner, chain_hash: [42u8; 32], chain_name: "TestChain".to_string() }
     }
 
     #[test]
