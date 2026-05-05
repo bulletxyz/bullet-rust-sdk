@@ -64,6 +64,7 @@ struct SolanaSimpleMessage<'a> {
     uniqueness: &'a UniquenessData,
     details: &'a TxDetails,
     chain_name: &'a str,
+    chain_hash: String,
 }
 
 #[bon]
@@ -104,6 +105,7 @@ impl UnsignedTransaction {
             uniqueness: &self.inner.uniqueness,
             details: &self.inner.details,
             chain_name: &self.chain_name,
+            chain_hash: chain_hash_hex(&self.chain_hash),
         };
         let mut message = serde_json::to_value(&message)?;
         stringify_offchain_integer_newtypes(&mut message);
@@ -208,6 +210,7 @@ impl SolanaOffchainTransaction {
 
     /// Borsh-serialize a Solana offchain transaction to bytes.
     pub fn to_bytes(&self) -> SDKResult<Vec<u8>> {
+        self.validate_chain_hash()?;
         borsh::to_vec(self).map_err(|e| SDKError::SerializationError(e.to_string()))
     }
 
@@ -215,6 +218,25 @@ impl SolanaOffchainTransaction {
     pub fn to_base64(&self) -> SDKResult<String> {
         let bytes = self.to_bytes()?;
         Ok(BASE64.encode(&bytes))
+    }
+
+    fn validate_chain_hash(&self) -> SDKResult<()> {
+        let message =
+            serde_json::from_slice::<serde_json::Value>(&self.signed_message).map_err(|e| {
+                SDKError::SerializationError(format!("invalid signed message JSON: {e}"))
+            })?;
+        let Some(chain_hash) = message.get("chain_hash").and_then(|value| value.as_str()) else {
+            return Err(SDKError::SerializationError(
+                "signed message is missing chain_hash".to_string(),
+            ));
+        };
+        let message_chain_hash = parse_chain_hash_hex(chain_hash)?;
+        if message_chain_hash != self.chain_hash {
+            return Err(SDKError::SerializationError(
+                "signed message chain_hash does not match envelope chain_hash".to_string(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -323,13 +345,7 @@ impl Client {
         match response {
             Err(ErrorResponse(response)) if response.status() == 401 => {
                 let inner = response.into_inner();
-                if inner.message.contains("Invalid signature") {
-                    self.update_schema().await?;
-                    // indicate that a the transaction must be re-signed and can not be simply
-                    // retried
-                    return Err(SDKError::TransactionOutdated);
-                }
-                Err(SDKError::ApiError(inner))
+                Err(self.submit_tx_api_error(inner).await?)
             }
             Ok(r) => Ok(r.into_inner()),
             Err(e) => Err(e.into()),
@@ -365,7 +381,16 @@ impl Client {
                 details: None,
             }
         });
-        Err(SDKError::ApiError(error))
+        Err(self.submit_tx_api_error(error).await?)
+    }
+
+    async fn submit_tx_api_error(&self, error: ApiErrorResponse) -> SDKResult<SDKError> {
+        if error.status == 401 && error.message.contains("Invalid signature") {
+            self.update_schema().await?;
+            // The transaction was signed against an old chain hash and must be re-signed.
+            return Ok(SDKError::TransactionOutdated);
+        }
+        Ok(SDKError::ApiError(error))
     }
 }
 
@@ -382,6 +407,18 @@ const OFFCHAIN_STRING_INTEGER_FIELDS: &[&str] = &[
     "twap_id",
     "twap_ids",
 ];
+
+fn chain_hash_hex(chain_hash: &[u8; 32]) -> String {
+    format!("0x{}", hex::encode(chain_hash))
+}
+
+fn parse_chain_hash_hex(chain_hash: &str) -> SDKResult<[u8; 32]> {
+    let bytes = hex::decode(chain_hash.strip_prefix("0x").unwrap_or(chain_hash))
+        .map_err(|e| SDKError::InvalidChainHash(e.to_string()))?;
+    bytes.try_into().map_err(|v: Vec<u8>| {
+        SDKError::InvalidChainHash(format!("expected 32 bytes, got {}", v.len()))
+    })
+}
 
 fn stringify_offchain_integer_newtypes(value: &mut serde_json::Value) {
     match value {
@@ -427,10 +464,14 @@ fn stringify_json_number(value: &mut serde_json::Value) {
 #[cfg(test)]
 mod tests {
     use bullet_exchange_interface::message::{CancelOrderArgs, PublicAction, UserAction};
+    use bullet_exchange_interface::schema::Schema;
     use bullet_exchange_interface::transaction::{
-        Amount, PriorityFeeBips, RuntimeCall, TxDetails, UniquenessData,
+        Amount, PriorityFeeBips, RuntimeCall, Transaction as InterfaceTransaction, TxDetails,
+        UniquenessData,
     };
     use bullet_exchange_interface::types::{MarketId, OrderId};
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
 
@@ -448,6 +489,67 @@ mod tests {
             },
         };
         UnsignedTransaction { inner, chain_hash: [42u8; 32], chain_name: "TestChain".to_string() }
+    }
+
+    fn schema_response(chain_byte: u8) -> serde_json::Value {
+        let schema = Schema::of_single_type::<InterfaceTransaction>().unwrap();
+        serde_json::json!({
+            "chain_hash": format!("0x{}", hex::encode([chain_byte; 32])),
+            "schema": schema,
+        })
+    }
+
+    fn exchange_info_response() -> serde_json::Value {
+        serde_json::json!({
+            "assets": [],
+            "rateLimits": [],
+            "symbols": [],
+        })
+    }
+
+    async fn mock_client_for_offchain_submission(
+        offchain_response: ResponseTemplate,
+    ) -> (MockServer, Client) {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rollup/schema"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(schema_response(7)))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/fapi/v1/exchangeInfo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(exchange_info_response()))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/sequencer/solana_offchain_txs"))
+            .respond_with(offchain_response)
+            .mount(&server)
+            .await;
+
+        let client = Client::builder()
+            .network(server.uri())
+            .solana_offchain_url(format!("{}/sequencer/solana_offchain_txs", server.uri()))
+            .build()
+            .await
+            .unwrap();
+
+        (server, client)
+    }
+
+    fn test_solana_offchain_transaction() -> SolanaOffchainTransaction {
+        let chain_hash = [7u8; 32];
+        SolanaOffchainTransaction {
+            signed_message: serde_json::json!({
+                "chain_hash": chain_hash_hex(&chain_hash),
+            })
+            .to_string()
+            .into_bytes(),
+            chain_hash,
+            pubkey: [8u8; 32],
+            signature: [9u8; 64],
+        }
     }
 
     #[test]
@@ -484,6 +586,16 @@ mod tests {
         assert_eq!(message["details"]["chain_id"], 1);
         assert_eq!(message["details"]["max_fee"], "10000000");
         assert!(message.get("runtime_call").is_some());
+    }
+
+    #[test]
+    fn to_message_bytes_includes_chain_hash_domain_separator() {
+        let unsigned = test_unsigned_tx();
+
+        let bytes = unsigned.to_message_bytes().unwrap();
+        let message: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(message["chain_hash"], format!("0x{}", hex::encode([42u8; 32])));
     }
 
     #[test]
@@ -552,6 +664,43 @@ mod tests {
         let roundtrip: SolanaOffchainTransaction =
             borsh::from_slice(&tx.to_bytes().unwrap()).expect("should deserialize");
         assert_eq!(roundtrip, tx);
+    }
+
+    #[test]
+    fn solana_offchain_transaction_rejects_mismatched_chain_hash() {
+        let keypair = Keypair::generate();
+        let unsigned = test_unsigned_tx();
+
+        let signable = unsigned.to_message_bytes().unwrap();
+        let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
+        let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
+
+        let mut tx = SolanaOffchainTransaction::from_parts(unsigned, signature, pub_key).unwrap();
+        tx.chain_hash = [43u8; 32];
+
+        let err = tx.to_bytes().unwrap_err();
+
+        assert!(err.to_string().contains("chain_hash"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn send_offchain_transaction_requires_resign_on_invalid_signature() {
+        let (server, client) = mock_client_for_offchain_submission(
+            ResponseTemplate::new(401).set_body_json(serde_json::json!({
+                "status": 401,
+                "message": "Invalid signature",
+            })),
+        )
+        .await;
+        let signed = test_solana_offchain_transaction();
+
+        let err = client.send_offchain_transaction(&signed).await.unwrap_err();
+
+        assert!(matches!(err, SDKError::TransactionOutdated), "{err:?}");
+        let requests = server.received_requests().await.unwrap();
+        let schema_requests =
+            requests.iter().filter(|request| request.url.path() == "/rollup/schema").count();
+        assert_eq!(schema_requests, 2);
     }
 
     #[test]

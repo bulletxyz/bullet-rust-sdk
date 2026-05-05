@@ -42,24 +42,34 @@ fn build_option_conversion(inner: &ParamMapping) -> String {
         if inner_expr.contains('?') {
             let expr_no_q = inner_expr.trim_end_matches('?');
             format!("{{v}}.map(|v| {expr_no_q}).transpose()?")
-        } else if is_simple_constructor(&inner.conversion) {
+        } else if let Some(converter) = simple_conversion_fn(&inner.conversion) {
             // e.g. "ClientOrderId({v})" → "{v}.map(ClientOrderId)"
-            let ctor = inner.conversion.split('(').next().unwrap();
-            format!("{{v}}.map({ctor})")
+            // or "Time::from_micros({v})" → "{v}.map(Time::from_micros)"
+            format!("{{v}}.map({converter})")
         } else {
             format!("{{v}}.map(|v| {inner_expr})")
         }
     }
 }
 
-/// Check if a conversion is a simple constructor like "TypeName({v})".
-fn is_simple_constructor(conversion: &str) -> bool {
-    if let Some(rest) = conversion.strip_suffix("({v})") {
-        // Must be a valid identifier (alphanumeric + underscore, starts with letter).
-        !rest.is_empty() && rest.chars().all(|c| c.is_alphanumeric() || c == '_')
+/// Return the callable if a conversion is a simple function path like `TypeName({v})`
+/// or `TypeName::method({v})`.
+fn simple_conversion_fn(conversion: &str) -> Option<&str> {
+    let path = conversion.strip_suffix("({v})")?;
+    if path.split("::").all(is_rust_ident) {
+        Some(path)
     } else {
-        false
+        None
     }
+}
+
+fn is_rust_ident(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 fn build_str_option_conversion(inner: &ParamMapping) -> String {

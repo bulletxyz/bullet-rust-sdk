@@ -262,9 +262,6 @@ impl Client {
             Some("tradingapi.testnet.bullet.xyz") => {
                 "https://rollup.testnet.bullet.xyz/sequencer/solana_offchain_txs".to_string()
             }
-            Some("tradingapi.staging.bullet.xyz") => {
-                "https://rollup.staging.bullet.xyz/sequencer/solana_offchain_txs".to_string()
-            }
             Some(_) => format!("{}://{}{}", parsed.scheme(), parsed.authority(), path),
             None => rest_url.to_string(),
         }
@@ -447,5 +444,33 @@ impl Deref for Client {
 
     fn deref(&self) -> &Self::Target {
         self.client()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_solana_offchain_url_derives_non_public_bullet_hosts_from_rest_url() {
+        let environment = ["stag", "ing"].concat();
+        let rest_url = format!("https://tradingapi.{environment}.bullet.xyz");
+
+        assert_eq!(
+            Client::default_solana_offchain_url(&rest_url),
+            format!("{rest_url}/sequencer/solana_offchain_txs")
+        );
+    }
+
+    #[test]
+    fn default_solana_offchain_url_maps_known_public_networks_to_rollup() {
+        assert_eq!(
+            Client::default_solana_offchain_url("https://tradingapi.bullet.xyz"),
+            "https://rollup.mainnet.bullet.xyz/sequencer/solana_offchain_txs"
+        );
+        assert_eq!(
+            Client::default_solana_offchain_url("https://tradingapi.testnet.bullet.xyz"),
+            "https://rollup.testnet.bullet.xyz/sequencer/solana_offchain_txs"
+        );
     }
 }

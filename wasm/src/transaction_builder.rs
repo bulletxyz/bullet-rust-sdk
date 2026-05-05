@@ -137,7 +137,8 @@ impl WasmUnsignedTransaction {
     /// Serialize into readable JSON bytes for offchain signing.
     ///
     /// External Solana wallets should sign these bytes when the backend uses
-    /// the `solanaSimple` authenticator. Assemble the result with
+    /// the `solanaSimple` authenticator. The JSON includes the chain hash as
+    /// the signed domain separator. Assemble the result with
     /// `SolanaOffchainTransaction.fromParts(...)` and submit it with
     /// `client.sendOffChainTransaction(...)`.
     ///
@@ -147,6 +148,7 @@ impl WasmUnsignedTransaction {
     /// const unsigned = Transaction.builder().callMessage(msg).buildUnsigned(client);
     /// const message = unsigned.toMessageBytes();
     /// const signature = await wallet.signMessage(message);
+    /// const pubKey = wallet.publicKey.toBytes();
     /// const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
     /// await client.sendOffChainTransaction(tx);
     /// ```

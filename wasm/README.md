@@ -123,7 +123,9 @@ what the network verifies. Use `toDisplayMessage()` in your app UI to show the
 transaction contents before asking the wallet to sign `toBytes()`.
 
 For external Solana wallets where the wallet confirmation should show readable
-JSON, use the Solana offchain path instead:
+JSON, use the Solana offchain path instead. `toMessageBytes()` includes the
+chain hash in the signed JSON so the signature is bound to the target rollup
+chain:
 
 ```typescript
 const unsigned = Transaction.builder()
@@ -132,6 +134,7 @@ const unsigned = Transaction.builder()
 
 const message = unsigned.toMessageBytes();
 const signature = await wallet.signMessage(message);
+const pubKey = wallet.publicKey.toBytes(); // 32-byte Solana public key
 const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
 
 await client.sendOffChainTransaction(tx);
@@ -161,6 +164,7 @@ wallet. Submit it with `client.sendOffChainTransaction(tx)`, which posts
 to `/sequencer/solana_offchain_txs`.
 
 ```typescript
+const pubKey = wallet.publicKey.toBytes(); // 32-byte Solana public key
 const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
 
 tx.toBytes()   // Uint8Array (borsh offchain envelope)
