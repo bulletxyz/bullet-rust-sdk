@@ -487,6 +487,18 @@ mod tests {
     }
 
     #[test]
+    fn to_message_bytes_serializes_large_max_fee_as_string() {
+        let mut unsigned = test_unsigned_tx();
+        let max_fee = u128::from(u64::MAX) + 1;
+        unsigned.inner.details.max_fee = Amount(max_fee);
+
+        let bytes = unsigned.to_message_bytes().unwrap();
+        let message: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(message["details"]["max_fee"], max_fee.to_string());
+    }
+
+    #[test]
     fn to_message_bytes_serializes_order_ids_as_strings() {
         let inner = RawUnsignedTransaction {
             runtime_call: RuntimeCall::Exchange(CallMessage::User(UserAction::CancelOrders {
