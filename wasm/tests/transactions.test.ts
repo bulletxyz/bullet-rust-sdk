@@ -11,7 +11,7 @@
 import { jest } from '@jest/globals';
 
 import {
-  Client, Keypair, Transaction, SignedTransaction,
+  Client, Keypair, Transaction, SignedTransaction, SolanaOffchainTransaction,
   User, Public,
   NewOrderArgs,
   Side, OrderType,
@@ -108,6 +108,10 @@ describe('external signing', () => {
     expect(signableBytes).toBeInstanceOf(Uint8Array);
     expect(signableBytes.length).toBeGreaterThan(32);
 
+    const displayMessage = unsigned.toDisplayMessage();
+    expect(displayMessage).toContain('ApplyFunding');
+    expect(displayMessage).toContain('max_fee');
+
     // Sign with keypair
     const signature = keypair.sign(signableBytes);
     expect(signature.length).toBe(64);
@@ -142,6 +146,33 @@ describe('external signing', () => {
     const bytes1 = tx.toBytes();
     const bytes2 = tx.toBytes();
     expect(bytes1).toEqual(bytes2);
+  });
+
+  test('buildUnsigned → toMessageBytes → SolanaOffchainTransaction.fromParts', async () => {
+    const client = await Client.connect(ENDPOINT);
+    const keypair = Keypair.generate();
+
+    const unsigned = Transaction.builder()
+      .callMessage(Public.applyFunding([]))
+      .maxFee(10_000_000n)
+      .buildUnsigned(client);
+
+    const messageBytes = unsigned.toMessageBytes();
+    expect(messageBytes).toBeInstanceOf(Uint8Array);
+
+    const message = JSON.parse(new TextDecoder().decode(messageBytes));
+    expect(message.chain_name).toBe(client.chainName());
+    expect(message.runtime_call).toBeDefined();
+    expect(BigInt(message.details.chain_id)).toBe(client.chainId());
+
+    const signature = keypair.sign(messageBytes);
+    const pubKey = keypair.publicKey();
+    const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
+
+    expect(tx.toBytes()).toBeInstanceOf(Uint8Array);
+    expect(tx.toBytes().length).toBeGreaterThan(messageBytes.length);
+    expect(tx.toBase64().length).toBeGreaterThan(0);
+    expect(typeof client.sendOffChainTransaction).toBe('function');
   });
 });
 

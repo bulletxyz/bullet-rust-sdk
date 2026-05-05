@@ -112,6 +112,12 @@ impl WasmTradingApi {
         self.inner.chain_hash().to_vec()
     }
 
+    /// Chain name for the connected network.
+    #[wasm_bindgen(js_name = chainName)]
+    pub fn chain_name(&self) -> String {
+        self.inner.chain_name()
+    }
+
     /// REST API base URL.
     pub fn url(&self) -> String {
         self.inner.url().to_string()
@@ -121,6 +127,12 @@ impl WasmTradingApi {
     #[wasm_bindgen(js_name = wsUrl)]
     pub fn ws_url(&self) -> String {
         self.inner.ws_url().to_string()
+    }
+
+    /// Solana offchain sequencer URL.
+    #[wasm_bindgen(js_name = solanaOffchainUrl)]
+    pub fn solana_offchain_url(&self) -> String {
+        self.inner.solana_offchain_url().to_string()
     }
 
     /// Get the default max fee for transactions.
@@ -293,6 +305,7 @@ pub struct WasmClientBuilder {
     max_fee: Option<u64>,
     max_priority_fee_bips: Option<u64>,
     gas_limit: Option<[u64; 2]>,
+    solana_offchain_url: Option<String>,
     user_actions: Option<Vec<UserActionDiscriminants>>,
 }
 
@@ -304,6 +317,7 @@ impl WasmClientBuilder {
             max_fee: None,
             max_priority_fee_bips: None,
             gas_limit: None,
+            solana_offchain_url: None,
             user_actions: None,
         }
     }
@@ -348,6 +362,16 @@ impl WasmClientBuilder {
         self
     }
 
+    /// Override the Solana offchain sequencer endpoint.
+    ///
+    /// @param {string} url - Full `/sequencer/solana_offchain_txs` endpoint URL.
+    /// @returns {ClientBuilder}
+    #[wasm_bindgen(js_name = solanaOffchainUrl)]
+    pub fn solana_offchain_url(mut self, url: &str) -> WasmClientBuilder {
+        self.solana_offchain_url = Some(url.to_string());
+        self
+    }
+
     /// Restrict schema validation to specific `UserAction` variants.
     ///
     /// Pass an array of action name strings (e.g. `["PlaceOrders", "CancelOrders"]`).
@@ -385,6 +409,7 @@ impl WasmClientBuilder {
             .maybe_max_fee(max_fee)
             .maybe_max_priority_fee_bips(max_priority_fee_bips)
             .maybe_gas_limit(gas_limit)
+            .maybe_solana_offchain_url(self.solana_offchain_url)
             .maybe_user_actions(self.user_actions)
             .build()
             .await?;
