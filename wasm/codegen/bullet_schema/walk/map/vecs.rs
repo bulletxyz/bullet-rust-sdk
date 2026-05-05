@@ -68,16 +68,16 @@ fn map_vec_by_index(
 /// Known Vec<Newtype> patterns with direct primitive params.
 fn try_map_known_vec(inner_idx: usize) -> Option<ParamMapping> {
     let (param_type, conversion) = match inner_idx {
-        9 => ("Vec<u16>", "{v}.into_iter().map(AssetId).collect()"),
-        25 => ("Vec<u16>", "{v}.into_iter().map(MarketId).collect()"),
-        22 => (
+        15 => ("Vec<u16>", "{v}.into_iter().map(AssetId).collect()"),
+        30 => ("Vec<u16>", "{v}.into_iter().map(MarketId).collect()"),
+        7 => (
             "Vec<String>",
             "{v}.iter().map(|s| parse_addr(s)).collect::<Result<Vec<_>, _>>()?",
         ),
-        45 => ("Vec<u64>", "{v}.into_iter().map(OrderId).collect()"),
-        57 => ("Vec<u64>", "{v}.into_iter().map(TriggerOrderId).collect()"),
-        33 => ("Vec<u64>", "{v}.into_iter().map(ClientOrderId).collect()"),
-        61 => ("Vec<u64>", "{v}.into_iter().map(TwapId).collect()"),
+        59 => ("Vec<u64>", "{v}.into_iter().map(OrderId).collect()"),
+        71 => ("Vec<u64>", "{v}.into_iter().map(TriggerOrderId).collect()"),
+        47 => ("Vec<u64>", "{v}.into_iter().map(ClientOrderId).collect()"),
+        75 => ("Vec<u64>", "{v}.into_iter().map(TwapId).collect()"),
         _ => return None,
     };
 
@@ -98,8 +98,8 @@ fn map_admin_cancel_vec(
     };
 
     let id_wrapper = match id_index {
-        45 => "OrderId",
-        57 => "TriggerOrderId",
+        59 => "OrderId",
+        71 => "TriggerOrderId",
         _ => panic!("Unknown ID type at index {id_index} in cancel tuple"),
     };
 

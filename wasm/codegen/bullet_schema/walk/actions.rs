@@ -20,64 +20,72 @@ pub struct RawVariantInfo {
 
 /// Find the `CallMessage` enum in the schema by name and extract all action groups.
 pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
-    let call_message_enum = types
+    let groups: Vec<_> = types
         .iter()
-        .find_map(|ty| match ty {
+        .filter_map(|ty| match ty {
             Ty::Enum(e) if e.type_name == "CallMessage" => Some(e),
             _ => None,
         })
-        .expect("CallMessage enum not found in schema");
-
-    call_message_enum
-        .variants
-        .iter()
-        .filter_map(|variant| {
-            let tuple_index = match variant
-                .value
-                .as_ref()
-                .expect("CallMessage variant must have value")
-            {
-                Link::ByIndex(i) => *i,
-                _ => panic!(
-                    "Expected ByIndex link for CallMessage variant {}",
-                    variant.name
-                ),
-            };
-
-            // Unwrap the Tuple wrapper to get the action enum index.
-            // Skip variants that don't follow the Tuple(ActionEnum) pattern
-            // (e.g. wallet-level operations like TransferWithMemo).
-            // TODO: This should be handled at some point by the schema @nick
-            let action_enum_index = match &types[tuple_index] {
-                Ty::Tuple(t) => {
-                    assert_eq!(t.fields.len(), 1);
-                    match &t.fields[0].value {
-                        Link::ByIndex(i) => *i,
-                        _ => panic!("Expected ByIndex in tuple wrapper"),
-                    }
-                }
-                _ => return None,
-            };
-
-            // Action enums: User, Keeper, Admin, etc.
-            let action_enum = match &types[action_enum_index] {
-                Ty::Enum(e) => e,
-                _ => panic!("Expected Enum at index {action_enum_index}"),
-            };
-
-            let variants = action_enum
+        .flat_map(|call_message_enum| {
+            call_message_enum
                 .variants
                 .iter()
-                .map(|av| extract_variant(av, types))
-                .collect();
-
-            Some(RawActionGroup {
-                call_message_variant: variant.name.clone(),
-                action_enum: action_enum.type_name.clone(),
-                variants,
-            })
+                .filter_map(|variant| extract_action_group_variant(variant, types))
         })
-        .collect()
+        .collect();
+
+    assert!(
+        !groups.is_empty(),
+        "Exchange CallMessage enum not found in schema"
+    );
+    groups
+}
+
+fn extract_action_group_variant(
+    variant: &sov_universal_wallet::ty::EnumVariant<sov_universal_wallet::schema::IndexLinking>,
+    types: &Types,
+) -> Option<RawActionGroup> {
+    let tuple_index = match variant
+        .value
+        .as_ref()
+        .expect("CallMessage variant must have value")
+    {
+        Link::ByIndex(i) => *i,
+        _ => panic!(
+            "Expected ByIndex link for CallMessage variant {}",
+            variant.name
+        ),
+    };
+
+    // Unwrap the Tuple wrapper to get the action enum index. Skip variants that
+    // don't follow the Tuple(ActionEnum) pattern, e.g. bank TransferWithMemo.
+    let action_enum_index = match &types[tuple_index] {
+        Ty::Tuple(t) => {
+            assert_eq!(t.fields.len(), 1);
+            match &t.fields[0].value {
+                Link::ByIndex(i) => *i,
+                _ => panic!("Expected ByIndex in tuple wrapper"),
+            }
+        }
+        _ => return None,
+    };
+
+    let action_enum = match &types[action_enum_index] {
+        Ty::Enum(e) => e,
+        _ => panic!("Expected Enum at index {action_enum_index}"),
+    };
+
+    let variants = action_enum
+        .variants
+        .iter()
+        .map(|av| extract_variant(av, types))
+        .collect();
+
+    Some(RawActionGroup {
+        call_message_variant: variant.name.clone(),
+        action_enum: action_enum.type_name.clone(),
+        variants,
+    })
 }
 
 fn extract_variant(

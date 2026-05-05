@@ -6,8 +6,8 @@ use bullet_rust_sdk::{
         models::ServerMessage,
     },
 };
-use std::time::Duration as StdDuration;
 use js_sys::{Array, Function};
+use std::time::Duration as StdDuration;
 use wasm_bindgen::prelude::*;
 use web_time::Duration;
 
@@ -278,26 +278,26 @@ impl WasmManagedWsConfig {
         idle_timeout_ms: Option<u64>,
         backoff_reset_after_ms: Option<u64>,
     ) -> Self {
-        let mut b = ManagedWsConfig::builder();
+        let mut inner = ManagedWsConfig::default();
         if let Some(ms) = initial_backoff_ms {
-            b = b.initial_backoff(StdDuration::from_millis(ms));
+            inner.initial_backoff = StdDuration::from_millis(ms);
         }
         if let Some(ms) = max_backoff_ms {
-            b = b.max_backoff(StdDuration::from_millis(ms));
+            inner.max_backoff = StdDuration::from_millis(ms);
         }
         if let Some(n) = max_retries {
-            b = b.max_retries(n);
+            inner.max_retries = Some(n);
         }
         if let Some(n) = channel_capacity {
-            b = b.channel_capacity(n);
+            inner.channel_capacity = n;
         }
         if let Some(ms) = idle_timeout_ms {
-            b = b.idle_timeout(StdDuration::from_millis(ms));
+            inner.idle_timeout = StdDuration::from_millis(ms);
         }
         if let Some(ms) = backoff_reset_after_ms {
-            b = b.backoff_reset_after(StdDuration::from_millis(ms));
+            inner.backoff_reset_after = StdDuration::from_millis(ms);
         }
-        Self { inner: b.build() }
+        Self { inner }
     }
 }
 
@@ -327,7 +327,9 @@ impl WasmWsEvent {
     #[wasm_bindgen(getter)]
     pub fn message(&self) -> Option<WasmServerMessage> {
         match &self.inner {
-            WsEvent::Message(m) => Some(WasmServerMessage { inner: (**m).clone() }),
+            WsEvent::Message(m) => Some(WasmServerMessage {
+                inner: (**m).clone(),
+            }),
             _ => None,
         }
     }
@@ -385,7 +387,8 @@ impl WasmManagedWebsocket {
     /// @param {number} [id]
     #[wasm_bindgen(js_name = orderPlace)]
     pub fn order_place(&self, tx: &str, id: Option<u64>) -> WasmResult<()> {
-        self.inner.order_place(tx.to_string(), id.map(RequestId::new))?;
+        self.inner
+            .order_place(tx.to_string(), id.map(RequestId::new))?;
         Ok(())
     }
 
@@ -394,7 +397,8 @@ impl WasmManagedWebsocket {
     /// @param {number} [id]
     #[wasm_bindgen(js_name = orderCancel)]
     pub fn order_cancel(&self, tx: &str, id: Option<u64>) -> WasmResult<()> {
-        self.inner.order_cancel(tx.to_string(), id.map(RequestId::new))?;
+        self.inner
+            .order_cancel(tx.to_string(), id.map(RequestId::new))?;
         Ok(())
     }
 
