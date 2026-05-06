@@ -79,6 +79,11 @@ fn build_str_option_conversion(inner: &ParamMapping) -> String {
         "{{v}}.as_deref().map(from_json).transpose()?".into()
     } else {
         let inner_expr = inner.conversion.replace("{v}", "s");
-        format!("{{v}}.as_deref().map(|s| {inner_expr})")
+        if inner_expr.contains('?') {
+            let expr_no_q = inner_expr.trim_end_matches('?');
+            format!("{{v}}.as_deref().map(|s| {expr_no_q}).transpose()?")
+        } else {
+            format!("{{v}}.as_deref().map(|s| {inner_expr})")
+        }
     }
 }

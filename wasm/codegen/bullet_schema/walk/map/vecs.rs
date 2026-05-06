@@ -6,13 +6,21 @@ use sov_universal_wallet::schema::Link;
 use sov_universal_wallet::ty::Ty;
 
 use super::super::super::Types;
-use super::ParamMapping;
-use super::primitives;
+use super::newtypes::{self, NewtypeKind};
+use super::{ParamMapping, primitives};
 
 /// Map a `Vec { value }` schema type.
-pub fn map_vec(value_link: &Link, types: &Types, wrapper_indices: &HashSet<usize>) -> ParamMapping {
+pub fn map_vec(
+    context_name: &str,
+    field_name: &str,
+    value_link: &Link,
+    types: &Types,
+    wrapper_indices: &HashSet<usize>,
+) -> ParamMapping {
     match value_link {
-        Link::ByIndex(inner_idx) => map_vec_by_index(*inner_idx, types, wrapper_indices),
+        Link::ByIndex(inner_idx) => {
+            map_vec_by_index(context_name, field_name, *inner_idx, types, wrapper_indices)
+        }
         Link::Immediate(prim) => {
             let inner = primitives::map_immediate(prim);
             ParamMapping {
@@ -26,12 +34,16 @@ pub fn map_vec(value_link: &Link, types: &Types, wrapper_indices: &HashSet<usize
 }
 
 fn map_vec_by_index(
+    context_name: &str,
+    field_name: &str,
     inner_idx: usize,
     types: &Types,
     wrapper_indices: &HashSet<usize>,
 ) -> ParamMapping {
     // Known newtype Vecs.
-    if let Some(m) = try_map_known_vec(inner_idx) {
+    if let Some(m) =
+        newtypes::classify(field_name, inner_idx, types).and_then(NewtypeKind::vec_mapping)
+    {
         return m;
     }
 
@@ -59,48 +71,36 @@ fn map_vec_by_index(
             }
         }
         // Vec<(multi-field tuple)> — admin cancel ops.
-        Ty::Tuple(t) if t.fields.len() == 3 => map_admin_cancel_vec(t),
+        Ty::Tuple(t) if t.fields.len() == 3 => map_admin_cancel_vec(context_name, t, types),
         // Everything else — JSON fallback.
         _ => json_fallback(),
     }
 }
 
-/// Known Vec<Newtype> patterns with direct primitive params.
-fn try_map_known_vec(inner_idx: usize) -> Option<ParamMapping> {
-    let (param_type, conversion) = match inner_idx {
-        15 => ("Vec<u16>", "{v}.into_iter().map(AssetId).collect()"),
-        30 => ("Vec<u16>", "{v}.into_iter().map(MarketId).collect()"),
-        7 => (
-            "Vec<String>",
-            "{v}.iter().map(|s| parse_addr(s)).collect::<Result<Vec<_>, _>>()?",
-        ),
-        59 => ("Vec<u64>", "{v}.into_iter().map(OrderId).collect()"),
-        71 => ("Vec<u64>", "{v}.into_iter().map(TriggerOrderId).collect()"),
-        47 => ("Vec<u64>", "{v}.into_iter().map(ClientOrderId).collect()"),
-        75 => ("Vec<u64>", "{v}.into_iter().map(TwapId).collect()"),
-        _ => return None,
-    };
-
-    Some(ParamMapping {
-        param_type: param_type.into(),
-        conversion: conversion.into(),
-        is_optional: false,
-    })
-}
-
 /// Map `Vec<(MarketId, OrderId|TriggerOrderId, Address)>` for admin cancel ops.
 fn map_admin_cancel_vec(
+    context_name: &str,
     tuple: &sov_universal_wallet::ty::Tuple<sov_universal_wallet::schema::IndexLinking>,
+    types: &Types,
 ) -> ParamMapping {
-    let id_index = match &tuple.fields[1].value {
-        Link::ByIndex(i) => *i,
-        _ => panic!("Expected ByIndex for cancel tuple field 1"),
-    };
+    expect_tuple_newtype(&tuple.fields[0].value, "market_id", NewtypeKind::MarketId, types);
+    expect_tuple_newtype(&tuple.fields[2].value, "address", NewtypeKind::Address, types);
 
-    let id_wrapper = match id_index {
-        59 => "OrderId",
-        71 => "TriggerOrderId",
-        _ => panic!("Unknown ID type at index {id_index} in cancel tuple"),
+    let id_wrapper = match context_name {
+        "CancelOrders" => {
+            expect_tuple_newtype(&tuple.fields[1].value, "order_id", NewtypeKind::OrderId, types);
+            "OrderId"
+        }
+        "CancelTriggerOrders" => {
+            expect_tuple_newtype(
+                &tuple.fields[1].value,
+                "trigger_order_id",
+                NewtypeKind::TriggerOrderId,
+                types,
+            );
+            "TriggerOrderId"
+        }
+        _ => panic!("Unknown cancel tuple context {context_name}"),
     };
 
     let conversion = format!(
@@ -109,11 +109,16 @@ fn map_admin_cancel_vec(
          .collect::<Result<Vec<_>, String>>()? }}"
     );
 
-    ParamMapping {
-        param_type: "&str".into(),
-        conversion,
-        is_optional: false,
-    }
+    ParamMapping { param_type: "&str".into(), conversion, is_optional: false }
+}
+
+fn expect_tuple_newtype(link: &Link, field_name: &str, expected: NewtypeKind, types: &Types) {
+    let Link::ByIndex(idx) = link else {
+        panic!("Expected ByIndex for {field_name} in cancel tuple");
+    };
+
+    let actual = newtypes::classify(field_name, *idx, types);
+    assert_eq!(actual, Some(expected), "unexpected type for {field_name} in cancel tuple");
 }
 
 fn json_fallback() -> ParamMapping {

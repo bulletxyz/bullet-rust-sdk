@@ -278,25 +278,14 @@ impl WasmManagedWsConfig {
         idle_timeout_ms: Option<u64>,
         backoff_reset_after_ms: Option<u64>,
     ) -> Self {
-        let mut inner = ManagedWsConfig::default();
-        if let Some(ms) = initial_backoff_ms {
-            inner.initial_backoff = StdDuration::from_millis(ms);
-        }
-        if let Some(ms) = max_backoff_ms {
-            inner.max_backoff = StdDuration::from_millis(ms);
-        }
-        if let Some(n) = max_retries {
-            inner.max_retries = Some(n);
-        }
-        if let Some(n) = channel_capacity {
-            inner.channel_capacity = n;
-        }
-        if let Some(ms) = idle_timeout_ms {
-            inner.idle_timeout = StdDuration::from_millis(ms);
-        }
-        if let Some(ms) = backoff_reset_after_ms {
-            inner.backoff_reset_after = StdDuration::from_millis(ms);
-        }
+        let inner = ManagedWsConfig::builder()
+            .maybe_initial_backoff(initial_backoff_ms.map(StdDuration::from_millis))
+            .maybe_max_backoff(max_backoff_ms.map(StdDuration::from_millis))
+            .maybe_max_retries(max_retries)
+            .maybe_channel_capacity(channel_capacity)
+            .maybe_idle_timeout(idle_timeout_ms.map(StdDuration::from_millis))
+            .maybe_backoff_reset_after(backoff_reset_after_ms.map(StdDuration::from_millis))
+            .build();
         Self { inner }
     }
 }

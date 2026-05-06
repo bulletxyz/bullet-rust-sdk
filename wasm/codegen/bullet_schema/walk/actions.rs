@@ -1,7 +1,9 @@
 //! Extract the five CallMessage action groups from the schema.
 
+use bullet_exchange_interface::message::CallMessageDiscriminants;
 use sov_universal_wallet::schema::Link;
 use sov_universal_wallet::ty::Ty;
+use strum::IntoEnumIterator;
 
 use super::super::{FieldInfo, Types};
 use super::field_info_from_link;
@@ -20,41 +22,29 @@ pub struct RawVariantInfo {
 
 /// Find the `CallMessage` enum in the schema by name and extract all action groups.
 pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
-    let groups: Vec<_> = types
+    let action_names = call_message_action_names();
+    let call_message_enum = types
         .iter()
-        .filter_map(|ty| match ty {
-            Ty::Enum(e) if e.type_name == "CallMessage" => Some(e),
+        .find_map(|ty| match ty {
+            Ty::Enum(e) if is_exchange_call_message(e, &action_names) => Some(e),
             _ => None,
         })
-        .flat_map(|call_message_enum| {
-            call_message_enum
-                .variants
-                .iter()
-                .filter_map(|variant| extract_action_group_variant(variant, types))
-        })
-        .collect();
+        .expect("exchange CallMessage enum not found in schema");
 
-    assert!(
-        !groups.is_empty(),
-        "Exchange CallMessage enum not found in schema"
-    );
-    groups
+    call_message_enum
+        .variants
+        .iter()
+        .filter_map(|variant| extract_action_group_variant(variant, types))
+        .collect()
 }
 
 fn extract_action_group_variant(
     variant: &sov_universal_wallet::ty::EnumVariant<sov_universal_wallet::schema::IndexLinking>,
     types: &Types,
 ) -> Option<RawActionGroup> {
-    let tuple_index = match variant
-        .value
-        .as_ref()
-        .expect("CallMessage variant must have value")
-    {
+    let tuple_index = match variant.value.as_ref().expect("CallMessage variant must have value") {
         Link::ByIndex(i) => *i,
-        _ => panic!(
-            "Expected ByIndex link for CallMessage variant {}",
-            variant.name
-        ),
+        _ => panic!("Expected ByIndex link for CallMessage variant {}", variant.name),
     };
 
     // Unwrap the Tuple wrapper to get the action enum index. Skip variants that
@@ -75,17 +65,27 @@ fn extract_action_group_variant(
         _ => panic!("Expected Enum at index {action_enum_index}"),
     };
 
-    let variants = action_enum
-        .variants
-        .iter()
-        .map(|av| extract_variant(av, types))
-        .collect();
+    let variants = action_enum.variants.iter().map(|av| extract_variant(av, types)).collect();
 
     Some(RawActionGroup {
         call_message_variant: variant.name.clone(),
         action_enum: action_enum.type_name.clone(),
         variants,
     })
+}
+
+fn is_exchange_call_message(
+    enum_ty: &sov_universal_wallet::ty::Enum<sov_universal_wallet::schema::IndexLinking>,
+    action_names: &[String],
+) -> bool {
+    enum_ty.type_name == "CallMessage"
+        && action_names
+            .iter()
+            .all(|name| enum_ty.variants.iter().any(|variant| variant.name == name.as_str()))
+}
+
+fn call_message_action_names() -> Vec<String> {
+    CallMessageDiscriminants::iter().map(|variant| variant.to_string()).collect()
 }
 
 fn extract_variant(
@@ -96,22 +96,14 @@ fn extract_variant(
 ) -> RawVariantInfo {
     let fields = match enum_variant.value.as_ref() {
         Some(Link::ByIndex(i)) => match &types[*i] {
-            Ty::Struct(s) => s
-                .fields
-                .iter()
-                .map(|f| field_info_from_link(&f.display_name, &f.value))
-                .collect(),
-            _ => panic!(
-                "Expected Struct at index {i} for variant {}",
-                enum_variant.name
-            ),
+            Ty::Struct(s) => {
+                s.fields.iter().map(|f| field_info_from_link(&f.display_name, &f.value)).collect()
+            }
+            _ => panic!("Expected Struct at index {i} for variant {}", enum_variant.name),
         },
         Some(_) => panic!("Expected ByIndex for action variant {}", enum_variant.name),
         None => vec![],
     };
 
-    RawVariantInfo {
-        variant_name: enum_variant.name.clone(),
-        fields,
-    }
+    RawVariantInfo { variant_name: enum_variant.name.clone(), fields }
 }

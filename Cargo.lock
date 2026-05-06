@@ -354,6 +354,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "serde_json",
  "sov-universal-wallet",
+ "strum",
  "syn 2.0.117",
  "wasm-bindgen",
  "wasm-bindgen-futures",
