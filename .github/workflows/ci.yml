@@ -14,13 +14,13 @@ jobs:
     name: Test (rust crate)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           components: clippy
       - name: Install nightly rustfmt
         run: rustup toolchain install nightly --component rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       # Scope to bullet-rust-sdk only — bullet-rust-sdk-wasm has its own
       # build pipeline (npm publish workflow) and is not crates.io-bound.
       - run: cargo +nightly fmt --package bullet-rust-sdk -- --check --config-path rustfmt.nightly.toml
