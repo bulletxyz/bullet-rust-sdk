@@ -349,6 +349,7 @@ dependencies = [
  "prettyplease",
  "proc-macro2",
  "quote",
+ "reqwest",
  "rust_decimal",
  "serde",
  "serde-wasm-bindgen",

@@ -56,8 +56,9 @@
   "types": "./pkg/node.d.ts",
   "exports": {
     ".": {
+      "types": "./pkg/index.d.ts",
       "node": "./pkg/node.js",
-      "default": "./pkg/bullet_rust_sdk_wasm.js"
+      "default": "./pkg/index.js"
     }
   },
   "files": [

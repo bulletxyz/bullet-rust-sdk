@@ -23,6 +23,9 @@ build-wasm:
     wasm-pack build wasm --target web --out-dir pkg
     # Remove wasm-pack generated package.json and .gitignore that interfere with npm install --install-links
     rm -f wasm/pkg/.gitignore wasm/pkg/package.json
+    # Copy JS error class used by Rust wasm-bindgen imports and package exports
+    cp wasm/js/bullet-sdk-error.js wasm/pkg/bullet-sdk-error.js
+    cp wasm/js/bullet-sdk-error.d.ts wasm/pkg/bullet-sdk-error.d.ts
     # Copy the real README into pkg/ (wasm-pack generates a stub from Cargo.toml description)
     cp wasm/README.md wasm/pkg/README.md
     # Generate Node.js auto-init wrapper (uses web target's initSync)
@@ -31,10 +34,27 @@ build-wasm:
         'import { initSync } from "./bullet_rust_sdk_wasm.js";' \
         'const wasm = readFileSync(new URL("./bullet_rust_sdk_wasm_bg.wasm", import.meta.url));' \
         'initSync({ module: wasm });' \
+        'export { BulletSdkError } from "./bullet-sdk-error.js";' \
         'export * from "./bullet_rust_sdk_wasm.js";' \
         > wasm/pkg/node.js
     # Generate type re-exports
-    echo 'export * from "./bullet_rust_sdk_wasm.js";' > wasm/pkg/node.d.ts
+    printf '%s\n' \
+        'export { BulletSdkError } from "./bullet-sdk-error.js";' \
+        'export type { BulletSdkErrorKind, BulletSdkErrorOptions } from "./bullet-sdk-error.js";' \
+        'export * from "./bullet_rust_sdk_wasm.js";' \
+        > wasm/pkg/node.d.ts
+    # Generate browser/default package wrapper
+    printf '%s\n' \
+        'export { BulletSdkError } from "./bullet-sdk-error.js";' \
+        'export * from "./bullet_rust_sdk_wasm.js";' \
+        'export { default, initSync } from "./bullet_rust_sdk_wasm.js";' \
+        > wasm/pkg/index.js
+    printf '%s\n' \
+        'export { BulletSdkError } from "./bullet-sdk-error.js";' \
+        'export type { BulletSdkErrorKind, BulletSdkErrorOptions } from "./bullet-sdk-error.js";' \
+        'export * from "./bullet_rust_sdk_wasm.js";' \
+        'export { default, initSync } from "./bullet_rust_sdk_wasm.js";' \
+        > wasm/pkg/index.d.ts
 
 # Remove generated WASM build artifacts
 clean-wasm:
