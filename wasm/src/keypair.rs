@@ -50,6 +50,13 @@ impl WasmKeypair {
         self.inner.address_hex()
     }
 
+    /// The public key as a lowercase hex string (64 chars).
+    /// @returns {string}
+    #[wasm_bindgen(js_name = publicKeyHex)]
+    pub fn public_key_hex(&self) -> String {
+        self.inner.public_key_hex()
+    }
+
     /// Sign `message` and return the 64-byte Ed25519 signature as `Uint8Array`.
     pub fn sign(&self, message: &[u8]) -> Vec<u8> {
         self.inner.sign(message)

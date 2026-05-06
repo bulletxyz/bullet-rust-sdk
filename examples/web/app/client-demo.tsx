@@ -14,7 +14,10 @@ import init, {
 let wasmInitPromise: ReturnType<typeof init> | null = null;
 
 function initWasm() {
-  wasmInitPromise ??= init();
+  wasmInitPromise ??= init().catch((err) => {
+    wasmInitPromise = null;
+    throw err;
+  });
   return wasmInitPromise;
 }
 
