@@ -141,8 +141,9 @@ impl From<bullet_rust_sdk::codegen::Error<ApiErrorResponse>> for WasmError {
 
 impl From<reqwest::Error> for WasmError {
     fn from(e: reqwest::Error) -> Self {
+        let retryable = e.is_timeout() || e.is_request();
         let mut err = WasmError::new(e).with_kind(WasmErrorKind::Http);
-        err.retryable = true;
+        err.retryable = retryable;
         err
     }
 }
