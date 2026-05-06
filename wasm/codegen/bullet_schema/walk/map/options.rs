@@ -17,11 +17,7 @@ pub fn map_option(inner: ParamMapping) -> ParamMapping {
 
     let conversion = build_option_conversion(&inner);
 
-    ParamMapping {
-        param_type,
-        conversion,
-        is_optional: true,
-    }
+    ParamMapping { param_type, conversion, is_optional: true }
 }
 
 fn build_option_conversion(inner: &ParamMapping) -> String {

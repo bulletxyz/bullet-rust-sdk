@@ -13,26 +13,20 @@ pub struct WasmKeypair {
 impl WasmKeypair {
     /// Generate a new random keypair.
     pub fn generate() -> WasmKeypair {
-        WasmKeypair {
-            inner: Keypair::generate(),
-        }
+        WasmKeypair { inner: Keypair::generate() }
     }
 
     /// Create from a 32-byte hex private key (with or without `0x` prefix).
     #[wasm_bindgen(js_name = fromHex)]
     pub fn from_hex(hex: &str) -> WasmResult<WasmKeypair> {
-        Ok(WasmKeypair {
-            inner: Keypair::from_hex(hex)?,
-        })
+        Ok(WasmKeypair { inner: Keypair::from_hex(hex)? })
     }
 
     /// Create from a raw 32-byte `Uint8Array`.
     #[wasm_bindgen(js_name = fromBytes)]
     pub fn from_bytes(bytes: &[u8]) -> WasmResult<WasmKeypair> {
         let arr: [u8; 32] = bytes.try_into()?;
-        Ok(WasmKeypair {
-            inner: Keypair::from_bytes(arr),
-        })
+        Ok(WasmKeypair { inner: Keypair::from_bytes(arr) })
     }
 
     /// 32-byte public key as `Uint8Array`.

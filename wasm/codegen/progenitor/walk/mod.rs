@@ -7,10 +7,10 @@
 //!
 //! # Adding new type support
 //!
-//! 1. If it's a structural type that changes codegen shape (like `Option`, `Vec`),
-//!    add a variant to `RustType` and handle it in `utils::parse_rust_type`.
-//! 2. Otherwise, it falls through to `Named { name, args }` automatically.
-//!    Handle it in `emit/type_map.rs` by matching on the name.
+//! 1. If it's a structural type that changes codegen shape (like `Option`, `Vec`), add a variant to
+//!    `RustType` and handle it in `utils::parse_rust_type`.
+//! 2. Otherwise, it falls through to `Named { name, args }` automatically. Handle it in
+//!    `emit/type_map.rs` by matching on the name.
 
 mod extractions;
 mod utils;
@@ -18,21 +18,18 @@ mod utils;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use extractions::{extract_enum, extract_impl, extract_struct};
 use syn::Item;
+use utils::impl_target_name;
 
 use super::{CodeModel, TypeInfo};
-use extractions::{extract_enum, extract_impl, extract_struct};
-use utils::impl_target_name;
 
 // ── Entry Point ──────────────────────────────────────────────────────────────
 
 /// Parse the progenitor-generated codegen.rs and build a `CodeModel`.
 pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
     let source = std::fs::read_to_string(codegen_path).unwrap_or_else(|e| {
-        panic!(
-            "failed to read progenitor codegen at {}: {e}",
-            codegen_path.display()
-        )
+        panic!("failed to read progenitor codegen at {}: {e}", codegen_path.display())
     });
 
     let file = syn::parse_file(&source)
