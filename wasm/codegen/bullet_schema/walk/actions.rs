@@ -31,11 +31,26 @@ pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
         })
         .expect("exchange CallMessage enum not found in schema");
 
-    call_message_enum
+    let groups: Vec<_> = call_message_enum
         .variants
         .iter()
         .filter_map(|variant| extract_action_group_variant(variant, types))
-        .collect()
+        .collect();
+
+    let extracted_names: Vec<_> =
+        groups.iter().map(|group| group.call_message_variant.as_str()).collect();
+    let missing_names: Vec<_> = action_names
+        .iter()
+        .filter(|name| !extracted_names.contains(&name.as_str()))
+        .map(String::as_str)
+        .collect();
+    assert!(
+        missing_names.is_empty(),
+        "missing action groups in exchange CallMessage enum: {}",
+        missing_names.join(", ")
+    );
+
+    groups
 }
 
 fn extract_action_group_variant(

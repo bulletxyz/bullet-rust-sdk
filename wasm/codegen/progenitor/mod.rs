@@ -58,16 +58,16 @@ pub enum TypeInfo {
 /// # Design decisions
 ///
 /// - **Lifetimes are stripped.** They're irrelevant for WASM type mapping.
-/// - **Named types store only the final path segment.** `types::Account` → "Account".
-///   This assumes progenitor uses a flat `types` module with no name collisions.
-/// - **Only structural types get promoted to variants.** `Option`, `Vec`, `Map`,
-///   `Ref`, `Slice`, `Tuple`, `ResponseValue` each have their own variant because
-///   they fundamentally change how emit generates code.
-/// - **`ResponseValue<T>` is promoted** despite being progenitor-specific. It
-///   appears on every client method return, so promoting it avoids repetitive
-///   unwrapping in emit. Walk strips the outer `Result<..., Error<_>>` wrapper.
-/// - **Everything else is `Named`** with optional generic args, letting emit
-///   pattern match on the name (e.g., "ByteStream" for streaming responses).
+/// - **Named types store only the final path segment.** `types::Account` → "Account". This assumes
+///   progenitor uses a flat `types` module with no name collisions.
+/// - **Only structural types get promoted to variants.** `Option`, `Vec`, `Map`, `Ref`, `Slice`,
+///   `Tuple`, `ResponseValue` each have their own variant because they fundamentally change how
+///   emit generates code.
+/// - **`ResponseValue<T>` is promoted** despite being progenitor-specific. It appears on every
+///   client method return, so promoting it avoids repetitive unwrapping in emit. Walk strips the
+///   outer `Result<..., Error<_>>` wrapper.
+/// - **Everything else is `Named`** with optional generic args, letting emit pattern match on the
+///   name (e.g., "ByteStream" for streaming responses).
 #[derive(Debug, Clone, PartialEq)]
 pub enum RustType {
     // ── Primitives ───────────────────────────────────────────────────────────
@@ -141,7 +141,8 @@ pub struct StructDetails {
     pub fields: Vec<FieldDetails>,
     /// Whether this is a newtype wrapper (single unnamed field, `#[serde(transparent)]`).
     pub is_newtype: bool,
-    /// Module path relative to the codegen root, e.g. `["types", "error"]` for `types::error::ConversionError`.
+    /// Module path relative to the codegen root, e.g. `["types", "error"]` for
+    /// `types::error::ConversionError`.
     pub module_path: Vec<String>,
     /// Derive macros on this struct (e.g., `["Serialize", "Deserialize", "Clone"]`).
     pub derives: Vec<String>,

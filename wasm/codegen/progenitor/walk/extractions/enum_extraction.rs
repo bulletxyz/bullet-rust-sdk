@@ -20,11 +20,7 @@ pub fn extract_enum(e: &ItemEnum, module_path: &[String]) -> Option<EnumDetails>
                         let field_name = f.ident.as_ref()?.to_string();
                         let ty = parse_rust_type(&f.ty)?;
                         let serde_rename = extract_serde_rename(&f.attrs);
-                        Some(FieldDetails {
-                            kind: FieldKind::Named(field_name),
-                            ty,
-                            serde_rename,
-                        })
+                        Some(FieldDetails { kind: FieldKind::Named(field_name), ty, serde_rename })
                     })
                     .collect(),
                 syn::Fields::Unnamed(unnamed) => unnamed
@@ -33,19 +29,12 @@ pub fn extract_enum(e: &ItemEnum, module_path: &[String]) -> Option<EnumDetails>
                     .enumerate()
                     .filter_map(|(i, f)| {
                         let ty = parse_rust_type(&f.ty)?;
-                        Some(FieldDetails {
-                            kind: FieldKind::Index(i),
-                            ty,
-                            serde_rename: None,
-                        })
+                        Some(FieldDetails { kind: FieldKind::Index(i), ty, serde_rename: None })
                     })
                     .collect(),
                 syn::Fields::Unit => vec![],
             };
-            VariantDetails {
-                name: variant_name,
-                fields,
-            }
+            VariantDetails { name: variant_name, fields }
         })
         .collect();
 

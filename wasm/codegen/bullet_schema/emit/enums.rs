@@ -11,9 +11,7 @@ pub fn emit_enum(e: &SchemaEnum) -> TokenStream {
     let js_name = &e.type_name;
 
     let variant_idents: Vec<_> = e.variants.iter().map(|v| format_ident!("{}", v)).collect();
-    let variant_indices: Vec<_> = (0..e.variants.len())
-        .map(|i| i as isize)
-        .collect::<Vec<_>>();
+    let variant_indices: Vec<_> = (0..e.variants.len()).map(|i| i as isize).collect::<Vec<_>>();
 
     let match_arms: Vec<TokenStream> = variant_idents
         .iter()

@@ -162,13 +162,10 @@ pub fn first_generic_arg(args: &PathArguments) -> Option<&Type> {
 
 fn first_two_generic_args(args: &PathArguments) -> Option<(&Type, &Type)> {
     if let PathArguments::AngleBracketed(ab) = args {
-        let mut types = ab.args.iter().filter_map(|arg| {
-            if let GenericArgument::Type(ty) = arg {
-                Some(ty)
-            } else {
-                None
-            }
-        });
+        let mut types = ab
+            .args
+            .iter()
+            .filter_map(|arg| if let GenericArgument::Type(ty) = arg { Some(ty) } else { None });
         let first = types.next()?;
         let second = types.next()?;
         return Some((first, second));
@@ -181,11 +178,7 @@ fn collect_generic_args(args: &PathArguments) -> Vec<RustType> {
         ab.args
             .iter()
             .filter_map(|arg| {
-                if let GenericArgument::Type(ty) = arg {
-                    parse_rust_type(ty)
-                } else {
-                    None
-                }
+                if let GenericArgument::Type(ty) = arg { parse_rust_type(ty) } else { None }
             })
             .collect()
     } else {
@@ -194,11 +187,7 @@ fn collect_generic_args(args: &PathArguments) -> Vec<RustType> {
 }
 
 fn path_to_string(path: &syn::Path) -> String {
-    path.segments
-        .iter()
-        .map(|s| s.ident.to_string())
-        .collect::<Vec<_>>()
-        .join("::")
+    path.segments.iter().map(|s| s.ident.to_string()).collect::<Vec<_>>().join("::")
 }
 
 // ── Attribute Helpers ────────────────────────────────────────────────────────

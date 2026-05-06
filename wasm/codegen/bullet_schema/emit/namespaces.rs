@@ -22,11 +22,7 @@ pub fn emit_namespace(group: &ActionGroup) -> TokenStream {
     let ns = format_ident!("{}", group.call_message_variant);
     let doc = namespace_doc(&group.call_message_variant);
 
-    let methods: Vec<TokenStream> = group
-        .variants
-        .iter()
-        .map(|v| emit_factory(group, v))
-        .collect();
+    let methods: Vec<TokenStream> = group.variants.iter().map(|v| emit_factory(group, v)).collect();
 
     quote! {
         #[doc = #doc]
@@ -55,10 +51,8 @@ fn emit_factory(group: &ActionGroup, variant: &VariantInfo) -> TokenStream {
         .iter()
         .map(|&i| {
             let name = format_ident!("{}", variant.fields[i].name);
-            let ty: TokenStream = variant.fields[i]
-                .param_type
-                .parse()
-                .expect("param type should parse");
+            let ty: TokenStream =
+                variant.fields[i].param_type.parse().expect("param type should parse");
             quote! { #name: #ty }
         })
         .collect();
