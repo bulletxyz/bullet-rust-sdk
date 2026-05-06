@@ -20,6 +20,7 @@ build-release:
 
 # Build the WASM package (web target + Node.js wrapper)
 build-wasm:
+    rm -rf wasm/pkg
     wasm-pack build wasm --target web --out-dir pkg
     # Remove wasm-pack generated package.json and .gitignore that interfere with npm install --install-links
     rm -f wasm/pkg/.gitignore wasm/pkg/package.json
@@ -40,7 +41,7 @@ build-wasm:
     # Generate type re-exports
     printf '%s\n' \
         'export { BulletSdkError } from "./bullet-sdk-error.js";' \
-        'export type { BulletSdkErrorKind, BulletSdkErrorOptions } from "./bullet-sdk-error.js";' \
+        'export type { BulletSdkErrorDetails, BulletSdkErrorDetailsByKind, BulletSdkErrorKind, BulletSdkErrorOptions, BulletSdkErrorStatus, JsonValue } from "./bullet-sdk-error.js";' \
         'export * from "./bullet_rust_sdk_wasm.js";' \
         > wasm/pkg/node.d.ts
     # Generate browser/default package wrapper
@@ -51,7 +52,7 @@ build-wasm:
         > wasm/pkg/index.js
     printf '%s\n' \
         'export { BulletSdkError } from "./bullet-sdk-error.js";' \
-        'export type { BulletSdkErrorKind, BulletSdkErrorOptions } from "./bullet-sdk-error.js";' \
+        'export type { BulletSdkErrorDetails, BulletSdkErrorDetailsByKind, BulletSdkErrorKind, BulletSdkErrorOptions, BulletSdkErrorStatus, JsonValue } from "./bullet-sdk-error.js";' \
         'export * from "./bullet_rust_sdk_wasm.js";' \
         'export { default, initSync } from "./bullet_rust_sdk_wasm.js";' \
         > wasm/pkg/index.d.ts

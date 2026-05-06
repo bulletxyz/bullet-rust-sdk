@@ -76,7 +76,7 @@ try {
     if (err instanceof BulletSdkError) {
         err.kind       // 'api' | 'http' | 'websocket' | 'validation' | ...
         err.status     // HTTP status when the API returned one
-        err.details    // API-provided details when available
+        err.details    // structured JSON details when available
         err.retryable  // whether retry/backoff is reasonable
         err.message    // human-readable message
     }

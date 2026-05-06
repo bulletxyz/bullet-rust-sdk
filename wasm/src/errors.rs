@@ -46,7 +46,7 @@ pub struct WasmError {
     message: String,
     kind: WasmErrorKind,
     status: Option<u16>,
-    details: Option<String>,
+    details: Option<JsValue>,
     retryable: bool,
 }
 
@@ -85,7 +85,7 @@ impl From<WasmError> for JsValue {
         }
 
         if let Some(details) = e.details {
-            set_property(&err, "details", &JsValue::from_str(&details));
+            set_property(&err, "details", &details);
         }
 
         err
@@ -123,7 +123,10 @@ impl From<SDKError> for WasmError {
 
         if let Some(api_error) = e.api_error() {
             err.status = Some(api_error.status);
-            err.details = api_error.details.as_ref().map(ToString::to_string);
+            err.details = api_error
+                .details
+                .as_ref()
+                .map(|details| serde_wasm_bindgen::to_value(details).unwrap_or(JsValue::NULL));
         }
 
         err
