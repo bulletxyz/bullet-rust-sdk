@@ -1,0 +1,23 @@
+renovate.json
+  2bfcdcf4982093e0 36-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "f0df8301b46cbcdd79c45426dd4722719eebcb63",
+  "prompts": {
+    "2bfcdcf4982093e0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "38df2c31-3caa-4dc7-9395-907a9b88fd0b",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Tristan",
+      "messages": [],
+      "total_additions": 21,
+      "total_deletions": 0,
+      "accepted_lines": 21,
+      "overriden_lines": 0
+    }
+  }
+}
