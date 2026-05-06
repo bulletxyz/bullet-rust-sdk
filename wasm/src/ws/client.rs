@@ -93,9 +93,12 @@ impl WasmWebsocketHandle {
     }
 
     /// Subscribe to topics.
-    /// @param {Array<Topic>} topics - Array of `Topic` objects (e.g.
-    /// `[Topic.aggTrade("BTC-USD")]`). @param {number} [id] - Optional request ID for
-    /// correlating the server response. @returns {Promise<void>}
+    /// @param {Array<Topic>} topics - Array of `Topic` objects, such as
+    /// `[Topic.aggTrade("BTC-USD")]`.
+    ///
+    /// @param {number} [id] - Optional request ID for correlating the server response.
+    ///
+    /// @returns {Promise<void>}
     pub async fn subscribe(&mut self, topics: TopicArray, id: Option<u64>) -> WasmResult<()> {
         let arr: &Array = topics.unchecked_ref();
         let params: Vec<String> = arr.iter().filter_map(resolve_topic).collect();
@@ -237,12 +240,21 @@ pub struct WasmManagedWsConfig {
 impl WasmManagedWsConfig {
     /// Create a managed WebSocket configuration.
     /// @param {number} [initialBackoffMs] - Initial reconnect backoff, in milliseconds (default
-    /// 1000). @param {number} [maxBackoffMs] - Maximum backoff ceiling, in milliseconds
-    /// (default 30000). @param {number} [maxRetries] - Maximum reconnect attempts before giving
-    /// up (default: infinite). @param {number} [channelCapacity] - Event buffer size (default
-    /// 10000). @param {number} [idleTimeoutMs] - Force a reconnect if no server message arrives
-    /// in this window (default 60000; pass 0 to disable). @param {number} [backoffResetAfterMs]
-    /// - Reset exponential backoff after the connection has been up for this long (default 30000).
+    /// 1000).
+    ///
+    /// @param {number} [maxBackoffMs] - Maximum backoff ceiling, in milliseconds (default 30000).
+    ///
+    /// @param {number} [maxRetries] - Maximum reconnect attempts before giving up (default:
+    /// infinite).
+    ///
+    /// @param {number} [channelCapacity] - Event buffer size (default 10000).
+    ///
+    /// @param {number} [idleTimeoutMs] - Force a reconnect if no server message arrives in this
+    /// window (default 60000; pass 0 to disable).
+    ///
+    /// @param {number} [backoffResetAfterMs] - Reset exponential backoff after the connection has
+    /// been up for this long (default 30000).
+    ///
     /// @returns {ManagedWsConfig}
     #[wasm_bindgen(constructor)]
     pub fn new(

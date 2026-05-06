@@ -33,11 +33,5 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest,just,wasm-pack
-      - uses: Swatinem/rust-cache@v2
-      - run: just ci
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-      # Scope to bullet-rust-sdk only — bullet-rust-sdk-wasm has its own
-      # build pipeline (npm publish workflow) and is not crates.io-bound.
-      - run: cargo +nightly fmt --package bullet-rust-sdk -- --check --config-path rustfmt.nightly.toml
-      - run: cargo clippy --package bullet-rust-sdk --all-targets --all-features -- -D warnings
-      - run: cargo test --package bullet-rust-sdk --all-features
+      - run: just ci
