@@ -52,11 +52,7 @@ fn build_option_conversion(inner: &ParamMapping) -> String {
 /// Extract simple callable conversions like `TypeName({v})` or `Type::function({v})`.
 fn simple_callable(conversion: &str) -> Option<&str> {
     let path = conversion.strip_suffix("({v})")?;
-    if path.split("::").all(is_rust_ident) {
-        Some(path)
-    } else {
-        None
-    }
+    if path.split("::").all(is_rust_ident) { Some(path) } else { None }
 }
 
 fn is_rust_ident(value: &str) -> bool {

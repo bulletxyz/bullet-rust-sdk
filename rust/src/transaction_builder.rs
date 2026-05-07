@@ -103,14 +103,8 @@ impl UnsignedTransaction {
                 "unsigned transaction serialized to non-object JSON".to_string(),
             ));
         };
-        message.insert(
-            "chain_name".to_string(),
-            Value::String(self.chain_name.clone()),
-        );
-        message.insert(
-            "chain_hash".to_string(),
-            Value::String(chain_hash_hex(&self.chain_hash)),
-        );
+        message.insert("chain_name".to_string(), Value::String(self.chain_name.clone()));
+        message.insert("chain_hash".to_string(), Value::String(chain_hash_hex(&self.chain_hash)));
         serde_json::to_vec(&Value::Object(message)).map_err(Into::into)
     }
 
@@ -200,11 +194,7 @@ impl SolanaOffchainTransaction {
         signature: [u8; 64],
         pubkey: [u8; 32],
     ) -> SDKResult<Self> {
-        Ok(Self {
-            signed_message: tx.to_message_bytes()?,
-            pubkey,
-            signature,
-        })
+        Ok(Self { signed_message: tx.to_message_bytes()?, pubkey, signature })
     }
 
     /// Borsh-serialize a Solana offchain transaction to bytes.
@@ -406,13 +396,7 @@ fn offchain_integer_newtype_paths() -> SDKResult<&'static [JsonPath]> {
 fn build_offchain_integer_newtype_paths() -> Result<Vec<JsonPath>, String> {
     let schema = Schema::of_single_type::<RawUnsignedTransaction>().map_err(|e| e.to_string())?;
     let mut paths = Vec::new();
-    collect_integer_newtype_paths(
-        &schema,
-        &Link::ByIndex(0),
-        false,
-        &mut Vec::new(),
-        &mut paths,
-    )?;
+    collect_integer_newtype_paths(&schema, &Link::ByIndex(0), false, &mut Vec::new(), &mut paths)?;
     Ok(paths)
 }
 
@@ -531,10 +515,7 @@ fn link_contains_wide_integer(schema: &Schema, link: &Link) -> Result<bool, Stri
 }
 
 fn is_wide_integer(kind: IntegerType) -> bool {
-    matches!(
-        kind,
-        IntegerType::u64 | IntegerType::u128 | IntegerType::i64 | IntegerType::i128
-    )
+    matches!(kind, IntegerType::u64 | IntegerType::u128 | IntegerType::i64 | IntegerType::i128)
 }
 
 fn stringify_json_path(value: &mut Value, path: &[JsonPathSegment]) {
@@ -550,10 +531,7 @@ fn stringify_json_path(value: &mut Value, path: &[JsonPathSegment]) {
             }
         }
         JsonPathSegment::Index(index) => {
-            if let Some(value) = value
-                .as_array_mut()
-                .and_then(|values| values.get_mut(*index))
-            {
+            if let Some(value) = value.as_array_mut().and_then(|values| values.get_mut(*index)) {
                 stringify_json_path(value, rest);
             }
         }
@@ -751,10 +729,7 @@ mod tests {
         let bytes = unsigned.to_message_bytes().unwrap();
         let message: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
-        assert_eq!(
-            message["details"]["max_priority_fee_bips"],
-            u64::MAX.to_string()
-        );
+        assert_eq!(message["details"]["max_priority_fee_bips"], u64::MAX.to_string());
         assert_eq!(message["details"]["chain_id"], 1);
         assert_eq!(message["uniqueness"]["generation"], 12345);
     }
