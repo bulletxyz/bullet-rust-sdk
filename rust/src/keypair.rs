@@ -70,6 +70,11 @@ impl Keypair {
         hex::encode(self.public_key())
     }
 
+    /// The public key as a hex string (32 bytes → 64 hex chars).
+    pub fn public_key_hex(&self) -> String {
+        self.address_hex()
+    }
+
     /// Write to a Solana-compatible JSON keystore file.
     ///
     /// Format: a JSON array of 64 integers — the 32-byte secret key followed

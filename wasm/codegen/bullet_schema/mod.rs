@@ -1,8 +1,8 @@
 //! Schema-driven codegen for the Bullet exchange WASM SDK.
 //!
 //! Two phases:
-//! - **walk**: traverse the `Transaction` schema, extract types, and resolve
-//!   field mappings to wasm-bindgen-compatible params
+//! - **walk**: traverse the `Transaction` schema, extract types, and resolve field mappings to
+//!   wasm-bindgen-compatible params
 //! - **emit**: generate Rust source code from the resolved data
 
 pub mod emit;
@@ -219,15 +219,15 @@ pub struct SchemaEnum {
 ///
 /// The three collections serve different purposes:
 ///
-/// - `action_groups` define the **factory methods** (e.g., `User.deposit(...)`)
-///   that construct `CallMessage` variants. These are the entry points for JS.
+/// - `action_groups` define the **factory methods** (e.g., `User.deposit(...)`) that construct
+///   `CallMessage` variants. These are the entry points for JS.
 ///
-/// - `structs` are **nested types** used as parameters within action variants.
-///   For example, `UserAction::PlaceOrders { orders: Vec<NewOrderArgs> }` needs
-///   `NewOrderArgs` to be exposed so JS can construct order objects.
+/// - `structs` are **nested types** used as parameters within action variants. For example,
+///   `UserAction::PlaceOrders { orders: Vec<NewOrderArgs> }` needs `NewOrderArgs` to be exposed so
+///   JS can construct order objects.
 ///
-/// - `enums` are **C-style enums** used as parameters (e.g., `Side`, `OrderType`).
-///   These become wasm-bindgen enums that JS can pass to factory methods.
+/// - `enums` are **C-style enums** used as parameters (e.g., `Side`, `OrderType`). These become
+///   wasm-bindgen enums that JS can pass to factory methods.
 ///
 /// The `structs` and `enums` are discovered by walking the action group fields —
 /// any non-primitive type referenced by an action variant gets a wrapper generated.

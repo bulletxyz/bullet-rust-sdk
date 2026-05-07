@@ -21,11 +21,7 @@ pub fn extract_struct(s: &ItemStruct, module_path: &[String]) -> Option<StructDe
                     let field_name = f.ident.as_ref()?.to_string();
                     let ty = parse_rust_type(&f.ty)?;
                     let serde_rename = extract_serde_rename(&f.attrs);
-                    Some(FieldDetails {
-                        kind: FieldKind::Named(field_name),
-                        ty,
-                        serde_rename,
-                    })
+                    Some(FieldDetails { kind: FieldKind::Named(field_name), ty, serde_rename })
                 })
                 .collect();
 
@@ -48,11 +44,7 @@ pub fn extract_struct(s: &ItemStruct, module_path: &[String]) -> Option<StructDe
                         return None;
                     }
                     let ty = parse_rust_type(&f.ty)?;
-                    Some(FieldDetails {
-                        kind: FieldKind::Index(i),
-                        ty,
-                        serde_rename: None,
-                    })
+                    Some(FieldDetails { kind: FieldKind::Index(i), ty, serde_rename: None })
                 })
                 .collect();
 

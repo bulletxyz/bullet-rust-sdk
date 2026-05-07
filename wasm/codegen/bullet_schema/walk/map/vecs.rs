@@ -6,13 +6,21 @@ use sov_universal_wallet::schema::Link;
 use sov_universal_wallet::ty::Ty;
 
 use super::super::super::Types;
-use super::ParamMapping;
-use super::primitives;
+use super::newtypes::{self, NewtypeKind};
+use super::{ParamMapping, primitives};
 
 /// Map a `Vec { value }` schema type.
-pub fn map_vec(value_link: &Link, types: &Types, wrapper_indices: &HashSet<usize>) -> ParamMapping {
+pub fn map_vec(
+    context_name: &str,
+    field_name: &str,
+    value_link: &Link,
+    types: &Types,
+    wrapper_indices: &HashSet<usize>,
+) -> ParamMapping {
     match value_link {
-        Link::ByIndex(inner_idx) => map_vec_by_index(*inner_idx, types, wrapper_indices),
+        Link::ByIndex(inner_idx) => {
+            map_vec_by_index(context_name, field_name, *inner_idx, types, wrapper_indices)
+        }
         Link::Immediate(prim) => {
             let inner = primitives::map_immediate(prim);
             ParamMapping {
@@ -26,12 +34,16 @@ pub fn map_vec(value_link: &Link, types: &Types, wrapper_indices: &HashSet<usize
 }
 
 fn map_vec_by_index(
+    context_name: &str,
+    field_name: &str,
     inner_idx: usize,
     types: &Types,
     wrapper_indices: &HashSet<usize>,
 ) -> ParamMapping {
     // Known newtype Vecs.
-    if let Some(m) = try_map_known_vec(inner_idx) {
+    if let Some(m) =
+        newtypes::classify(field_name, inner_idx, types).and_then(NewtypeKind::vec_mapping)
+    {
         return m;
     }
 
@@ -58,49 +70,45 @@ fn map_vec_by_index(
                 json_fallback()
             }
         }
-        // Vec<(multi-field tuple)> — admin cancel ops.
-        Ty::Tuple(t) if t.fields.len() == 3 => map_admin_cancel_vec(t),
+        // Vec<(multi-field tuple)> — admin cancel ops use a specialized
+        // compact JSON shape. Other tuple Vecs should stay on the generic
+        // JSON fallback so future schema additions do not panic here.
+        Ty::Tuple(t) if t.fields.len() == 3 && is_admin_cancel_context(context_name) => {
+            map_admin_cancel_vec(context_name, t, types)
+        }
         // Everything else — JSON fallback.
         _ => json_fallback(),
     }
 }
 
-/// Known Vec<Newtype> patterns with direct primitive params.
-fn try_map_known_vec(inner_idx: usize) -> Option<ParamMapping> {
-    let (param_type, conversion) = match inner_idx {
-        15 => ("Vec<u16>", "{v}.into_iter().map(AssetId).collect()"),
-        30 => ("Vec<u16>", "{v}.into_iter().map(MarketId).collect()"),
-        7 => (
-            "Vec<String>",
-            "{v}.iter().map(|s| parse_addr(s)).collect::<Result<Vec<_>, _>>()?",
-        ),
-        59 => ("Vec<u64>", "{v}.into_iter().map(OrderId).collect()"),
-        71 => ("Vec<u64>", "{v}.into_iter().map(TriggerOrderId).collect()"),
-        47 => ("Vec<u64>", "{v}.into_iter().map(ClientOrderId).collect()"),
-        75 => ("Vec<u64>", "{v}.into_iter().map(TwapId).collect()"),
-        _ => return None,
-    };
-
-    Some(ParamMapping {
-        param_type: param_type.into(),
-        conversion: conversion.into(),
-        is_optional: false,
-    })
+fn is_admin_cancel_context(context_name: &str) -> bool {
+    matches!(context_name, "CancelOrders" | "CancelTriggerOrders")
 }
 
 /// Map `Vec<(MarketId, OrderId|TriggerOrderId, Address)>` for admin cancel ops.
 fn map_admin_cancel_vec(
+    context_name: &str,
     tuple: &sov_universal_wallet::ty::Tuple<sov_universal_wallet::schema::IndexLinking>,
+    types: &Types,
 ) -> ParamMapping {
-    let id_index = match &tuple.fields[1].value {
-        Link::ByIndex(i) => *i,
-        _ => panic!("Expected ByIndex for cancel tuple field 1"),
-    };
+    expect_tuple_newtype(&tuple.fields[0].value, "market_id", NewtypeKind::MarketId, types);
+    expect_tuple_newtype(&tuple.fields[2].value, "address", NewtypeKind::Address, types);
 
-    let id_wrapper = match id_index {
-        59 => "OrderId",
-        71 => "TriggerOrderId",
-        _ => panic!("Unknown ID type at index {id_index} in cancel tuple"),
+    let id_wrapper = match context_name {
+        "CancelOrders" => {
+            expect_tuple_newtype(&tuple.fields[1].value, "order_id", NewtypeKind::OrderId, types);
+            "OrderId"
+        }
+        "CancelTriggerOrders" => {
+            expect_tuple_newtype(
+                &tuple.fields[1].value,
+                "trigger_order_id",
+                NewtypeKind::TriggerOrderId,
+                types,
+            );
+            "TriggerOrderId"
+        }
+        _ => unreachable!("admin cancel context checked before mapping"),
     };
 
     let conversion = format!(
@@ -109,11 +117,16 @@ fn map_admin_cancel_vec(
          .collect::<Result<Vec<_>, String>>()? }}"
     );
 
-    ParamMapping {
-        param_type: "&str".into(),
-        conversion,
-        is_optional: false,
-    }
+    ParamMapping { param_type: "&str".into(), conversion, is_optional: false }
+}
+
+fn expect_tuple_newtype(link: &Link, field_name: &str, expected: NewtypeKind, types: &Types) {
+    let Link::ByIndex(idx) = link else {
+        panic!("Expected ByIndex for {field_name} in cancel tuple");
+    };
+
+    let actual = newtypes::classify(field_name, *idx, types);
+    assert_eq!(actual, Some(expected), "unexpected type for {field_name} in cancel tuple");
 }
 
 fn json_fallback() -> ParamMapping {
@@ -121,5 +134,38 @@ fn json_fallback() -> ParamMapping {
         param_type: "&str".into(),
         conversion: "from_json({v})?".into(),
         is_optional: false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use sov_universal_wallet::schema::{Link, Primitive};
+    use sov_universal_wallet::ty::{IntegerDisplay, IntegerType, Ty, UnnamedField};
+
+    use super::map_vec;
+
+    #[test]
+    fn unknown_three_tuple_vec_context_falls_back_to_json() {
+        let types = vec![Ty::Tuple(sov_universal_wallet::ty::Tuple {
+            template: None,
+            peekable: false,
+            fields: vec![immediate_u64_field(), immediate_u64_field(), immediate_u64_field()],
+        })];
+
+        let mapping =
+            map_vec("FutureStruct", "tuple_items", &Link::ByIndex(0), &types, &HashSet::new());
+
+        assert_eq!(mapping.param_type, "&str");
+        assert_eq!(mapping.conversion, "from_json({v})?");
+    }
+
+    fn immediate_u64_field() -> UnnamedField<sov_universal_wallet::schema::IndexLinking> {
+        UnnamedField {
+            value: Link::Immediate(Primitive::Integer(IntegerType::u64, IntegerDisplay::Decimal)),
+            silent: false,
+            doc: String::new(),
+        }
     }
 }
