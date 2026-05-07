@@ -41,7 +41,7 @@ pub struct Client {
     pub(crate) ws_client: reqwest::Client,
     chain_id: u64,
     chain_hash: Mutex<[u8; 32]>,
-    chain_name: Mutex<String>,
+    chain_name: String,
     user_actions: Option<Vec<UserActionDiscriminants>>,
 
     keypair: Option<Keypair>,
@@ -189,7 +189,7 @@ impl Client {
             ws_client,
             chain_id: chain_data.chain_id,
             chain_hash: Mutex::new(chain_data.chain_hash),
-            chain_name: Mutex::new(chain_data.chain_name),
+            chain_name: chain_data.chain_name,
             user_actions,
             gas_limit,
             max_priority_fee_bips,
@@ -244,8 +244,6 @@ impl Client {
         // object. We never hold a lock in code that can panic.
         *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.") =
             chain_data.chain_hash;
-        *self.chain_name.lock().expect("Taking the chain-name lock can never fail.") =
-            chain_data.chain_name;
         Ok(())
     }
 
@@ -347,9 +345,7 @@ impl Client {
 
     /// Get the chain name for this network.
     pub fn chain_name(&self) -> String {
-        // The expect is fine here as we just read and write the
-        // object. We never hold a lock in code that can panic.
-        self.chain_name.lock().expect("Taking the chain-name lock can never fail.").clone()
+        self.chain_name.clone()
     }
 
     pub fn user_actions(&self) -> &Option<Vec<UserActionDiscriminants>> {

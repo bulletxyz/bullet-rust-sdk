@@ -20,6 +20,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 bullet-exchange-interface.workspace = true
 bullet-ws-interface = "0.1"
+sov-universal-wallet = { version = "0.3", features = ["serde"] }
 
 progenitor-client = "0.13"
 reqwest = { version = "0.13", features = ["blocking"] }

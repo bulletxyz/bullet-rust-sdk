@@ -29,6 +29,8 @@
 //! client.send_transaction(&signed).await?;
 //! ```
 
+use std::sync::OnceLock;
+
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use bon::bon;
@@ -38,7 +40,9 @@ use bullet_exchange_interface::transaction::{
     Amount, Gas, PriorityFeeBips, RuntimeCall, Transaction as SignedTransaction, TxDetails,
     UniquenessData, UnsignedTransaction as RawUnsignedTransaction, Version0,
 };
-use serde::Serialize;
+use serde_json::Value;
+use sov_universal_wallet::schema::{Link, Primitive};
+use sov_universal_wallet::ty::{IntegerType, Ty};
 use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::codegen::Error::ErrorResponse;
@@ -56,15 +60,6 @@ pub struct UnsignedTransaction {
     inner: RawUnsignedTransaction,
     chain_hash: [u8; 32],
     chain_name: String,
-}
-
-#[derive(Serialize)]
-struct SolanaSimpleMessage<'a> {
-    runtime_call: &'a RuntimeCall,
-    uniqueness: &'a UniquenessData,
-    details: &'a TxDetails,
-    chain_name: &'a str,
-    chain_hash: String,
 }
 
 #[bon]
@@ -100,16 +95,23 @@ impl UnsignedTransaction {
     /// wrapped with [`SolanaOffchainTransaction::from_parts`] and submitted via
     /// [`Client::send_offchain_transaction`].
     pub fn to_message_bytes(&self) -> SDKResult<Vec<u8>> {
-        let message = SolanaSimpleMessage {
-            runtime_call: &self.inner.runtime_call,
-            uniqueness: &self.inner.uniqueness,
-            details: &self.inner.details,
-            chain_name: &self.chain_name,
-            chain_hash: chain_hash_hex(&self.chain_hash),
+        let mut message = serde_json::to_value(&self.inner)?;
+        stringify_offchain_integer_newtypes(&mut message)?;
+
+        let Value::Object(mut message) = message else {
+            return Err(SDKError::SerializationError(
+                "unsigned transaction serialized to non-object JSON".to_string(),
+            ));
         };
-        let mut message = serde_json::to_value(&message)?;
-        stringify_offchain_integer_newtypes(&mut message);
-        serde_json::to_vec(&message).map_err(Into::into)
+        message.insert(
+            "chain_name".to_string(),
+            Value::String(self.chain_name.clone()),
+        );
+        message.insert(
+            "chain_hash".to_string(),
+            Value::String(chain_hash_hex(&self.chain_hash)),
+        );
+        serde_json::to_vec(&Value::Object(message)).map_err(Into::into)
     }
 
     /// Build an unsigned transaction.
@@ -181,8 +183,6 @@ impl UnsignedTransaction {
 pub struct SolanaOffchainTransaction {
     /// JSON message bytes signed by the Solana wallet.
     pub signed_message: Vec<u8>,
-    /// Bullet rollup chain hash.
-    pub chain_hash: [u8; 32],
     /// Solana Ed25519 public key.
     pub pubkey: [u8; 32],
     /// Ed25519 signature over `signed_message`.
@@ -202,7 +202,6 @@ impl SolanaOffchainTransaction {
     ) -> SDKResult<Self> {
         Ok(Self {
             signed_message: tx.to_message_bytes()?,
-            chain_hash: tx.chain_hash,
             pubkey,
             signature,
         })
@@ -210,7 +209,6 @@ impl SolanaOffchainTransaction {
 
     /// Borsh-serialize a Solana offchain transaction to bytes.
     pub fn to_bytes(&self) -> SDKResult<Vec<u8>> {
-        self.validate_chain_hash()?;
         borsh::to_vec(self).map_err(|e| SDKError::SerializationError(e.to_string()))
     }
 
@@ -218,25 +216,6 @@ impl SolanaOffchainTransaction {
     pub fn to_base64(&self) -> SDKResult<String> {
         let bytes = self.to_bytes()?;
         Ok(BASE64.encode(&bytes))
-    }
-
-    fn validate_chain_hash(&self) -> SDKResult<()> {
-        let message =
-            serde_json::from_slice::<serde_json::Value>(&self.signed_message).map_err(|e| {
-                SDKError::SerializationError(format!("invalid signed message JSON: {e}"))
-            })?;
-        let Some(chain_hash) = message.get("chain_hash").and_then(|value| value.as_str()) else {
-            return Err(SDKError::SerializationError(
-                "signed message is missing chain_hash".to_string(),
-            ));
-        };
-        let message_chain_hash = parse_chain_hash_hex(chain_hash)?;
-        if message_chain_hash != self.chain_hash {
-            return Err(SDKError::SerializationError(
-                "signed message chain_hash does not match envelope chain_hash".to_string(),
-            ));
-        }
-        Ok(())
     }
 }
 
@@ -394,63 +373,218 @@ impl Client {
     }
 }
 
-const OFFCHAIN_STRING_INTEGER_FIELDS: &[&str] = &[
-    "client_order_id",
-    "client_order_ids",
-    "gas_limit",
-    "linked_trigger_order_id",
-    "max_fee",
-    "order_id",
-    "order_ids",
-    "trigger_order_id",
-    "trigger_order_ids",
-    "twap_id",
-    "twap_ids",
-];
-
 fn chain_hash_hex(chain_hash: &[u8; 32]) -> String {
     format!("0x{}", hex::encode(chain_hash))
 }
 
-fn parse_chain_hash_hex(chain_hash: &str) -> SDKResult<[u8; 32]> {
-    let bytes = hex::decode(chain_hash.strip_prefix("0x").unwrap_or(chain_hash))
-        .map_err(|e| SDKError::InvalidChainHash(e.to_string()))?;
-    bytes.try_into().map_err(|v: Vec<u8>| {
-        SDKError::InvalidChainHash(format!("expected 32 bytes, got {}", v.len()))
-    })
+#[derive(Clone, Debug)]
+enum JsonPathSegment {
+    Key(String),
+    Index(usize),
+    AnyArrayItem,
+    AnyObjectValue,
 }
 
-fn stringify_offchain_integer_newtypes(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(map) => {
-            for (key, value) in map {
-                if OFFCHAIN_STRING_INTEGER_FIELDS.contains(&key.as_str()) {
-                    stringify_json_number(value);
-                } else {
-                    stringify_offchain_integer_newtypes(value);
-                }
+type JsonPath = Vec<JsonPathSegment>;
+
+static OFFCHAIN_INTEGER_NEWTYPE_PATHS: OnceLock<Result<Vec<JsonPath>, String>> = OnceLock::new();
+
+fn stringify_offchain_integer_newtypes(value: &mut Value) -> SDKResult<()> {
+    for path in offchain_integer_newtype_paths()? {
+        stringify_json_path(value, path);
+    }
+    Ok(())
+}
+
+fn offchain_integer_newtype_paths() -> SDKResult<&'static [JsonPath]> {
+    OFFCHAIN_INTEGER_NEWTYPE_PATHS
+        .get_or_init(build_offchain_integer_newtype_paths)
+        .as_deref()
+        .map_err(|e| SDKError::SerializationError(e.clone()))
+}
+
+fn build_offchain_integer_newtype_paths() -> Result<Vec<JsonPath>, String> {
+    let schema = Schema::of_single_type::<RawUnsignedTransaction>().map_err(|e| e.to_string())?;
+    let mut paths = Vec::new();
+    collect_integer_newtype_paths(
+        &schema,
+        &Link::ByIndex(0),
+        false,
+        &mut Vec::new(),
+        &mut paths,
+    )?;
+    Ok(paths)
+}
+
+fn collect_integer_newtype_paths(
+    schema: &Schema,
+    link: &Link,
+    allow_newtype_stringify: bool,
+    path: &mut JsonPath,
+    paths: &mut Vec<JsonPath>,
+) -> Result<(), String> {
+    let Link::ByIndex(index) = link else {
+        return Ok(());
+    };
+    let schema_type = schema.types().get(*index).ok_or_else(|| {
+        format!("schema index {index} not found while serializing offchain message")
+    })?;
+
+    match schema_type {
+        Ty::Tuple(tuple)
+            if allow_newtype_stringify
+                && tuple.fields.len() == 1
+                && link_contains_wide_integer(schema, &tuple.fields[0].value)? =>
+        {
+            paths.push(path.clone());
+        }
+        Ty::Tuple(tuple) if tuple.fields.len() == 1 => {
+            collect_integer_newtype_paths(
+                schema,
+                &tuple.fields[0].value,
+                allow_newtype_stringify,
+                path,
+                paths,
+            )?;
+        }
+        Ty::Tuple(tuple) => {
+            for (field_index, field) in tuple.fields.iter().enumerate() {
+                path.push(JsonPathSegment::Index(field_index));
+                collect_integer_newtype_paths(
+                    schema,
+                    &field.value,
+                    allow_newtype_stringify,
+                    path,
+                    paths,
+                )?;
+                path.pop();
             }
         }
-        serde_json::Value::Array(values) => {
-            for value in values {
-                stringify_offchain_integer_newtypes(value);
+        Ty::Struct(data) => {
+            let serde_metadata = schema.serde_metadata().get(*index);
+            for (field_index, field) in data.fields.iter().enumerate() {
+                let key = serde_metadata
+                    .and_then(|metadata| metadata.fields_or_variants.get(field_index))
+                    .map(|field| field.name.as_str())
+                    .unwrap_or(field.display_name.as_str());
+                path.push(JsonPathSegment::Key(key.to_string()));
+                collect_integer_newtype_paths(schema, &field.value, true, path, paths)?;
+                path.pop();
             }
+        }
+        Ty::Enum(data) => {
+            let serde_metadata = schema.serde_metadata().get(*index);
+            for (variant_index, variant) in data.variants.iter().enumerate() {
+                let Some(link) = &variant.value else {
+                    continue;
+                };
+                let key = serde_metadata
+                    .and_then(|metadata| metadata.fields_or_variants.get(variant_index))
+                    .map(|variant| variant.name.as_str())
+                    .unwrap_or(variant.name.as_str());
+                path.push(JsonPathSegment::Key(key.to_string()));
+                collect_integer_newtype_paths(schema, link, false, path, paths)?;
+                path.pop();
+            }
+        }
+        Ty::Option { value: inner } => {
+            collect_integer_newtype_paths(schema, inner, allow_newtype_stringify, path, paths)?;
+        }
+        Ty::Array { value: inner, .. } | Ty::Vec { value: inner } => {
+            path.push(JsonPathSegment::AnyArrayItem);
+            collect_integer_newtype_paths(schema, inner, allow_newtype_stringify, path, paths)?;
+            path.pop();
+        }
+        Ty::Map { value: inner, .. } => {
+            path.push(JsonPathSegment::AnyObjectValue);
+            collect_integer_newtype_paths(schema, inner, allow_newtype_stringify, path, paths)?;
+            path.pop();
         }
         _ => {}
     }
+    Ok(())
 }
 
-fn stringify_json_number(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Number(number) => {
-            *value = serde_json::Value::String(number.to_string());
+fn link_contains_wide_integer(schema: &Schema, link: &Link) -> Result<bool, String> {
+    match link {
+        Link::Immediate(Primitive::Integer(kind, _)) => Ok(is_wide_integer(*kind)),
+        Link::Immediate(_) => Ok(false),
+        Link::ByIndex(index) => {
+            let schema_type = schema.types().get(*index).ok_or_else(|| {
+                format!("schema index {index} not found while serializing offchain message")
+            })?;
+            match schema_type {
+                Ty::Integer(kind, _) => Ok(is_wide_integer(*kind)),
+                Ty::Tuple(tuple) if tuple.fields.len() == 1 => {
+                    link_contains_wide_integer(schema, &tuple.fields[0].value)
+                }
+                Ty::Option { value } | Ty::Array { value, .. } | Ty::Vec { value } => {
+                    link_contains_wide_integer(schema, value)
+                }
+                _ => Ok(false),
+            }
         }
-        serde_json::Value::Array(values) => {
+        Link::Placeholder | Link::IndexedPlaceholder(_) => {
+            Err("unresolved schema link while serializing offchain message".to_string())
+        }
+    }
+}
+
+fn is_wide_integer(kind: IntegerType) -> bool {
+    matches!(
+        kind,
+        IntegerType::u64 | IntegerType::u128 | IntegerType::i64 | IntegerType::i128
+    )
+}
+
+fn stringify_json_path(value: &mut Value, path: &[JsonPathSegment]) {
+    let Some((segment, rest)) = path.split_first() else {
+        stringify_json_number(value);
+        return;
+    };
+
+    match segment {
+        JsonPathSegment::Key(key) => {
+            if let Some(value) = value.as_object_mut().and_then(|object| object.get_mut(key)) {
+                stringify_json_path(value, rest);
+            }
+        }
+        JsonPathSegment::Index(index) => {
+            if let Some(value) = value
+                .as_array_mut()
+                .and_then(|values| values.get_mut(*index))
+            {
+                stringify_json_path(value, rest);
+            }
+        }
+        JsonPathSegment::AnyArrayItem => {
+            if let Some(values) = value.as_array_mut() {
+                for value in values {
+                    stringify_json_path(value, rest);
+                }
+            }
+        }
+        JsonPathSegment::AnyObjectValue => {
+            if let Some(object) = value.as_object_mut() {
+                for value in object.values_mut() {
+                    stringify_json_path(value, rest);
+                }
+            }
+        }
+    }
+}
+
+fn stringify_json_number(value: &mut Value) {
+    match value {
+        Value::Number(number) => {
+            *value = Value::String(number.to_string());
+        }
+        Value::Array(values) => {
             for value in values {
                 stringify_json_number(value);
             }
         }
-        serde_json::Value::Object(map) => {
+        Value::Object(map) => {
             for value in map.values_mut() {
                 stringify_json_number(value);
             }
@@ -546,7 +680,6 @@ mod tests {
             })
             .to_string()
             .into_bytes(),
-            chain_hash,
             pubkey: [8u8; 32],
             signature: [9u8; 64],
         }
@@ -611,6 +744,22 @@ mod tests {
     }
 
     #[test]
+    fn to_message_bytes_serializes_integer_newtypes_by_schema_type() {
+        let mut unsigned = test_unsigned_tx();
+        unsigned.inner.details.max_priority_fee_bips = PriorityFeeBips(u64::MAX);
+
+        let bytes = unsigned.to_message_bytes().unwrap();
+        let message: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(
+            message["details"]["max_priority_fee_bips"],
+            u64::MAX.to_string()
+        );
+        assert_eq!(message["details"]["chain_id"], 1);
+        assert_eq!(message["uniqueness"]["generation"], 12345);
+    }
+
+    #[test]
     fn to_message_bytes_serializes_order_ids_as_strings() {
         let inner = RawUnsignedTransaction {
             runtime_call: RuntimeCall::Exchange(CallMessage::User(UserAction::CancelOrders {
@@ -656,7 +805,6 @@ mod tests {
         let tx = SolanaOffchainTransaction::from_parts(unsigned, signature, pub_key).unwrap();
 
         assert_eq!(tx.signed_message, signable);
-        assert_eq!(tx.chain_hash, [42u8; 32]);
         assert_eq!(tx.pubkey, pub_key);
         assert_eq!(tx.signature, signature);
         assert!(!tx.to_base64().unwrap().is_empty());
@@ -664,23 +812,6 @@ mod tests {
         let roundtrip: SolanaOffchainTransaction =
             borsh::from_slice(&tx.to_bytes().unwrap()).expect("should deserialize");
         assert_eq!(roundtrip, tx);
-    }
-
-    #[test]
-    fn solana_offchain_transaction_rejects_mismatched_chain_hash() {
-        let keypair = Keypair::generate();
-        let unsigned = test_unsigned_tx();
-
-        let signable = unsigned.to_message_bytes().unwrap();
-        let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
-        let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
-
-        let mut tx = SolanaOffchainTransaction::from_parts(unsigned, signature, pub_key).unwrap();
-        tx.chain_hash = [43u8; 32];
-
-        let err = tx.to_bytes().unwrap_err();
-
-        assert!(err.to_string().contains("chain_hash"), "{err}");
     }
 
     #[tokio::test]
