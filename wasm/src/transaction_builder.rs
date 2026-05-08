@@ -37,7 +37,10 @@ use bullet_exchange_interface::types::{
     TriggerPriceCondition, TwapId,
 };
 use bullet_rust_sdk::types::CallMessage;
-use bullet_rust_sdk::{Transaction as RustTransaction, UnsignedTransaction};
+use bullet_rust_sdk::{
+    SolanaOffchainTransaction as RustSolanaOffchainTransaction, Transaction as RustTransaction,
+    UnsignedTransaction,
+};
 use wasm_bindgen::prelude::*;
 
 use crate::client::WasmTradingApi;
@@ -95,6 +98,7 @@ include!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
 ///
 /// ```js
 /// const signable = unsigned.toBytes();
+/// const display = unsigned.toDisplayMessage();
 /// const signature = myExternalSigner(signable);
 /// const signed = SignedTransaction.fromParts(unsigned, signature, pubKey);
 /// ```
@@ -112,6 +116,105 @@ impl WasmUnsignedTransaction {
     #[wasm_bindgen(js_name = toBytes)]
     pub fn to_bytes(&self) -> WasmResult<Vec<u8>> {
         Ok(self.inner.to_bytes()?)
+    }
+
+    /// Render the unsigned transaction payload as a human-readable message.
+    ///
+    /// Use this string in your own confirmation UI when an external wallet shows
+    /// the raw Borsh bytes during `signMessage`. The wallet must still sign the
+    /// bytes from `toBytes()`.
+    ///
+    /// @returns {string} Human-readable transaction payload for display.
+    /// @example
+    /// ```js
+    /// const unsigned = Transaction.builder().callMessage(msg).buildUnsigned(client);
+    /// console.log(unsigned.toDisplayMessage());
+    /// const signature = await wallet.signMessage(unsigned.toBytes());
+    /// ```
+    #[wasm_bindgen(js_name = toDisplayMessage)]
+    pub fn to_display_message(&self) -> WasmResult<String> {
+        Ok(self.inner.to_display_message()?)
+    }
+
+    /// Serialize into readable JSON bytes for offchain signing.
+    ///
+    /// External Solana wallets should sign these bytes when the backend uses
+    /// the `solanaSimple` authenticator. The JSON includes the chain hash as
+    /// the signed domain separator. Assemble the result with
+    /// `SolanaOffchainTransaction.fromParts(...)` and submit it with
+    /// `client.sendOffChainTransaction(...)`.
+    ///
+    /// @returns {Uint8Array} UTF-8 JSON bytes to pass to `wallet.signMessage`.
+    /// @example
+    /// ```js
+    /// const unsigned = Transaction.builder().callMessage(msg).buildUnsigned(client);
+    /// const message = unsigned.toMessageBytes();
+    /// const signature = await wallet.signMessage(message);
+    /// const pubKey = wallet.publicKey.toBytes();
+    /// const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
+    /// await client.sendOffChainTransaction(tx);
+    /// ```
+    #[wasm_bindgen(js_name = toMessageBytes)]
+    pub fn to_message_bytes(&self) -> WasmResult<Vec<u8>> {
+        Ok(self.inner.to_message_bytes()?)
+    }
+}
+
+// ── WasmSolanaOffchainTransaction ────────────────────────────────────────────
+
+/// A Solana offchain transaction ready for submission.
+///
+/// Use this with external Solana wallets when you want the wallet to sign
+/// readable JSON instead of Borsh bytes.
+#[wasm_bindgen(js_name = SolanaOffchainTransaction)]
+pub struct WasmSolanaOffchainTransaction {
+    pub(crate) inner: RustSolanaOffchainTransaction,
+}
+
+#[wasm_bindgen(js_class = SolanaOffchainTransaction)]
+impl WasmSolanaOffchainTransaction {
+    /// Assemble a Solana offchain transaction from an unsigned transaction, a
+    /// 64-byte Ed25519 signature, and a 32-byte public key.
+    ///
+    /// Use after signing `unsigned.toMessageBytes()`.
+    ///
+    /// @param {UnsignedTransaction} unsignedTx - The unsigned transaction.
+    /// @param {Uint8Array} signature - 64-byte Ed25519 signature.
+    /// @param {Uint8Array} pubKey - 32-byte Solana public key.
+    /// @returns {SolanaOffchainTransaction}
+    #[wasm_bindgen(js_name = fromParts)]
+    pub fn from_parts(
+        unsigned_tx: WasmUnsignedTransaction,
+        signature: &[u8],
+        pub_key: &[u8],
+    ) -> WasmResult<WasmSolanaOffchainTransaction> {
+        let signature: [u8; 64] = signature
+            .try_into()
+            .map_err(|_| format!("expected 64-byte signature, got {}", signature.len()))?;
+        let pub_key: [u8; 32] = pub_key
+            .try_into()
+            .map_err(|_| format!("expected 32-byte public key, got {}", pub_key.len()))?;
+        Ok(WasmSolanaOffchainTransaction {
+            inner: RustSolanaOffchainTransaction::from_parts(
+                unsigned_tx.inner,
+                signature,
+                pub_key,
+            )?,
+        })
+    }
+
+    /// Borsh-serialize the Solana offchain transaction to bytes.
+    /// @returns {Uint8Array}
+    #[wasm_bindgen(js_name = toBytes)]
+    pub fn to_bytes(&self) -> WasmResult<Vec<u8>> {
+        Ok(self.inner.to_bytes()?)
+    }
+
+    /// Borsh-serialize and base64-encode the Solana offchain transaction.
+    /// @returns {string}
+    #[wasm_bindgen(js_name = toBase64)]
+    pub fn to_base64(&self) -> WasmResult<String> {
+        Ok(self.inner.to_base64()?)
     }
 }
 
@@ -343,6 +446,18 @@ impl WasmTradingApi {
         tx: &WasmTransaction,
     ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
         let resp = self.inner.send_transaction(&tx.inner).await?;
+        Ok(crate::generated::WasmSubmitTxResponse(resp))
+    }
+
+    /// Send a Solana offchain transaction to the sequencer via REST.
+    /// @param {SolanaOffchainTransaction} tx - A signed Solana offchain transaction.
+    /// @returns {Promise<SubmitTxResponse>}
+    #[wasm_bindgen(js_name = sendOffChainTransaction)]
+    pub async fn send_off_chain_transaction(
+        &self,
+        tx: &WasmSolanaOffchainTransaction,
+    ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
+        let resp = self.inner.send_offchain_transaction(&tx.inner).await?;
         Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
 

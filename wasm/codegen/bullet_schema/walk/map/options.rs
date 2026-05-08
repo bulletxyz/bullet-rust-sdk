@@ -38,29 +38,30 @@ fn build_option_conversion(inner: &ParamMapping) -> String {
         if inner_expr.contains('?') {
             let expr_no_q = inner_expr.trim_end_matches('?');
             format!("{{v}}.map(|v| {expr_no_q}).transpose()?")
-        } else if let Some(ctor) = simple_callable(&inner.conversion) {
+        } else if let Some(converter) = simple_callable(&inner.conversion) {
             // e.g. "ClientOrderId({v})" → "{v}.map(ClientOrderId)"
             // e.g. "UnixTimestampMicros::from_micros({v})" →
             // "{v}.map(UnixTimestampMicros::from_micros)"
-            format!("{{v}}.map({ctor})")
+            format!("{{v}}.map({converter})")
         } else {
             format!("{{v}}.map(|v| {inner_expr})")
         }
     }
 }
 
-/// Extract simple callable conversions like "TypeName({v})" or "Type::function({v})".
+/// Extract simple callable conversions like `TypeName({v})` or `Type::function({v})`.
 fn simple_callable(conversion: &str) -> Option<&str> {
-    if let Some(rest) = conversion.strip_suffix("({v})") {
-        let valid = !rest.is_empty()
-            && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ':')
-            && rest.split("::").all(|segment| {
-                segment.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-            });
-        valid.then_some(rest)
-    } else {
-        None
-    }
+    let path = conversion.strip_suffix("({v})")?;
+    if path.split("::").all(is_rust_ident) { Some(path) } else { None }
+}
+
+fn is_rust_ident(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 fn build_str_option_conversion(inner: &ParamMapping) -> String {
