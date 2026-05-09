@@ -11,16 +11,17 @@
 import { jest } from '@jest/globals';
 
 import {
-  Client, Keypair, Transaction, SignedTransaction,
+  Keypair, Transaction, SignedTransaction, SolanaOffchainTransaction,
   User, Public,
   NewOrderArgs,
   Side, OrderType,
 } from "../pkg/node";
-
-const ENDPOINT =
-  process.env.BULLET_API_ENDPOINT ?? 'https://tradingapi.bullet.xyz';
+import { connectForUserActions } from './helpers';
 
 jest.setTimeout(30_000);
+
+const toHex = (bytes: Uint8Array) =>
+  `0x${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 
 // ── Transaction.builder() pattern ────────────────────────────────────────────
 
@@ -29,12 +30,12 @@ describe('Transaction.builder()', () => {
     expect(typeof Transaction.builder).toBe('function');
   });
 
-  test('build signed tx from Public.applyFunding', async () => {
-    const client = await Client.connect(ENDPOINT);
+  test('build signed tx from User.cancelAllOrders', async () => {
+    const client = await connectForUserActions(['CancelAllOrders']);
     const keypair = Keypair.generate();
 
     const tx = Transaction.builder()
-      .callMessage(Public.applyFunding([]))
+      .callMessage(User.cancelAllOrders())
       .maxFee(10_000_000n)
       .signer(keypair)
       .build(client);
@@ -46,7 +47,7 @@ describe('Transaction.builder()', () => {
   });
 
   test('build signed tx from User.placeOrders with typed wrappers', async () => {
-    const client = await Client.connect(ENDPOINT);
+    const client = await connectForUserActions(['PlaceOrders']);
     const keypair = Keypair.generate();
 
     const order = new NewOrderArgs(
@@ -63,11 +64,11 @@ describe('Transaction.builder()', () => {
   });
 
   test('build tx with priorityFeeBips', async () => {
-    const client = await Client.connect(ENDPOINT);
+    const client = await connectForUserActions(['CancelAllOrders']);
     const keypair = Keypair.generate();
 
     const tx = Transaction.builder()
-      .callMessage(Public.applyFunding([]))
+      .callMessage(User.cancelAllOrders())
       .maxFee(10_000_000n)
       .priorityFeeBips(100n)
       .signer(keypair)
@@ -78,16 +79,29 @@ describe('Transaction.builder()', () => {
   });
 
   test('client.sendTransaction works with built tx', async () => {
-    const client = await Client.connect(ENDPOINT);
+    const client = await connectForUserActions(['CancelAllOrders']);
     const keypair = Keypair.generate();
 
     const tx = Transaction.builder()
-      .callMessage(Public.applyFunding([]))
+      .callMessage(User.cancelAllOrders())
       .maxFee(10_000_000n)
       .signer(keypair)
       .build(client);
 
     expect(typeof client.sendTransaction).toBe('function');
+  });
+
+  test('selective userActions rejects non-User call messages', async () => {
+    const client = await connectForUserActions(['CancelAllOrders']);
+    const keypair = Keypair.generate();
+
+    expect(() => {
+      Transaction.builder()
+        .callMessage(Public.applyFunding([]))
+        .maxFee(10_000_000n)
+        .signer(keypair)
+        .build(client);
+    }).toThrow(/must be added to user-actions/);
   });
 });
 
@@ -95,11 +109,11 @@ describe('Transaction.builder()', () => {
 
 describe('external signing', () => {
   test('buildUnsigned → toBytes → fromParts', async () => {
-    const client = await Client.connect(ENDPOINT);
+    const client = await connectForUserActions(['CancelAllOrders']);
     const keypair = Keypair.generate();
 
     const unsigned = Transaction.builder()
-      .callMessage(Public.applyFunding([]))
+      .callMessage(User.cancelAllOrders())
       .maxFee(10_000_000n)
       .buildUnsigned(client);
 
@@ -107,6 +121,10 @@ describe('external signing', () => {
     const signableBytes = unsigned.toBytes();
     expect(signableBytes).toBeInstanceOf(Uint8Array);
     expect(signableBytes.length).toBeGreaterThan(32);
+
+    const displayMessage = unsigned.toDisplayMessage();
+    expect(displayMessage).toContain('CancelAllOrders');
+    expect(displayMessage).toContain('max_fee');
 
     // Sign with keypair
     const signature = keypair.sign(signableBytes);
@@ -130,11 +148,11 @@ describe('external signing', () => {
   });
 
   test('toBytes() is deterministic', async () => {
-    const client = await Client.connect(ENDPOINT);
+    const client = await connectForUserActions(['CancelAllOrders']);
     const keypair = Keypair.generate();
 
     const tx = Transaction.builder()
-      .callMessage(Public.applyFunding([]))
+      .callMessage(User.cancelAllOrders())
       .maxFee(10_000_000n)
       .signer(keypair)
       .build(client);
@@ -143,13 +161,41 @@ describe('external signing', () => {
     const bytes2 = tx.toBytes();
     expect(bytes1).toEqual(bytes2);
   });
+
+  test('buildUnsigned → toMessageBytes → SolanaOffchainTransaction.fromParts', async () => {
+    const client = await connectForUserActions(['CancelAllOrders']);
+    const keypair = Keypair.generate();
+
+    const unsigned = Transaction.builder()
+      .callMessage(User.cancelAllOrders())
+      .maxFee(10_000_000n)
+      .buildUnsigned(client);
+
+    const messageBytes = unsigned.toMessageBytes();
+    expect(messageBytes).toBeInstanceOf(Uint8Array);
+
+    const message = JSON.parse(new TextDecoder().decode(messageBytes));
+    expect(message.chain_name).toBe(client.chainName());
+    expect(message.chain_hash).toBe(toHex(client.chainHash()));
+    expect(message.runtime_call).toBeDefined();
+    expect(BigInt(message.details.chain_id)).toBe(client.chainId());
+
+    const signature = keypair.sign(messageBytes);
+    const pubKey = keypair.publicKey();
+    const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
+
+    expect(tx.toBytes()).toBeInstanceOf(Uint8Array);
+    expect(tx.toBytes().length).toBeGreaterThan(messageBytes.length);
+    expect(tx.toBase64().length).toBeGreaterThan(0);
+    expect(typeof client.sendOffChainTransaction).toBe('function');
+  });
 });
 
 // ── Error handling ───────────────────────────────────────────────────────────
 
 describe('error handling', () => {
   test('missing callMessage throws error', async () => {
-    const client = await Client.connect(ENDPOINT);
+    const client = await connectForUserActions(['CancelAllOrders']);
     const keypair = Keypair.generate();
 
     expect(() => {
@@ -161,21 +207,21 @@ describe('error handling', () => {
   });
 
   test('missing signer throws error', async () => {
-    const client = await Client.connect(ENDPOINT);
+    const client = await connectForUserActions(['CancelAllOrders']);
 
     expect(() => {
       Transaction.builder()
-        .callMessage(Public.applyFunding([]))
+        .callMessage(User.cancelAllOrders())
         .maxFee(10_000_000n)
         .build(client);
     }).toThrow();
   });
 
   test('fromParts rejects invalid signature length', async () => {
-    const client = await Client.connect(ENDPOINT);
+    const client = await connectForUserActions(['CancelAllOrders']);
 
     const unsigned = Transaction.builder()
-      .callMessage(Public.applyFunding([]))
+      .callMessage(User.cancelAllOrders())
       .maxFee(10_000_000n)
       .buildUnsigned(client);
 
@@ -185,10 +231,10 @@ describe('error handling', () => {
   });
 
   test('fromParts rejects invalid pubkey length', async () => {
-    const client = await Client.connect(ENDPOINT);
+    const client = await connectForUserActions(['CancelAllOrders']);
 
     const unsigned = Transaction.builder()
-      .callMessage(Public.applyFunding([]))
+      .callMessage(User.cancelAllOrders())
       .maxFee(10_000_000n)
       .buildUnsigned(client);
 

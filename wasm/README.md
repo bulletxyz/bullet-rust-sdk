@@ -47,20 +47,28 @@ const client = await Client.builder()
     .network('mainnet')        // or 'testnet', or custom URL
     .keypair(keypair)          // default signer
     .maxPriorityFeeBips(100n)  // default priority fee
-    .userActions(['PlaceOrders', 'CancelOrders'])  // optional schema filter
+    .userActions(['PlaceOrders', 'CancelOrders'])  // optional User-only schema pruning
     .build();
 
 // Metadata
 client.chainId()             // u64
 client.chainHash()           // Uint8Array (32 bytes)
+client.chainName()           // chain name used in Solana offchain messages
 client.url()                 // REST URL
 client.wsUrl()               // WebSocket URL
+client.solanaOffchainUrl()   // Solana offchain sequencer URL
 client.maxFee()              // default max fee
 client.hasKeypair()          // whether a default keypair is set
 
 // Submission
 await client.sendTransaction(signedTx)  // returns JSON string
+await client.sendOffChainTransaction(offchainTx)
 ```
+By default the client validates every exchange `CallMessage` group (`User`,
+`Vault`, `Keeper`, `Public`, and `Admin`) against the server schema when it
+connects. `.userActions(...)` intentionally narrows validation to only the
+listed `UserAction` variants; when enabled, non-`User` call messages and
+unlisted user actions are rejected before signing.
 
 ### Errors
 
@@ -105,7 +113,8 @@ await client.sendTransaction(tx);
 
 ### External Signing
 
-For hardware wallets or external signing services:
+For hardware wallets or external signing services that can sign the standard
+Borsh payload:
 
 ```typescript
 // Build unsigned (chain hash is baked in)
@@ -115,6 +124,7 @@ const unsigned = Transaction.builder()
 
 // Get signable bytes and sign externally
 const signable = unsigned.toBytes();
+const display = unsigned.toDisplayMessage(); // optional: show in your own confirmation UI
 const signature = myExternalSigner(signable);  // 64-byte Ed25519 signature
 
 // Assemble the signed transaction
@@ -129,6 +139,31 @@ chain hash so signable bytes can be produced without a client reference.
 
 ```typescript
 unsigned.toBytes()  // Uint8Array — borsh-serialized tx + chain hash (signable bytes)
+unsigned.toDisplayMessage() // string — human-readable unsigned payload for display only
+unsigned.toMessageBytes() // Uint8Array — readable JSON bytes for Solana wallets
+```
+
+Some external wallets display `signMessage` bytes as raw UTF-8, so `toBytes()`
+can look garbled in the wallet confirmation. That is expected: those bytes are
+what the network verifies. Use `toDisplayMessage()` in your app UI to show the
+transaction contents before asking the wallet to sign `toBytes()`.
+
+For external Solana wallets where the wallet confirmation should show readable
+JSON, use the Solana offchain path instead. `toMessageBytes()` includes the
+chain hash in the signed JSON so the signature is bound to the target rollup
+chain:
+
+```typescript
+const unsigned = Transaction.builder()
+    .callMessage(User.deposit(0, '1000.0'))
+    .buildUnsigned(client);
+
+const message = unsigned.toMessageBytes();
+const signature = await wallet.signMessage(message);
+const pubKey = wallet.publicKey.toBytes(); // 32-byte Solana public key
+const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
+
+await client.sendOffChainTransaction(tx);
 ```
 
 ### SignedTransaction
@@ -146,6 +181,20 @@ const tx = SignedTransaction.fromParts(unsigned, signature, pubKey);
 // Serialization
 tx.toBytes()   // Uint8Array (borsh)
 tx.toBase64()  // base64 string (for WebSocket submission)
+```
+
+### SolanaOffchainTransaction
+
+Assembled after signing `unsigned.toMessageBytes()` with a Solana
+wallet. Submit it with `client.sendOffChainTransaction(tx)`, which posts
+to `/sequencer/solana_offchain_txs`.
+
+```typescript
+const pubKey = wallet.publicKey.toBytes(); // 32-byte Solana public key
+const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
+
+tx.toBytes()   // Uint8Array (borsh offchain envelope)
+tx.toBase64()  // base64 string
 ```
 
 ### Keypair

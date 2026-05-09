@@ -4,27 +4,16 @@
 
 import { jest } from '@jest/globals';
 
-import { Client } from '../pkg/node';
-
-const ENDPOINT =
-  process.env.BULLET_API_ENDPOINT ?? 'https://tradingapi.bullet.xyz';
+import { connectReadOnlyClient } from './helpers';
 
 jest.setTimeout(30_000);
 
 test('exchangeInfo returns assets and symbols', async () => {
-  const client = await Client.connect(ENDPOINT);
+  const client = await connectReadOnlyClient();
   const info = await client.exchangeInfo();
 
   const assets = info.assets;
   const symbols = info.symbols;
-
-  assets.forEach(x => {
-    console.log("asset:", {
-      asset: x.asset,
-      id: x.assetId,
-    })
-  })
-
 
   expect(Array.isArray(assets)).toBe(true);
   expect(assets.length).toBeGreaterThan(0);

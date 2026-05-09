@@ -22,6 +22,7 @@ use super::{
 pub fn extract_schema_info() -> SchemaInfo {
     let schema = Schema::of_single_type::<Transaction>().expect("failed to build schema");
     let types = schema.types();
+    let serde_metadata = schema.serde_metadata();
 
     // Phase 1: Extract raw action groups and discover structs/enums.
     let raw_groups = actions::extract_action_groups(types);
@@ -60,10 +61,10 @@ pub fn extract_schema_info() -> SchemaInfo {
                         &variant_name,
                         &v.fields,
                         types,
+                        serde_metadata,
                         &wrapper_indices,
                         &enum_indices,
                     );
-
                     VariantInfo { variant_name, fields }
                 })
                 .collect(),
@@ -74,9 +75,14 @@ pub fn extract_schema_info() -> SchemaInfo {
         .into_iter()
         .map(|s| {
             let type_name = s.type_name;
-            let fields =
-                resolve_fields(&type_name, &s.fields, types, &wrapper_indices, &enum_indices);
-
+            let fields = resolve_fields(
+                &type_name,
+                &s.fields,
+                types,
+                serde_metadata,
+                &wrapper_indices,
+                &enum_indices,
+            );
             SchemaStruct { type_name, schema_index: s.schema_index, fields }
         })
         .collect();
@@ -88,10 +94,12 @@ fn resolve_fields(
     context_name: &str,
     fields: &[FieldInfo],
     types: &super::Types,
+    serde_metadata: &super::SerdeMetadata,
     wrapper_indices: &HashSet<usize>,
     enum_indices: &HashSet<usize>,
 ) -> Vec<MappedField> {
-    let mappings = map::map_fields(context_name, fields, types, wrapper_indices, enum_indices);
+    let mappings =
+        map::map_fields(context_name, fields, types, serde_metadata, wrapper_indices, enum_indices);
     fields
         .iter()
         .zip(mappings)
@@ -125,6 +133,8 @@ fn convert_primitive(prim: &sov_universal_wallet::schema::Primitive) -> Primitiv
     use sov_universal_wallet::ty::IntegerType;
     match prim {
         P::Boolean => Primitive::Bool,
+        P::ByteArray { len, .. } => Primitive::ByteArray { len: *len },
+        P::ByteVec { .. } => Primitive::ByteVec,
         P::String => Primitive::String,
         P::Integer(IntegerType::u8, _) => Primitive::U8,
         P::Integer(IntegerType::u16, _) => Primitive::U16,

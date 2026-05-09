@@ -9,6 +9,7 @@ use url::Url;
 
 use crate::generated::Client as GeneratedClient;
 use crate::metadata::{ExchangeMetadata, SymbolInfo};
+use crate::types::CallMessage;
 use crate::{Keypair, SDKError, SDKResult};
 
 /// The main trading API client for REST operations.
@@ -35,10 +36,13 @@ use crate::{Keypair, SDKError, SDKResult};
 pub struct Client {
     rest_url: String,
     ws_url: String,
+    solana_offchain_url: String,
     generated_client: GeneratedClient,
+    pub(crate) http_client: reqwest::Client,
     pub(crate) ws_client: reqwest::Client,
     chain_id: u64,
     chain_hash: Mutex<[u8; 32]>,
+    chain_name: String,
     user_actions: Option<Vec<UserActionDiscriminants>>,
 
     keypair: Option<Keypair>,
@@ -107,6 +111,7 @@ impl From<String> for Network {
 pub struct ChainData {
     pub chain_hash: [u8; 32],
     pub chain_id: u64,
+    pub chain_name: String,
 }
 
 pub const MAX_FEE: &Amount = &Amount(10000000000_u128);
@@ -128,16 +133,23 @@ impl Client {
         max_fee: Option<Amount>,
         gas_limit: Option<Gas>,
         keypair: Option<Keypair>,
+        /// Override the Solana offchain sequencer endpoint.
+        ///
+        /// By default this is derived from the selected Bullet network and used
+        /// by `Client::send_offchain_transaction`.
+        #[builder(into)]
+        solana_offchain_url: Option<String>,
         /// Restrict schema validation to specific `UserAction` variants.
         ///
-        /// By default (`None`), the client validates that **all** `UserAction` variants
-        /// match the remote schema and returns `SDKError::SchemaOutdated` if any differ.
-        /// If you only use a subset of actions (e.g. `PlaceOrders`), you can pass them
-        /// here to avoid false negatives when unrelated variants change server-side.
+        /// By default (`None`), the client validates every exchange `CallMessage`
+        /// branch (`User`, `Vault`, `Keeper`, `Public`, and `Admin`) against the remote
+        /// schema and returns `SDKError::SchemaOutdated` if any differ. If you only use
+        /// a subset of user actions (e.g. `PlaceOrders`), you can pass them here to
+        /// intentionally prune validation down to those `UserAction` variants.
         ///
-        /// **Warning:** If you use an action not listed here, the client will silently
-        /// skip its schema check — a breaking change to that action's schema won't be
-        /// caught at connect time and may cause runtime serialization failures.
+        /// **Warning:** When this is set, non-`User` call messages and unlisted
+        /// `UserAction` variants are rejected before signing because their schema branch
+        /// was not validated at connect time.
         user_actions: Option<Vec<UserActionDiscriminants>>,
     ) -> SDKResult<Self> {
         let url = network.url();
@@ -148,10 +160,10 @@ impl Client {
             "http" => (url.to_string(), format!("ws://{}/ws", parsed.authority())),
             _ => return Err(SDKError::InvalidNetworkUrl),
         };
-        let generated_client = match reqwest_client {
-            Some(client) => GeneratedClient::new_with_client(&rest_url, client),
-            None => GeneratedClient::new(&rest_url),
-        };
+        let http_client = reqwest_client.unwrap_or_default();
+        let generated_client = GeneratedClient::new_with_client(&rest_url, http_client.clone());
+        let solana_offchain_url =
+            solana_offchain_url.unwrap_or_else(|| Self::default_solana_offchain_url(&rest_url));
 
         // WebSocket requires HTTP/1.1 (HTTP/2 does not support the Upgrade mechanism).
         // We always build a dedicated HTTP/1.1 client for WS, regardless of whether
@@ -173,10 +185,13 @@ impl Client {
         Ok(Self {
             rest_url,
             ws_url,
+            solana_offchain_url,
             generated_client,
+            http_client,
             ws_client,
             chain_id: chain_data.chain_id,
             chain_hash: Mutex::new(chain_data.chain_hash),
+            chain_name: chain_data.chain_name,
             user_actions,
             gas_limit,
             max_priority_fee_bips,
@@ -220,7 +235,8 @@ impl Client {
             SDKError::InvalidChainHash(format!("expected 32 bytes, got {}", v.len()))
         })?;
         let chain_id = schema_file.schema.chain_data().chain_id;
-        Ok(ChainData { chain_hash, chain_id })
+        let chain_name = schema_file.schema.chain_data().chain_name.clone();
+        Ok(ChainData { chain_hash, chain_id, chain_name })
     }
 
     pub async fn update_schema(&self) -> SDKResult<()> {
@@ -233,6 +249,24 @@ impl Client {
         Ok(())
     }
 
+    fn default_solana_offchain_url(rest_url: &str) -> String {
+        let Ok(parsed) = Url::parse(rest_url) else {
+            return rest_url.to_string();
+        };
+
+        let path = "/sequencer/solana_offchain_txs";
+        match parsed.host_str() {
+            Some("tradingapi.bullet.xyz") => {
+                "https://rollup.mainnet.bullet.xyz/sequencer/solana_offchain_txs".to_string()
+            }
+            Some("tradingapi.testnet.bullet.xyz") => {
+                "https://rollup.testnet.bullet.xyz/sequencer/solana_offchain_txs".to_string()
+            }
+            Some(_) => format!("{}://{}{}", parsed.scheme(), parsed.authority(), path),
+            None => rest_url.to_string(),
+        }
+    }
+
     /// Decides whether a given enum variant should be included in the schema
     /// comparison between our compiled types and the remote API.
     ///
@@ -241,11 +275,15 @@ impl Client {
     /// from both sides before diffing so that changes to pruned variants
     /// don't trigger [`SDKError::SchemaOutdated`].
     ///
-    /// The fixed rules pin the path the SDK actually serializes:
-    ///   `Transaction::V0 → RuntimeCall::Exchange → CallMessage::User → UserAction::*`
+    /// The fixed rules pin the transaction envelope the SDK serializes:
+    ///   `Transaction::V0 → RuntimeCall::Exchange → CallMessage::*`
+    ///
+    /// By default, every exchange `CallMessage` group is kept. When `user_actions`
+    /// is set, validation is intentionally pruned to:
+    ///   `CallMessage::User → selected UserAction::*`
     ///
     /// For `UserAction`, the behaviour depends on `user_actions`:
-    /// - `None` — include every variant known to this binary (full check).
+    /// - `None` — include every variant (full exchange schema check).
     /// - `Some(&[PlaceOrders, CancelOrders])` — only include those two; schema changes to other
     ///   actions (e.g. `Withdraw`) are ignored.
     ///
@@ -259,18 +297,32 @@ impl Client {
         match name {
             "Transaction" => variant == "V0",
             "RuntimeCall" => variant == "Exchange",
-            "CallMessage" => variant == "User",
+            "CallMessage" => user_actions.is_none() || variant == "User",
             "UserAction" => match user_actions {
                 Some(actions) => UserActionDiscriminants::try_from(variant)
                     .map(|v| actions.contains(&v))
                     .unwrap_or(false),
-                None => UserActionDiscriminants::try_from(variant).is_ok(),
+                None => true,
             },
             "UniquenessData" => variant == "Generation",
             _ => {
                 // include the variant - to be sure we fail afterwards
                 true
             }
+        }
+    }
+
+    pub(crate) fn call_message_was_validated(
+        call_message: &CallMessage,
+        user_actions: Option<&[UserActionDiscriminants]>,
+    ) -> bool {
+        let Some(user_actions) = user_actions else {
+            return true;
+        };
+
+        match call_message {
+            CallMessage::User(action) => user_actions.contains(&action.into()),
+            _ => false,
         }
     }
 
@@ -311,6 +363,11 @@ impl Client {
         *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.")
     }
 
+    /// Get the chain name for this network.
+    pub fn chain_name(&self) -> String {
+        self.chain_name.clone()
+    }
+
     pub fn user_actions(&self) -> &Option<Vec<UserActionDiscriminants>> {
         &self.user_actions
     }
@@ -322,6 +379,11 @@ impl Client {
     /// The websocket URL.
     pub fn ws_url(&self) -> &str {
         &self.ws_url
+    }
+
+    /// The Solana offchain sequencer URL.
+    pub fn solana_offchain_url(&self) -> &str {
+        &self.solana_offchain_url
     }
 
     /// Get the default keypair for signing transactions.
@@ -398,5 +460,72 @@ impl Deref for Client {
 
     fn deref(&self) -> &Self::Target {
         self.client()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bullet_exchange_interface::message::PublicAction;
+
+    use super::*;
+    use crate::types::UserAction;
+
+    #[test]
+    fn default_solana_offchain_url_derives_non_public_bullet_hosts_from_rest_url() {
+        let environment = ["stag", "ing"].concat();
+        let rest_url = format!("https://tradingapi.{environment}.bullet.xyz");
+
+        assert_eq!(
+            Client::default_solana_offchain_url(&rest_url),
+            format!("{rest_url}/sequencer/solana_offchain_txs")
+        );
+    }
+
+    #[test]
+    fn default_solana_offchain_url_maps_known_public_networks_to_rollup() {
+        assert_eq!(
+            Client::default_solana_offchain_url("https://tradingapi.bullet.xyz"),
+            "https://rollup.mainnet.bullet.xyz/sequencer/solana_offchain_txs"
+        );
+        assert_eq!(
+            Client::default_solana_offchain_url("https://tradingapi.testnet.bullet.xyz"),
+            "https://rollup.testnet.bullet.xyz/sequencer/solana_offchain_txs"
+        );
+    }
+
+    #[test]
+    fn default_schema_filter_keeps_all_call_message_groups() {
+        for variant in ["User", "Vault", "Keeper", "Public", "Admin"] {
+            assert!(Client::filter_variants("CallMessage", variant, None));
+        }
+    }
+
+    #[test]
+    fn selective_schema_filter_keeps_only_user_call_messages() {
+        let selected = [UserActionDiscriminants::PlaceOrders];
+
+        assert!(Client::filter_variants("CallMessage", "User", Some(&selected)));
+        for variant in ["Vault", "Keeper", "Public", "Admin"] {
+            assert!(!Client::filter_variants("CallMessage", variant, Some(&selected)));
+        }
+    }
+
+    #[test]
+    fn selective_schema_filter_keeps_only_selected_user_actions() {
+        let selected = [UserActionDiscriminants::PlaceOrders];
+
+        assert!(Client::filter_variants("UserAction", "PlaceOrders", Some(&selected)));
+        assert!(!Client::filter_variants("UserAction", "CancelOrders", Some(&selected)));
+    }
+
+    #[test]
+    fn selective_mode_rejects_unvalidated_call_messages() {
+        let selected = [UserActionDiscriminants::PlaceOrders];
+        let public_call = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
+        let unselected_user_call =
+            CallMessage::User(UserAction::CancelAllOrders { sub_account_index: None });
+
+        assert!(!Client::call_message_was_validated(&public_call, Some(&selected)));
+        assert!(!Client::call_message_was_validated(&unselected_user_call, Some(&selected),));
     }
 }

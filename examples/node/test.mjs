@@ -12,9 +12,16 @@ import * as sdk from "@bulletxyz/sdk-wasm";
 const ENDPOINT =
   process.env.BULLET_API_ENDPOINT ?? "https://tradingapi.bullet.xyz";
 
+async function connectForUserActions(actions) {
+  return sdk.Client.builder()
+    .network(ENDPOINT)
+    .userActions(actions)
+    .build();
+}
+
 describe("REST API", () => {
   it("connects and fetches exchange info", async () => {
-    const client = await sdk.Client.connect(ENDPOINT);
+    const client = await connectForUserActions([]);
     const info = await client.exchangeInfo();
 
     assert.ok(Array.isArray(info.symbols));
@@ -24,7 +31,7 @@ describe("REST API", () => {
   });
 
   it("fetches ticker price", async () => {
-    const client = await sdk.Client.connect(ENDPOINT);
+    const client = await connectForUserActions([]);
     const info = await client.exchangeInfo();
     const symbol = info.symbols[0].symbol;
     const [ticker] = await client.tickerPrice(symbol);
@@ -36,7 +43,7 @@ describe("REST API", () => {
 
 describe("Transaction building", () => {
   it("constructs and signs a transaction via builder", async () => {
-    const client = await sdk.Client.connect(ENDPOINT);
+    const client = await connectForUserActions(["PlaceOrders"]);
 
     const order = new sdk.NewOrderArgs(
       "50000.0",
@@ -61,7 +68,7 @@ describe("Transaction building", () => {
 
   it("generates keypair from hex round-trips", () => {
     const kp = sdk.Keypair.generate();
-    const hex = kp.publicKeyHex();
+    const hex = kp.addressHex();
     assert.equal(typeof hex, "string");
     assert.equal(hex.length, 64); // 32 bytes = 64 hex chars
   });

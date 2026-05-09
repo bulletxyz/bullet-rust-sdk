@@ -14,24 +14,26 @@
 import { jest } from '@jest/globals';
 
 import {
-  Client, Keypair,
   // Namespace modules
   User, Public, Admin, Keeper, Vault,
   // Struct wrappers
   NewOrderArgs, AmendOrderArgs, CancelOrderArgs,
   NewTriggerOrderArgs, NewTwapOrderArgs,
   TpslPair, Tpsl, PendingTpslPair,
+  InitAssetInfoArgsV1, UpdateAssetInfoArgsV1, UpdateGlobalConfigArgsV1,
   UpdateVaultConfigArgs,
-  OraclePriceUpdateArgs, MarkPriceUpdateArgs,
+  OraclePriceUpdateArgs, OraclePriceUpdateWithPythProofArgs, MarkPriceUpdateArgs,
   BackstopLiquidatePerpPositionArgs,
   // Enums
   Side, OrderType, TriggerDirection, TriggerPriceCondition,
 } from "../pkg/node";
 
-const ENDPOINT =
-  process.env.BULLET_API_ENDPOINT ?? 'https://tradingapi.bullet.xyz';
-
 jest.setTimeout(30_000);
+
+const textEncoder = new TextEncoder();
+const PYTH_PRIMARY_WITHOUT_QUOTE = textEncoder.encode('pyth-primary-no-quote-v1');
+const PYTH_PRIMARY_WITH_QUOTE = textEncoder.encode('pyth-primary-with-quote-v1');
+const PYTH_QUOTE = textEncoder.encode('pyth-quote-v1');
 
 // ── Namespace existence ──────────────────────────────────────────────────────
 
@@ -63,15 +65,19 @@ describe('namespace modules exist', () => {
   test('Admin namespace has admin methods', () => {
     expect(typeof Admin.initPerpMarket).toBe('function');
     expect(typeof Admin.updatePerpMarket).toBe('function');
+    expect(typeof Admin.initAssetInfoV1).toBe('function');
+    expect(typeof Admin.updateAssetInfoV1).toBe('function');
     expect(typeof Admin.haltPerpMarket).toBe('function');
     expect(typeof Admin.cancelOrders).toBe('function');
     expect(typeof Admin.cancelTriggerOrders).toBe('function');
+    expect(typeof Admin.updateGlobalConfigV1).toBe('function');
     expect(typeof Admin.updateAdmin).toBe('function');
     expect(typeof Admin.deposit).toBe('function');
   });
 
   test('Keeper namespace has keeper methods', () => {
     expect(typeof Keeper.updateOraclePrices).toBe('function');
+    expect(typeof Keeper.updateOraclePricesWithPythProofs).toBe('function');
     expect(typeof Keeper.updateMarkPrices).toBe('function');
     expect(typeof Keeper.updateFunding).toBe('function');
     expect(typeof Keeper.updateUserFeeTier).toBe('function');
@@ -287,6 +293,23 @@ describe('struct wrapper constructors', () => {
     expect(update).toBeDefined();
   });
 
+  test('OraclePriceUpdateWithPythProofArgs', () => {
+    const update = new OraclePriceUpdateWithPythProofArgs(
+      0,
+      PYTH_PRIMARY_WITH_QUOTE,
+      PYTH_QUOTE,
+    );
+    expect(update).toBeDefined();
+  });
+
+  test('OraclePriceUpdateWithPythProofArgs — without quote', () => {
+    const update = new OraclePriceUpdateWithPythProofArgs(
+      0,
+      PYTH_PRIMARY_WITHOUT_QUOTE,
+    );
+    expect(update).toBeDefined();
+  });
+
   test('MarkPriceUpdateArgs', () => {
     const update = new MarkPriceUpdateArgs(0, '50000.0', '0.001');
     expect(update).toBeDefined();
@@ -295,6 +318,40 @@ describe('struct wrapper constructors', () => {
   test('BackstopLiquidatePerpPositionArgs', () => {
     const args = new BackstopLiquidatePerpPositionArgs(0, '1.0');
     expect(args).toBeDefined();
+  });
+
+  test('Admin V1 asset args', () => {
+    const init = new InitAssetInfoArgsV1(
+      1,
+      'USDC',
+      6,
+      '0.01',
+      'USDC',
+      101,
+      102,
+    );
+    const update = new UpdateAssetInfoArgsV1(1, '0.02', 201, 202);
+
+    expect(Admin.initAssetInfoV1(init)).toBeDefined();
+    expect(Admin.updateAssetInfoV1(update)).toBeDefined();
+  });
+
+  test('UpdateGlobalConfigArgsV1 accepts trusted signers JSON', () => {
+    const signer = Array.from({ length: 32 }, (_, i) => i);
+    const config = new UpdateGlobalConfigArgsV1(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      JSON.stringify([signer]),
+    );
+
+    expect(Admin.updateGlobalConfigV1(config)).toBeDefined();
   });
 });
 
@@ -348,6 +405,31 @@ describe('array params with struct wrappers', () => {
     const p1 = new OraclePriceUpdateArgs(0, '50000.0');
     const p2 = new OraclePriceUpdateArgs(1, '3000.0');
     const msg = Keeper.updateOraclePrices([p1, p2], BigInt(Date.now()) * 1000n);
+    expect(msg).toBeDefined();
+  });
+
+  test('Keeper.updateOraclePricesWithPythProofs — array of proof args', () => {
+    const p = new OraclePriceUpdateWithPythProofArgs(
+      0,
+      PYTH_PRIMARY_WITHOUT_QUOTE,
+    );
+    const msg = Keeper.updateOraclePricesWithPythProofs(
+      [p],
+      BigInt(Date.now()) * 1000n,
+    );
+    expect(msg).toBeDefined();
+  });
+
+  test('Keeper.updateOraclePricesWithPythProofs — quote proof path', () => {
+    const p = new OraclePriceUpdateWithPythProofArgs(
+      1,
+      PYTH_PRIMARY_WITH_QUOTE,
+      PYTH_QUOTE,
+    );
+    const msg = Keeper.updateOraclePricesWithPythProofs(
+      [p],
+      BigInt(Date.now()) * 1000n,
+    );
     expect(msg).toBeDefined();
   });
 
@@ -408,6 +490,11 @@ describe('no name collisions across namespaces', () => {
     expect(userMsg).toBeDefined();
     expect(adminMsg).toBeDefined();
   });
+
+  test('Admin.cancelTriggerOrders accepts trigger order ids', () => {
+    const msg = Admin.cancelTriggerOrders(
+      '[[0, 1, "11111111111111111111111111111111"]]',
+    );
+    expect(msg).toBeDefined();
+  });
 });
-
-
