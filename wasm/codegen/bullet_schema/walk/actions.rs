@@ -1,7 +1,9 @@
 //! Extract the five CallMessage action groups from the schema.
 
+use bullet_exchange_interface::message::CallMessageDiscriminants;
 use sov_universal_wallet::schema::Link;
 use sov_universal_wallet::ty::Ty;
+use strum::IntoEnumIterator;
 
 use super::super::{FieldInfo, Types};
 use super::field_info_from_link;
@@ -20,13 +22,14 @@ pub struct RawVariantInfo {
 
 /// Find the `CallMessage` enum in the schema by name and extract all action groups.
 pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
+    let action_names = call_message_action_names();
     let call_message_enum = types
         .iter()
         .find_map(|ty| match ty {
-            Ty::Enum(e) if e.type_name == "CallMessage" => Some(e),
+            Ty::Enum(e) if is_exchange_call_message(e, &action_names) => Some(e),
             _ => None,
         })
-        .expect("CallMessage enum not found in schema");
+        .expect("exchange CallMessage enum not found in schema");
 
     call_message_enum
         .variants
@@ -77,6 +80,25 @@ pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
                 variants,
             })
         })
+        .collect()
+}
+
+fn is_exchange_call_message(
+    enum_ty: &sov_universal_wallet::ty::Enum<sov_universal_wallet::schema::IndexLinking>,
+    action_names: &[String],
+) -> bool {
+    enum_ty.type_name == "CallMessage"
+        && action_names.iter().all(|name| {
+            enum_ty
+                .variants
+                .iter()
+                .any(|variant| variant.name == name.as_str())
+        })
+}
+
+fn call_message_action_names() -> Vec<String> {
+    CallMessageDiscriminants::iter()
+        .map(|variant| variant.to_string())
         .collect()
 }
 

@@ -26,7 +26,10 @@ const ENDPOINT =
 async function main() {
   // Connect to the exchange
   console.log(`Connecting to ${ENDPOINT}…`);
-  const client = await Client.connect(ENDPOINT);
+  const client = await Client.builder()
+    .network(ENDPOINT)
+    .userActions(["PlaceOrders"])
+    .build();
   console.log("Connected.\n");
 
   // Fetch exchange info
@@ -59,7 +62,7 @@ async function main() {
 
   // Sign with a throwaway keypair
   const kp = Keypair.generate();
-  console.log(`Generated keypair: ${kp.publicKeyHex()}`);
+  console.log(`Generated keypair: ${kp.addressHex()}`);
 
   const tx = Transaction.builder()
     .callMessage(callMsg)

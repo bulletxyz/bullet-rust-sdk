@@ -95,11 +95,8 @@ impl UnsignedTransaction {
         gas_limit: Option<Gas>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
-        // Check whether the call-message was part of the schema validation
-        if let Some(user_actions) = client.user_actions()
-            && let CallMessage::User(ref call) = call_message
-            && !user_actions.contains(&call.into())
-        {
+        // Check whether the call message was part of the schema validation.
+        if !Client::call_message_was_validated(&call_message, client.user_actions().as_deref()) {
             return Err(SDKError::UnsupportedCallMessage(call_message.msg_type()));
         }
 
@@ -117,7 +114,11 @@ impl UnsignedTransaction {
         };
 
         Ok(UnsignedTransaction {
-            inner: RawUnsignedTransaction { runtime_call, uniqueness, details },
+            inner: RawUnsignedTransaction {
+                runtime_call,
+                uniqueness,
+                details,
+            },
             chain_hash: client.chain_hash(),
         })
     }
@@ -159,7 +160,9 @@ impl Transaction {
         signer: Option<&Keypair>,
         client: &Client,
     ) -> SDKResult<SignedTransaction> {
-        let signer = signer.or_else(|| client.keypair()).ok_or(SDKError::MissingKeypair)?;
+        let signer = signer
+            .or_else(|| client.keypair())
+            .ok_or(SDKError::MissingKeypair)?;
 
         let max_fee = max_fee.unwrap_or_else(|| client.max_fee().0);
         let priority_fee_bips =
@@ -196,8 +199,18 @@ impl Transaction {
         signature: [u8; 64],
         pub_key: [u8; 32],
     ) -> SignedTransaction {
-        let RawUnsignedTransaction { runtime_call, uniqueness, details } = tx.inner;
-        SignedTransaction::V0(Version0 { runtime_call, uniqueness, details, pub_key, signature })
+        let RawUnsignedTransaction {
+            runtime_call,
+            uniqueness,
+            details,
+        } = tx.inner;
+        SignedTransaction::V0(Version0 {
+            runtime_call,
+            uniqueness,
+            details,
+            pub_key,
+            signature,
+        })
     }
 
     /// Borsh-serialize a signed transaction to bytes.
@@ -266,7 +279,10 @@ mod tests {
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
         };
-        UnsignedTransaction { inner, chain_hash: [42u8; 32] }
+        UnsignedTransaction {
+            inner,
+            chain_hash: [42u8; 32],
+        }
     }
 
     #[test]
@@ -360,8 +376,11 @@ mod tests {
                 .map(|e| Network::from(e.as_str()))
                 .unwrap_or(Network::Mainnet);
 
-            let client =
-                Client::builder().network(network).build().await.expect("could not connect");
+            let client = Client::builder()
+                .network(network)
+                .build()
+                .await
+                .expect("could not connect");
             let keypair = Keypair::generate();
 
             let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });

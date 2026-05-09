@@ -24,6 +24,8 @@
 //! await client.sendTransaction(signed);
 //! ```
 
+use std::str::FromStr;
+
 use bullet_exchange_interface::address::Address;
 use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::*;
@@ -34,10 +36,8 @@ use bullet_exchange_interface::types::{
     SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
     TriggerPriceCondition, TwapId,
 };
-use bullet_rust_sdk::Transaction as RustTransaction;
-use bullet_rust_sdk::UnsignedTransaction;
 use bullet_rust_sdk::types::CallMessage;
-use std::str::FromStr;
+use bullet_rust_sdk::{Transaction as RustTransaction, UnsignedTransaction};
 use wasm_bindgen::prelude::*;
 
 use crate::client::WasmTradingApi;
@@ -352,8 +352,9 @@ impl WasmTradingApi {
 
     /// Sign and submit a call message in one step.
     ///
-    /// This is a convenience method that wraps `Transaction.builder().callMessage(msg).send(client)`
-    /// into a single call using the client's default keypair, max fee, and gas settings.
+    /// This is a convenience method that wraps
+    /// `Transaction.builder().callMessage(msg).send(client)` into a single call using the
+    /// client's default keypair, max fee, and gas settings.
     ///
     /// @param {CallMessage} msg - A call message (e.g. from `User.placeOrders(...)`)
     /// @returns {Promise<SubmitTxResponse>}

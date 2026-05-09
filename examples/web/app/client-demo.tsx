@@ -35,9 +35,10 @@ export function ClientDemo() {
       try {
         await init();
 
-        const client = await Client.connect(
-          "https://tradingapi.bullet.xyz",
-        );
+        const client = await Client.builder()
+          .network("https://tradingapi.bullet.xyz")
+          .userActions(["PlaceOrders"])
+          .build();
 
         // Build a demo limit order
         const order = new NewOrderArgs(
@@ -58,7 +59,7 @@ export function ClientDemo() {
           .build(client);
 
         setTxResult({
-          publicKey: kp.publicKeyHex(),
+          publicKey: kp.addressHex(),
           base64Length: tx.toBase64().length,
         });
       } catch (err: any) {
