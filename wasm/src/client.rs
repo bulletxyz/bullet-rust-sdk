@@ -356,12 +356,11 @@ impl WasmClientBuilder {
     /// Restrict schema validation to specific `UserAction` variants.
     ///
     /// Pass an array of action name strings (e.g. `["PlaceOrders", "CancelOrders"]`).
-    /// When set, only these actions are checked against the remote schema — changes
-    /// to other actions won't prevent connection.
+    /// By default, every exchange `CallMessage` group is checked against the remote
+    /// schema. When set, validation is intentionally pruned to these user actions.
     ///
-    /// **Warning:** If you use an action not listed here, the client will silently
-    /// skip its schema check — a breaking change to that action's schema won't be
-    /// caught at connect time and may cause runtime serialization failures.
+    /// **Warning:** Non-`User` call messages and unlisted `UserAction` variants are
+    /// rejected before signing because their schema branches were not validated.
     #[wasm_bindgen(js_name = userActions)]
     pub fn user_actions(mut self, actions: Vec<String>) -> Result<WasmClientBuilder, JsError> {
         let parsed: Result<Vec<UserActionDiscriminants>, _> = actions

@@ -47,7 +47,7 @@ const client = await Client.builder()
     .network('mainnet')        // or 'testnet', or custom URL
     .keypair(keypair)          // default signer
     .maxPriorityFeeBips(100n)  // default priority fee
-    .userActions(['PlaceOrders', 'CancelOrders'])  // optional schema filter
+    .userActions(['PlaceOrders', 'CancelOrders'])  // optional User-only schema pruning
     .build();
 
 // Metadata
@@ -64,6 +64,12 @@ client.hasKeypair()          // whether a default keypair is set
 await client.sendTransaction(signedTx)  // returns JSON string
 await client.sendOffChainTransaction(offchainTx)
 ```
+
+By default the client validates every exchange `CallMessage` group (`User`,
+`Vault`, `Keeper`, `Public`, and `Admin`) against the server schema when it
+connects. `.userActions(...)` intentionally narrows validation to only the
+listed `UserAction` variants; when enabled, non-`User` call messages and
+unlisted user actions are rejected before signing.
 
 ### Transaction Builder
 

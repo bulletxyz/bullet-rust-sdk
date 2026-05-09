@@ -15,7 +15,10 @@ const ENDPOINT =
   process.env.BULLET_API_ENDPOINT ?? "https://tradingapi.bullet.xyz";
 
 export async function ExchangeInfo() {
-  const client = await Client.connect(ENDPOINT);
+  const client = await Client.builder()
+    .network(ENDPOINT)
+    .userActions([])
+    .build();
   const info = await client.exchangeInfo();
 
   const symbols: { symbol: string; marketId: number }[] = info.symbols.map(

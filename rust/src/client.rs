@@ -9,6 +9,7 @@ use url::Url;
 
 use crate::generated::Client as GeneratedClient;
 use crate::metadata::{ExchangeMetadata, SymbolInfo};
+use crate::types::CallMessage;
 use crate::{Keypair, SDKError, SDKResult};
 
 /// The main trading API client for REST operations.
@@ -140,14 +141,15 @@ impl Client {
         solana_offchain_url: Option<String>,
         /// Restrict schema validation to specific `UserAction` variants.
         ///
-        /// By default (`None`), the client validates that **all** `UserAction` variants
-        /// match the remote schema and returns `SDKError::SchemaOutdated` if any differ.
-        /// If you only use a subset of actions (e.g. `PlaceOrders`), you can pass them
-        /// here to avoid false negatives when unrelated variants change server-side.
+        /// By default (`None`), the client validates every exchange `CallMessage`
+        /// branch (`User`, `Vault`, `Keeper`, `Public`, and `Admin`) against the remote
+        /// schema and returns `SDKError::SchemaOutdated` if any differ. If you only use
+        /// a subset of user actions (e.g. `PlaceOrders`), you can pass them here to
+        /// intentionally prune validation down to those `UserAction` variants.
         ///
-        /// **Warning:** If you use an action not listed here, the client will silently
-        /// skip its schema check — a breaking change to that action's schema won't be
-        /// caught at connect time and may cause runtime serialization failures.
+        /// **Warning:** When this is set, non-`User` call messages and unlisted
+        /// `UserAction` variants are rejected before signing because their schema branch
+        /// was not validated at connect time.
         user_actions: Option<Vec<UserActionDiscriminants>>,
     ) -> SDKResult<Self> {
         let url = network.url();
@@ -273,11 +275,15 @@ impl Client {
     /// from both sides before diffing so that changes to pruned variants
     /// don't trigger [`SDKError::SchemaOutdated`].
     ///
-    /// The fixed rules pin the path the SDK actually serializes:
-    ///   `Transaction::V0 → RuntimeCall::Exchange → CallMessage::User → UserAction::*`
+    /// The fixed rules pin the transaction envelope the SDK serializes:
+    ///   `Transaction::V0 → RuntimeCall::Exchange → CallMessage::*`
+    ///
+    /// By default, every exchange `CallMessage` group is kept. When `user_actions`
+    /// is set, validation is intentionally pruned to:
+    ///   `CallMessage::User → selected UserAction::*`
     ///
     /// For `UserAction`, the behaviour depends on `user_actions`:
-    /// - `None` — include every variant known to this binary (full check).
+    /// - `None` — include every variant (full exchange schema check).
     /// - `Some(&[PlaceOrders, CancelOrders])` — only include those two; schema changes to other
     ///   actions (e.g. `Withdraw`) are ignored.
     ///
@@ -291,18 +297,32 @@ impl Client {
         match name {
             "Transaction" => variant == "V0",
             "RuntimeCall" => variant == "Exchange",
-            "CallMessage" => variant == "User",
+            "CallMessage" => user_actions.is_none() || variant == "User",
             "UserAction" => match user_actions {
                 Some(actions) => UserActionDiscriminants::try_from(variant)
                     .map(|v| actions.contains(&v))
                     .unwrap_or(false),
-                None => UserActionDiscriminants::try_from(variant).is_ok(),
+                None => true,
             },
             "UniquenessData" => variant == "Generation",
             _ => {
                 // include the variant - to be sure we fail afterwards
                 true
             }
+        }
+    }
+
+    pub(crate) fn call_message_was_validated(
+        call_message: &CallMessage,
+        user_actions: Option<&[UserActionDiscriminants]>,
+    ) -> bool {
+        let Some(user_actions) = user_actions else {
+            return true;
+        };
+
+        match call_message {
+            CallMessage::User(action) => user_actions.contains(&action.into()),
+            _ => false,
         }
     }
 
@@ -445,7 +465,10 @@ impl Deref for Client {
 
 #[cfg(test)]
 mod tests {
+    use bullet_exchange_interface::message::PublicAction;
+
     use super::*;
+    use crate::types::UserAction;
 
     #[test]
     fn default_solana_offchain_url_derives_non_public_bullet_hosts_from_rest_url() {
@@ -468,5 +491,41 @@ mod tests {
             Client::default_solana_offchain_url("https://tradingapi.testnet.bullet.xyz"),
             "https://rollup.testnet.bullet.xyz/sequencer/solana_offchain_txs"
         );
+    }
+
+    #[test]
+    fn default_schema_filter_keeps_all_call_message_groups() {
+        for variant in ["User", "Vault", "Keeper", "Public", "Admin"] {
+            assert!(Client::filter_variants("CallMessage", variant, None));
+        }
+    }
+
+    #[test]
+    fn selective_schema_filter_keeps_only_user_call_messages() {
+        let selected = [UserActionDiscriminants::PlaceOrders];
+
+        assert!(Client::filter_variants("CallMessage", "User", Some(&selected)));
+        for variant in ["Vault", "Keeper", "Public", "Admin"] {
+            assert!(!Client::filter_variants("CallMessage", variant, Some(&selected)));
+        }
+    }
+
+    #[test]
+    fn selective_schema_filter_keeps_only_selected_user_actions() {
+        let selected = [UserActionDiscriminants::PlaceOrders];
+
+        assert!(Client::filter_variants("UserAction", "PlaceOrders", Some(&selected)));
+        assert!(!Client::filter_variants("UserAction", "CancelOrders", Some(&selected)));
+    }
+
+    #[test]
+    fn selective_mode_rejects_unvalidated_call_messages() {
+        let selected = [UserActionDiscriminants::PlaceOrders];
+        let public_call = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
+        let unselected_user_call =
+            CallMessage::User(UserAction::CancelAllOrders { sub_account_index: None });
+
+        assert!(!Client::call_message_was_validated(&public_call, Some(&selected)));
+        assert!(!Client::call_message_was_validated(&unselected_user_call, Some(&selected),));
     }
 }

@@ -8,7 +8,7 @@
 pub mod emit;
 pub mod walk;
 
-use sov_universal_wallet::ty::Ty;
+use sov_universal_wallet::ty::{ContainerSerdeMetadata, Ty};
 
 // ── Data types ───────────────────────────────────────────────────────────────
 
@@ -261,6 +261,8 @@ pub(crate) struct FieldInfo {
 #[derive(Debug, Clone)]
 pub(crate) enum Primitive {
     Bool,
+    ByteArray { len: usize },
+    ByteVec,
     U8,
     U16,
     U32,
@@ -273,3 +275,6 @@ pub(crate) enum Primitive {
 
 /// Convenience alias for the schema type array.
 pub(crate) type Types = [Ty<sov_universal_wallet::schema::IndexLinking>];
+
+/// Convenience alias for the schema serde metadata array.
+pub(crate) type SerdeMetadata = [ContainerSerdeMetadata];
