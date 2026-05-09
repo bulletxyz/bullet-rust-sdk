@@ -28,7 +28,7 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@3fa6878dc4ae603f73960271565a082bf196ab96 # v2
         with:
           tool: cargo-nextest,just,wasm-pack
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
