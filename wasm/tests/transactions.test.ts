@@ -20,9 +20,6 @@ import { connectForUserActions } from './helpers';
 
 jest.setTimeout(30_000);
 
-const toHex = (bytes: Uint8Array) =>
-  `0x${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
-
 // ── Transaction.builder() pattern ────────────────────────────────────────────
 
 describe('Transaction.builder()', () => {
@@ -176,7 +173,6 @@ describe('external signing', () => {
 
     const message = JSON.parse(new TextDecoder().decode(messageBytes));
     expect(message.chain_name).toBe(client.chainName());
-    expect(message.chain_hash).toBe(toHex(client.chainHash()));
     expect(message.runtime_call).toBeDefined();
     expect(BigInt(message.details.chain_id)).toBe(client.chainId());
 

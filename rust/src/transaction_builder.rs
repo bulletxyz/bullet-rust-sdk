@@ -104,7 +104,6 @@ impl UnsignedTransaction {
             ));
         };
         message.insert("chain_name".to_string(), Value::String(self.chain_name.clone()));
-        message.insert("chain_hash".to_string(), Value::String(chain_hash_hex(&self.chain_hash)));
         serde_json::to_vec(&Value::Object(message)).map_err(Into::into)
     }
 
@@ -360,10 +359,6 @@ impl Client {
     }
 }
 
-fn chain_hash_hex(chain_hash: &[u8; 32]) -> String {
-    format!("0x{}", hex::encode(chain_hash))
-}
-
 #[derive(Clone, Debug)]
 enum JsonPathSegment {
     Key(String),
@@ -579,6 +574,7 @@ mod tests {
         UniquenessData,
     };
     use bullet_exchange_interface::types::{MarketId, OrderId};
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -651,13 +647,19 @@ mod tests {
         let chain_hash = [7u8; 32];
         SolanaOffchainTransaction {
             signed_message: serde_json::json!({
-                "chain_hash": chain_hash_hex(&chain_hash),
+                "chain_hash": format!("0x{}", hex::encode(chain_hash)),
             })
             .to_string()
             .into_bytes(),
             pubkey: [8u8; 32],
             signature: [9u8; 64],
         }
+    }
+
+    fn verify_signature(pub_key: [u8; 32], message: &[u8], signature: [u8; 64]) -> bool {
+        let verifying_key = VerifyingKey::from_bytes(&pub_key).unwrap();
+        let signature = Signature::from_bytes(&signature);
+        verifying_key.verify(message, &signature).is_ok()
     }
 
     #[test]
@@ -697,13 +699,13 @@ mod tests {
     }
 
     #[test]
-    fn to_message_bytes_includes_chain_hash_domain_separator() {
+    fn to_message_bytes_omits_chain_hash_domain_separator() {
         let unsigned = test_unsigned_tx();
 
         let bytes = unsigned.to_message_bytes().unwrap();
         let message: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
-        assert_eq!(message["chain_hash"], format!("0x{}", hex::encode([42u8; 32])));
+        assert!(message.get("chain_hash").is_none());
     }
 
     #[test]
@@ -784,6 +786,40 @@ mod tests {
         let roundtrip: SolanaOffchainTransaction =
             borsh::from_slice(&tx.to_bytes().unwrap()).expect("should deserialize");
         assert_eq!(roundtrip, tx);
+    }
+
+    #[test]
+    fn signed_transaction_signature_verifies_against_borsh_bytes() {
+        let keypair = Keypair::generate();
+        let unsigned = test_unsigned_tx();
+
+        let signable = unsigned.to_bytes().unwrap();
+        let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
+        let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
+
+        let signed = Transaction::from_parts(unsigned, signature, pub_key);
+        let version_0 = match signed {
+            SignedTransaction::V0(version_0) => version_0,
+            _ => panic!("expected Version0 signed transaction"),
+        };
+
+        assert!(verify_signature(version_0.pub_key, &signable, version_0.signature));
+    }
+
+    #[test]
+    fn solana_offchain_signature_verifies_against_message_bytes_only() {
+        let keypair = Keypair::generate();
+        let unsigned = test_unsigned_tx();
+
+        let message = unsigned.to_message_bytes().unwrap();
+        let borsh_bytes = unsigned.to_bytes().unwrap();
+        let signature: [u8; 64] = keypair.sign(&message).try_into().unwrap();
+        let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
+
+        let tx = SolanaOffchainTransaction::from_parts(unsigned, signature, pub_key).unwrap();
+
+        assert!(verify_signature(tx.pubkey, &tx.signed_message, tx.signature));
+        assert!(!verify_signature(tx.pubkey, &borsh_bytes, tx.signature));
     }
 
     #[tokio::test]
