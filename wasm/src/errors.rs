@@ -1,5 +1,5 @@
 use bullet_rust_sdk::{ApiErrorResponse, ManagedWsError, SDKError, WSErrors};
-use js_sys::Reflect;
+use js_sys::{Object, Reflect};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(raw_module = "./bullet-sdk-error.js")]
@@ -8,7 +8,7 @@ extern "C" {
     type JsBulletSdkError;
 
     #[wasm_bindgen(constructor, js_class = BulletSdkError)]
-    fn new(message: &str) -> JsBulletSdkError;
+    fn new(message: &str, options: &JsValue) -> JsBulletSdkError;
 }
 
 /// Frontend-facing category attached to `BulletSdkError.kind`.
@@ -75,20 +75,20 @@ fn set_property(target: &JsValue, key: &str, value: &JsValue) {
 /// plus parseable metadata such as `kind`, `status`, `details`, and `retryable`.
 impl From<WasmError> for JsValue {
     fn from(e: WasmError) -> JsValue {
-        let err: JsValue = JsBulletSdkError::new(&e.message).into();
+        let options: JsValue = Object::new().into();
 
-        set_property(&err, "kind", &JsValue::from_str(e.kind.as_str()));
-        set_property(&err, "retryable", &JsValue::from_bool(e.retryable));
+        set_property(&options, "kind", &JsValue::from_str(e.kind.as_str()));
+        set_property(&options, "retryable", &JsValue::from_bool(e.retryable));
 
         if let Some(status) = e.status {
-            set_property(&err, "status", &JsValue::from_f64(status as f64));
+            set_property(&options, "status", &JsValue::from_f64(status as f64));
         }
 
         if let Some(details) = e.details {
-            set_property(&err, "details", &details);
+            set_property(&options, "details", &details);
         }
 
-        err
+        JsBulletSdkError::new(&e.message, &options).into()
     }
 }
 
