@@ -48,13 +48,13 @@ build-wasm:
     printf '%s\n' \
         'export { BulletSdkError } from "./bullet-sdk-error.js";' \
         'export * from "./bullet_rust_sdk_wasm.js";' \
-        'export { default, initSync } from "./bullet_rust_sdk_wasm.js";' \
+        'export { default } from "./bullet_rust_sdk_wasm.js";' \
         > wasm/pkg/index.js
     printf '%s\n' \
         'export { BulletSdkError } from "./bullet-sdk-error.js";' \
         'export type { BulletSdkErrorDetails, BulletSdkErrorDetailsByKind, BulletSdkErrorKind, BulletSdkErrorOptions, BulletSdkErrorStatus, JsonValue } from "./bullet-sdk-error.js";' \
         'export * from "./bullet_rust_sdk_wasm.js";' \
-        'export { default, initSync } from "./bullet_rust_sdk_wasm.js";' \
+        'export { default } from "./bullet_rust_sdk_wasm.js";' \
         > wasm/pkg/index.d.ts
 
 # Remove generated WASM build artifacts
