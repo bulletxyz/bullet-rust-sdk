@@ -17,10 +17,10 @@ commit_parsers = [
     { message = "^build", skip = true },
 ]
 
-# wasm crate ships to npm as @bulletxyz/sdk-wasm via a separate workflow_dispatch
-# flow; release-plz only manages the Rust crate.
-# `publish = false` mirrors wasm/Cargo.toml so release-plz's consistency check passes.
+# wasm crate ships to npm as @bulletxyz/sdk-wasm (not crates.io). release-plz still
+# bumps its version and tags it alongside the Rust crate; the npm-publish workflow
+# triggers on the tag push and reuses that version for `npm publish`.
+# `publish = false` mirrors wasm/Cargo.toml so release-plz skips the crates.io upload.
 [[package]]
 name = "bullet-rust-sdk-wasm"
-release = false
 publish = false

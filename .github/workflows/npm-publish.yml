@@ -1,28 +1,24 @@
-# NPM publishing uses OIDC Trusted Publishers for authentication (no NPM_TOKEN needed).
-# Configure the Trusted Publisher at https://www.npmjs.com/package/@bulletxyz/sdk-wasm/access
+# Publishes @bulletxyz/sdk-wasm to npm. Triggered by the `v<version>` git tag
+# that release-plz creates after a release PR is merged (see release-plz.yml).
+# The version is already baked into wasm/Cargo.toml and wasm/package.json at this
+# point, so this workflow only builds and publishes — no version bump, no commits.
+#
+# Authentication uses npm OIDC Trusted Publishers; configure at:
+#   https://www.npmjs.com/package/@bulletxyz/sdk-wasm/access
 # See: https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
 
 name: NPM Publish
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
-      branch:
-        description: "Branch to build and publish from"
+      tag:
+        description: "Existing git tag to publish (e.g. v0.0.14)"
         required: true
-        default: "main"
         type: string
-      level:
-        description: "Release level"
-        required: true
-        default: "patch"
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-          - rc
-          - release
 
 env:
   CARGO_TERM_COLOR: always
@@ -37,15 +33,27 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
-      - name: Checkout
+      - name: Resolve ref
+        id: ref
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          PUSH_REF: ${{ github.ref }}
+        run: |
+          if [ -n "${INPUT_TAG:-}" ]; then
+            echo "ref=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${PUSH_REF}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ steps.ref.outputs.ref }}
           persist-credentials: false
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Create GitHub App Token
         id: app-token
@@ -55,13 +63,25 @@ jobs:
           private-key: ${{ secrets.BULLET_DEPLOY_KEY }}
           owner: ${{ github.repository_owner }}
 
-      - name: Configure git
+      - name: Verify tag matches Cargo + package.json versions
+        id: version
         env:
-          GITHUB_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          REF: ${{ steps.ref.outputs.ref }}
         run: |
-          git config user.name "bullet-deploy[bot]"
-          git config user.email "${{ vars.BULLET_DEPLOY_APP_ID }}+bullet-deploy[bot]@users.noreply.github.com"
-          git config --global url."https://x-access-token:${GITHUB_APP_TOKEN}@github.com/".insteadOf "https://github.com/"
+          set -euo pipefail
+          TAG="${REF#refs/tags/}"
+          V="${TAG#v}"
+          if ! echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Tag '$TAG' is not a valid semver tag" >&2
+            exit 1
+          fi
+          CARGO_V=$(grep -m1 '^version' wasm/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          PKG_V=$(node -p "require('./wasm/package.json').version")
+          if [ "$V" != "$CARGO_V" ] || [ "$V" != "$PKG_V" ]; then
+            echo "::error::Version mismatch — tag=$V wasm/Cargo.toml=$CARGO_V wasm/package.json=$PKG_V" >&2
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
 
       - name: Build
         uses: ./.github/actions/build
@@ -69,16 +89,11 @@ jobs:
           github-app-token: ${{ steps.app-token.outputs.token }}
           setup-npm-registry: "true"
 
-      - name: Install cargo-edit
-        run: cargo binstall cargo-edit -y
-
-      - name: Bump + publish to npm
-        run: just publish-wasm ${{ inputs.level }}
-
-      - name: Commit, tag, and push
+      - name: Publish to npm
+        working-directory: wasm
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          V=$(cargo pkgid -p bullet-rust-sdk-wasm | cut -d@ -f2)
-          git add Cargo.toml rust/Cargo.toml wasm/Cargo.toml wasm/package.json
-          git commit -m "v${V} [skip ci]"
-          git tag -m "v${V}" "v${V}"
-          git push --follow-tags
+          set -euo pipefail
+          TAG=$(echo "$VERSION" | grep -q '-' && echo "rc" || echo "latest")
+          npm publish --tag "$TAG" --access public
