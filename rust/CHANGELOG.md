@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.6](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.5...v0.0.6) - 2026-05-11
+
+### Bug Fixes
+
+- WASM schema codegen and websocket config ([#34](https://github.com/bulletxyz/bullet-rust-sdk/pull/34))
+
+### Features
+
+- add user order topic ([#33](https://github.com/bulletxyz/bullet-rust-sdk/pull/33))
+
 ## [0.0.4](https://github.com/bulletxyz/bullet-rust-sdk/releases/tag/v0.0.4) - 2026-05-04
 
 ### Bug Fixes
