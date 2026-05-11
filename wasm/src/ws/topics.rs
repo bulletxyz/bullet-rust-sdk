@@ -126,6 +126,16 @@ impl WasmTopic {
         }
     }
 
+    /// Create a user order topic, e.g. `"0xabc@user.orders"`.
+    /// @param {string} address - The user address.
+    /// @returns {Topic}
+    #[wasm_bindgen(js_name = userOrders)]
+    pub fn user_orders(address: &str) -> WasmTopic {
+        WasmTopic {
+            inner: SdkTopic::user_orders(address).to_string(),
+        }
+    }
+
     /// Subscribe to all market tickers.
     /// @returns {Topic}
     #[wasm_bindgen(js_name = allTickers)]

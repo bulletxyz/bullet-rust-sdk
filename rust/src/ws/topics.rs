@@ -99,6 +99,7 @@ impl KlineInterval {
 /// | [`Topic::mark_price`] | Mark price updates |
 /// | [`Topic::kline`] | Candlestick/kline data |
 /// | [`Topic::force_order`] | Liquidation orders |
+/// | [`Topic::user_orders`] | User order updates |
 /// | [`Topic::all_tickers`] | All symbol mini tickers |
 /// | [`Topic::all_mark_prices`] | All mark prices |
 /// | [`Topic::all_book_tickers`] | All best bid/ask |
@@ -128,6 +129,9 @@ pub enum Topic {
 
     /// Liquidation order stream for a symbol.
     ForceOrder { symbol: String },
+
+    /// User order stream for an address.
+    UserOrders { address: String },
 
     /// All symbols mini ticker stream.
     AllTickers,
@@ -241,6 +245,20 @@ impl Topic {
         }
     }
 
+    /// Subscribe to user order updates for an address.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use bullet_rust_sdk::ws::topics::Topic;
+    ///
+    /// let topic = Topic::user_orders("0xabc");
+    /// assert_eq!(topic.to_string(), "0xabc@user.orders");
+    /// ```
+    pub fn user_orders(address: impl Into<String>) -> Self {
+        Self::UserOrders { address: address.into() }
+    }
+
     /// Subscribe to mini ticker updates for all symbols.
     ///
     /// # Example
@@ -307,6 +325,7 @@ impl fmt::Display for Topic {
             Topic::MarkPrice { symbol } => write!(f, "{symbol}@markPrice"),
             Topic::Kline { symbol, interval } => write!(f, "{symbol}@kline_{}", interval.as_str()),
             Topic::ForceOrder { symbol } => write!(f, "{symbol}@forceOrder"),
+            Topic::UserOrders { address } => write!(f, "{address}@user.orders"),
             Topic::AllTickers => write!(f, "!ticker@arr"),
             Topic::AllMarkPrices => write!(f, "!markPrice@arr"),
             Topic::AllBookTickers => write!(f, "!bookTicker@arr"),
@@ -384,6 +403,11 @@ mod tests {
             Topic::force_order("BTC-USD").to_string(),
             "BTC-USD@forceOrder"
         );
+    }
+
+    #[test]
+    fn test_user_orders() {
+        assert_eq!(Topic::user_orders("0xabc").to_string(), "0xabc@user.orders");
     }
 
     #[test]
