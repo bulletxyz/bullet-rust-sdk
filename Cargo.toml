@@ -1,6 +1,11 @@
 [workspace]
 members = ["rust", "wasm"]
-resolver = "2"
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 
 [workspace.dependencies]
 bon = "3.9.0"

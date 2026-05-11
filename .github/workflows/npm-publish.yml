@@ -1,0 +1,93 @@
+# Publishes @bulletxyz/sdk-wasm to npm. Triggered by the `v<version>` git tag
+# release-plz creates after a release PR is merged (see release-plz.yml).
+# release-plz.toml pins this to a single workspace-wide `v<version>` tag rather
+# than per-crate tags, so both crates ship under one release.
+#
+# The version is already baked into wasm/Cargo.toml and wasm/package.json at this
+# point, so this workflow only builds and publishes — no version bump, no commits.
+#
+# Authentication uses npm OIDC Trusted Publishers; configure at:
+#   https://www.npmjs.com/package/@bulletxyz/sdk-wasm/access
+# See: https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
+
+name: NPM Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing git tag to publish (e.g. v0.0.14)"
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+  CI: 1
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Resolve ref
+        id: ref
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          PUSH_REF: ${{ github.ref }}
+        run: |
+          if [ -n "${INPUT_TAG:-}" ]; then
+            echo "ref=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${PUSH_REF}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify tag matches Cargo + package.json versions
+        id: version
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
+        run: |
+          set -euo pipefail
+          TAG="${REF#refs/tags/}"
+          V="${TAG#v}"
+          if ! echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Tag '$TAG' is not a valid semver tag" >&2
+            exit 1
+          fi
+          CARGO_V=$(grep -m1 '^version' wasm/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          PKG_V=$(node -p "require('./wasm/package.json').version")
+          if [ "$V" != "$CARGO_V" ] || [ "$V" != "$PKG_V" ]; then
+            echo "::error::Version mismatch — tag=$V wasm/Cargo.toml=$CARGO_V wasm/package.json=$PKG_V" >&2
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        uses: ./.github/actions/build
+        with:
+          setup-npm-registry: "true"
+
+      - name: Publish to npm
+        working-directory: wasm
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG=$(echo "$VERSION" | grep -q '-' && echo "rc" || echo "latest")
+          npm publish --provenance --tag "$TAG" --access public

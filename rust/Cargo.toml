@@ -1,11 +1,11 @@
 [package]
 name = "bullet-rust-sdk"
 version = "0.0.13"
-edition = "2024"
-license = "MIT"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Rust SDK for the Bullet trading platform"
 homepage = "https://www.bullet.xyz"
-repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 readme = "../README.md"
 keywords = ["bullet", "trading", "exchange", "sdk"]
 categories = ["api-bindings", "cryptography::cryptocurrencies"]
