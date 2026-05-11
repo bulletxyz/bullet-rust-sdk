@@ -81,9 +81,7 @@ impl WasmTradingApi {
 
     /// Connect to the mainnet REST endpoint and validate the remote schema.
     pub async fn mainnet() -> WasmResult<WasmTradingApi> {
-        Ok(WasmTradingApi {
-            inner: Client::mainnet().await?,
-        })
+        Ok(WasmTradingApi { inner: Client::mainnet().await? })
     }
 
     /// Connect to a network by name or custom URL.
@@ -91,10 +89,7 @@ impl WasmTradingApi {
     /// For more options, use `Client.builder()` instead.
     pub async fn connect(network: &str) -> WasmResult<WasmTradingApi> {
         Ok(WasmTradingApi {
-            inner: Client::builder()
-                .network(Network::from(network))
-                .build()
-                .await?,
+            inner: Client::builder().network(Network::from(network)).build().await?,
         })
     }
 
@@ -112,6 +107,12 @@ impl WasmTradingApi {
         self.inner.chain_hash().to_vec()
     }
 
+    /// Chain name for the connected network.
+    #[wasm_bindgen(js_name = chainName)]
+    pub fn chain_name(&self) -> String {
+        self.inner.chain_name()
+    }
+
     /// REST API base URL.
     pub fn url(&self) -> String {
         self.inner.url().to_string()
@@ -121,6 +122,12 @@ impl WasmTradingApi {
     #[wasm_bindgen(js_name = wsUrl)]
     pub fn ws_url(&self) -> String {
         self.inner.ws_url().to_string()
+    }
+
+    /// Solana offchain sequencer URL.
+    #[wasm_bindgen(js_name = solanaOffchainUrl)]
+    pub fn solana_offchain_url(&self) -> String {
+        self.inner.solana_offchain_url().to_string()
     }
 
     /// Get the default max fee for transactions.
@@ -161,12 +168,7 @@ impl WasmTradingApi {
     /// Get all available symbols as `SymbolInfo` objects.
     /// @returns {SymbolInfo[]}
     pub fn symbols(&self) -> Vec<crate::metadata::WasmSymbolInfo> {
-        self.inner
-            .symbols()
-            .iter()
-            .cloned()
-            .map(crate::metadata::WasmSymbolInfo)
-            .collect()
+        self.inner.symbols().iter().cloned().map(crate::metadata::WasmSymbolInfo).collect()
     }
 
     /// Look up symbol info by name.
@@ -174,10 +176,7 @@ impl WasmTradingApi {
     /// @returns {SymbolInfo | undefined}
     #[wasm_bindgen(js_name = symbolInfo)]
     pub fn symbol_info(&self, symbol: &str) -> Option<crate::metadata::WasmSymbolInfo> {
-        self.inner
-            .symbol_info_by_name(symbol)
-            .cloned()
-            .map(crate::metadata::WasmSymbolInfo)
+        self.inner.symbol_info_by_name(symbol).cloned().map(crate::metadata::WasmSymbolInfo)
     }
 
     /// Look up symbol info by numeric market ID.
@@ -216,10 +215,7 @@ impl WasmTradingApi {
         symbol: &str,
     ) -> WasmResult<Vec<crate::generated::WasmBinanceOrder>> {
         let orders = self.inner.my_open_orders(symbol).await?;
-        Ok(orders
-            .into_iter()
-            .map(crate::generated::WasmBinanceOrder)
-            .collect())
+        Ok(orders.into_iter().map(crate::generated::WasmBinanceOrder).collect())
     }
 
     /// Query account info (positions, margins) for the client's own account.
@@ -235,10 +231,7 @@ impl WasmTradingApi {
     #[wasm_bindgen(js_name = myBalances)]
     pub async fn my_balances(&self) -> WasmResult<Vec<crate::generated::WasmBalance>> {
         let balances = self.inner.my_balances().await?;
-        Ok(balances
-            .into_iter()
-            .map(crate::generated::WasmBalance)
-            .collect())
+        Ok(balances.into_iter().map(crate::generated::WasmBalance).collect())
     }
 
     /// Cancel all orders on a specific market.
@@ -293,6 +286,7 @@ pub struct WasmClientBuilder {
     max_fee: Option<u64>,
     max_priority_fee_bips: Option<u64>,
     gas_limit: Option<[u64; 2]>,
+    solana_offchain_url: Option<String>,
     user_actions: Option<Vec<UserActionDiscriminants>>,
 }
 
@@ -304,6 +298,7 @@ impl WasmClientBuilder {
             max_fee: None,
             max_priority_fee_bips: None,
             gas_limit: None,
+            solana_offchain_url: None,
             user_actions: None,
         }
     }
@@ -348,6 +343,16 @@ impl WasmClientBuilder {
         self
     }
 
+    /// Override the Solana offchain sequencer endpoint.
+    ///
+    /// @param {string} url - Full `/sequencer/solana_offchain_txs` endpoint URL.
+    /// @returns {ClientBuilder}
+    #[wasm_bindgen(js_name = solanaOffchainUrl)]
+    pub fn solana_offchain_url(mut self, url: &str) -> WasmClientBuilder {
+        self.solana_offchain_url = Some(url.to_string());
+        self
+    }
+
     /// Restrict schema validation to specific `UserAction` variants.
     ///
     /// Pass an array of action name strings (e.g. `["PlaceOrders", "CancelOrders"]`).
@@ -384,6 +389,7 @@ impl WasmClientBuilder {
             .maybe_max_fee(max_fee)
             .maybe_max_priority_fee_bips(max_priority_fee_bips)
             .maybe_gas_limit(gas_limit)
+            .maybe_solana_offchain_url(self.solana_offchain_url)
             .maybe_user_actions(self.user_actions)
             .build()
             .await?;

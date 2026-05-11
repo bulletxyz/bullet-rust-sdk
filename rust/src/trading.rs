@@ -127,10 +127,7 @@ impl Client {
             replace,
             sub_account_index,
         });
-        let signed = Transaction::builder()
-            .call_message(call_msg)
-            .client(self)
-            .build()?;
+        let signed = Transaction::builder().call_message(call_msg).client(self).build()?;
         self.send_transaction(&signed).await
     }
 
@@ -158,15 +155,9 @@ impl Client {
         orders: Vec<CancelOrderArgs>,
         sub_account_index: Option<u8>,
     ) -> SDKResult<SubmitTxResponse> {
-        let call_msg = CallMessage::User(UserAction::CancelOrders {
-            market_id,
-            orders,
-            sub_account_index,
-        });
-        let signed = Transaction::builder()
-            .call_message(call_msg)
-            .client(self)
-            .build()?;
+        let call_msg =
+            CallMessage::User(UserAction::CancelOrders { market_id, orders, sub_account_index });
+        let signed = Transaction::builder().call_message(call_msg).client(self).build()?;
         self.send_transaction(&signed).await
     }
 
@@ -182,14 +173,9 @@ impl Client {
         market_id: MarketId,
         sub_account_index: Option<u8>,
     ) -> SDKResult<SubmitTxResponse> {
-        let call_msg = CallMessage::User(UserAction::CancelMarketOrders {
-            market_id,
-            sub_account_index,
-        });
-        let signed = Transaction::builder()
-            .call_message(call_msg)
-            .client(self)
-            .build()?;
+        let call_msg =
+            CallMessage::User(UserAction::CancelMarketOrders { market_id, sub_account_index });
+        let signed = Transaction::builder().call_message(call_msg).client(self).build()?;
         self.send_transaction(&signed).await
     }
 
@@ -205,10 +191,7 @@ impl Client {
         sub_account_index: Option<u8>,
     ) -> SDKResult<SubmitTxResponse> {
         let call_msg = CallMessage::User(UserAction::CancelAllOrders { sub_account_index });
-        let signed = Transaction::builder()
-            .call_message(call_msg)
-            .client(self)
-            .build()?;
+        let signed = Transaction::builder().call_message(call_msg).client(self).build()?;
         self.send_transaction(&signed).await
     }
 
@@ -304,15 +287,9 @@ impl Client {
         orders: Vec<AmendOrderArgs>,
         sub_account_index: Option<u8>,
     ) -> SDKResult<SubmitTxResponse> {
-        let call_msg = CallMessage::User(UserAction::AmendOrders {
-            market_id,
-            orders,
-            sub_account_index,
-        });
-        let signed = Transaction::builder()
-            .call_message(call_msg)
-            .client(self)
-            .build()?;
+        let call_msg =
+            CallMessage::User(UserAction::AmendOrders { market_id, orders, sub_account_index });
+        let signed = Transaction::builder().call_message(call_msg).client(self).build()?;
         self.send_transaction(&signed).await
     }
 }

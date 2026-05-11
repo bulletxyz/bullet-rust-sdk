@@ -199,9 +199,11 @@ impl WebsocketHandle {
         // Note: web_time::Duration is std::time::Duration on native, but different on WASM.
         // The try_into() is needed for WASM compatibility.
         #[allow(clippy::useless_conversion)]
-        let timeout = Delay::new(timeout.try_into().unwrap_or(std::time::Duration::from_secs(
-            DEFAULT_CONNECTION_TIMEOUT_SECS,
-        )));
+        let timeout = Delay::new(
+            timeout
+                .try_into()
+                .unwrap_or(std::time::Duration::from_secs(DEFAULT_CONNECTION_TIMEOUT_SECS)),
+        );
 
         debug!("Waiting for connected message from websocket.");
 
@@ -261,9 +263,7 @@ impl WebsocketHandle {
     /// ```
     pub async fn send(&mut self, msg: ClientMessage) -> SDKResult<(), WSErrors> {
         let string_msg = serde_json::to_string(&msg)?;
-        self.socket
-            .send(reqwest_websocket::Message::Text(string_msg))
-            .await?;
+        self.socket.send(reqwest_websocket::Message::Text(string_msg)).await?;
         Ok(())
     }
 
@@ -467,11 +467,7 @@ impl WebsocketHandle {
         tx: impl Into<String>,
         id: Option<RequestId>,
     ) -> SDKResult<(), WSErrors> {
-        self.send(ClientMessage::OrderPlace {
-            id,
-            params: OrderParams { tx: tx.into() },
-        })
-        .await
+        self.send(ClientMessage::OrderPlace { id, params: OrderParams { tx: tx.into() } }).await
     }
 
     /// Cancel an order via WebSocket.
@@ -502,11 +498,7 @@ impl WebsocketHandle {
         tx: impl Into<String>,
         id: Option<RequestId>,
     ) -> SDKResult<(), WSErrors> {
-        self.send(ClientMessage::OrderCancel {
-            id,
-            params: OrderParams { tx: tx.into() },
-        })
-        .await
+        self.send(ClientMessage::OrderCancel { id, params: OrderParams { tx: tx.into() } }).await
     }
 
     /// Place an order via WebSocket using a signed transaction.

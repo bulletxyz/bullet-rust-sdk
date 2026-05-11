@@ -65,10 +65,7 @@ pub fn extract_schema_info() -> SchemaInfo {
                         &wrapper_indices,
                         &enum_indices,
                     );
-                    VariantInfo {
-                        variant_name,
-                        fields,
-                    }
+                    VariantInfo { variant_name, fields }
                 })
                 .collect(),
         })
@@ -86,19 +83,11 @@ pub fn extract_schema_info() -> SchemaInfo {
                 &wrapper_indices,
                 &enum_indices,
             );
-            SchemaStruct {
-                type_name,
-                schema_index: s.schema_index,
-                fields,
-            }
+            SchemaStruct { type_name, schema_index: s.schema_index, fields }
         })
         .collect();
 
-    SchemaInfo {
-        action_groups,
-        structs,
-        enums,
-    }
+    SchemaInfo { action_groups, structs, enums }
 }
 
 fn resolve_fields(
@@ -109,14 +98,8 @@ fn resolve_fields(
     wrapper_indices: &HashSet<usize>,
     enum_indices: &HashSet<usize>,
 ) -> Vec<MappedField> {
-    let mappings = map::map_fields(
-        context_name,
-        fields,
-        types,
-        serde_metadata,
-        wrapper_indices,
-        enum_indices,
-    );
+    let mappings =
+        map::map_fields(context_name, fields, types, serde_metadata, wrapper_indices, enum_indices);
     fields
         .iter()
         .zip(mappings)
@@ -133,11 +116,9 @@ fn resolve_fields(
 
 fn field_info_from_link(name: &str, link: &Link) -> FieldInfo {
     match link {
-        Link::ByIndex(i) => FieldInfo {
-            name: name.to_string(),
-            schema_index: Some(*i),
-            primitive: None,
-        },
+        Link::ByIndex(i) => {
+            FieldInfo { name: name.to_string(), schema_index: Some(*i), primitive: None }
+        }
         Link::Immediate(prim) => FieldInfo {
             name: name.to_string(),
             schema_index: None,

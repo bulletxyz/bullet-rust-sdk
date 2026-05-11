@@ -1,13 +1,10 @@
-use bullet_rust_sdk::{
-    types::{ClientMessage, RequestId},
-    ws::{
-        client::{WebsocketConfig, WebsocketHandle},
-        managed::{ManagedWebsocket, ManagedWsConfig, WsEvent},
-        models::ServerMessage,
-    },
-};
-use js_sys::{Array, Function};
 use std::time::Duration as StdDuration;
+
+use bullet_rust_sdk::types::{ClientMessage, RequestId};
+use bullet_rust_sdk::ws::client::{WebsocketConfig, WebsocketHandle};
+use bullet_rust_sdk::ws::managed::{ManagedWebsocket, ManagedWsConfig, WsEvent};
+use bullet_rust_sdk::ws::models::ServerMessage;
+use js_sys::{Array, Function};
 use wasm_bindgen::prelude::*;
 use web_time::Duration;
 
@@ -96,19 +93,16 @@ impl WasmWebsocketHandle {
     }
 
     /// Subscribe to topics.
-    /// @param {Array<Topic>} topics - Array of `Topic` objects (e.g. `[Topic.aggTrade("BTC-USD")]`).
+    /// @param {Array<Topic>} topics - Array of `Topic` objects, such as
+    /// `[Topic.aggTrade("BTC-USD")]`.
+    ///
     /// @param {number} [id] - Optional request ID for correlating the server response.
+    ///
     /// @returns {Promise<void>}
     pub async fn subscribe(&mut self, topics: TopicArray, id: Option<u64>) -> WasmResult<()> {
         let arr: &Array = topics.unchecked_ref();
         let params: Vec<String> = arr.iter().filter_map(resolve_topic).collect();
-        Ok(self
-            .inner
-            .send(ClientMessage::Subscribe {
-                id: id.map(RequestId::new),
-                params,
-            })
-            .await?)
+        Ok(self.inner.send(ClientMessage::Subscribe { id: id.map(RequestId::new), params }).await?)
     }
 
     /// Unsubscribe from topics.
@@ -120,10 +114,7 @@ impl WasmWebsocketHandle {
         let params: Vec<String> = arr.iter().filter_map(resolve_topic).collect();
         Ok(self
             .inner
-            .send(ClientMessage::Unsubscribe {
-                id: id.map(RequestId::new),
-                params,
-            })
+            .send(ClientMessage::Unsubscribe { id: id.map(RequestId::new), params })
             .await?)
     }
 
@@ -132,10 +123,7 @@ impl WasmWebsocketHandle {
     /// @returns {Promise<void>}
     #[wasm_bindgen(js_name = listSubscriptions)]
     pub async fn list_subscriptions(&mut self, id: Option<u64>) -> WasmResult<()> {
-        Ok(self
-            .inner
-            .list_subscriptions(id.map(RequestId::new))
-            .await?)
+        Ok(self.inner.list_subscriptions(id.map(RequestId::new)).await?)
     }
 
     /// Place an order.
@@ -168,10 +156,7 @@ impl WasmWebsocketHandle {
         tx: &crate::transaction_builder::WasmTransaction,
         id: Option<u64>,
     ) -> WasmResult<()> {
-        Ok(self
-            .inner
-            .place_order(&tx.inner, id.map(RequestId::new))
-            .await?)
+        Ok(self.inner.place_order(&tx.inner, id.map(RequestId::new)).await?)
     }
 
     /// Cancel an order using a signed transaction object.
@@ -186,10 +171,7 @@ impl WasmWebsocketHandle {
         tx: &crate::transaction_builder::WasmTransaction,
         id: Option<u64>,
     ) -> WasmResult<()> {
-        Ok(self
-            .inner
-            .cancel_order(&tx.inner, id.map(RequestId::new))
-            .await?)
+        Ok(self.inner.cancel_order(&tx.inner, id.map(RequestId::new)).await?)
     }
 }
 
@@ -225,12 +207,7 @@ impl WasmTradingApi {
         config: Option<WasmWebsocketConfig>,
     ) -> WasmResult<WasmWebsocketHandle> {
         Ok(WasmWebsocketHandle {
-            inner: self
-                .inner
-                .connect_ws()
-                .maybe_config(config.map(|c| c.inner))
-                .call()
-                .await?,
+            inner: self.inner.connect_ws().maybe_config(config.map(|c| c.inner)).call().await?,
         })
     }
 
@@ -262,12 +239,22 @@ pub struct WasmManagedWsConfig {
 #[wasm_bindgen(js_class = ManagedWsConfig)]
 impl WasmManagedWsConfig {
     /// Create a managed WebSocket configuration.
-    /// @param {number} [initialBackoffMs] - Initial reconnect backoff, in milliseconds (default 1000).
+    /// @param {number} [initialBackoffMs] - Initial reconnect backoff, in milliseconds (default
+    /// 1000).
+    ///
     /// @param {number} [maxBackoffMs] - Maximum backoff ceiling, in milliseconds (default 30000).
-    /// @param {number} [maxRetries] - Maximum reconnect attempts before giving up (default: infinite).
+    ///
+    /// @param {number} [maxRetries] - Maximum reconnect attempts before giving up (default:
+    /// infinite).
+    ///
     /// @param {number} [channelCapacity] - Event buffer size (default 10000).
-    /// @param {number} [idleTimeoutMs] - Force a reconnect if no server message arrives in this window (default 60000; pass 0 to disable).
-    /// @param {number} [backoffResetAfterMs] - Reset exponential backoff after the connection has been up for this long (default 30000).
+    ///
+    /// @param {number} [idleTimeoutMs] - Force a reconnect if no server message arrives in this
+    /// window (default 60000; pass 0 to disable).
+    ///
+    /// @param {number} [backoffResetAfterMs] - Reset exponential backoff after the connection has
+    /// been up for this long (default 30000).
+    ///
     /// @returns {ManagedWsConfig}
     #[wasm_bindgen(constructor)]
     pub fn new(
@@ -316,9 +303,7 @@ impl WasmWsEvent {
     #[wasm_bindgen(getter)]
     pub fn message(&self) -> Option<WasmServerMessage> {
         match &self.inner {
-            WsEvent::Message(m) => Some(WasmServerMessage {
-                inner: (**m).clone(),
-            }),
+            WsEvent::Message(m) => Some(WasmServerMessage { inner: (**m).clone() }),
             _ => None,
         }
     }
@@ -376,8 +361,7 @@ impl WasmManagedWebsocket {
     /// @param {number} [id]
     #[wasm_bindgen(js_name = orderPlace)]
     pub fn order_place(&self, tx: &str, id: Option<u64>) -> WasmResult<()> {
-        self.inner
-            .order_place(tx.to_string(), id.map(RequestId::new))?;
+        self.inner.order_place(tx.to_string(), id.map(RequestId::new))?;
         Ok(())
     }
 
@@ -386,8 +370,7 @@ impl WasmManagedWebsocket {
     /// @param {number} [id]
     #[wasm_bindgen(js_name = orderCancel)]
     pub fn order_cancel(&self, tx: &str, id: Option<u64>) -> WasmResult<()> {
-        self.inner
-            .order_cancel(tx.to_string(), id.map(RequestId::new))?;
+        self.inner.order_cancel(tx.to_string(), id.map(RequestId::new))?;
         Ok(())
     }
 

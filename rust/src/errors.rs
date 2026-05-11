@@ -245,9 +245,7 @@ mod tests {
 
         let client = crate::generated::Client::new(&server.uri());
         let result = client
-            .submit_tx(&crate::generated::types::SubmitTxRequest {
-                body: "dGVzdA==".into(),
-            })
+            .submit_tx(&crate::generated::types::SubmitTxRequest { body: "dGVzdA==".into() })
             .await;
 
         (server, result.unwrap_err().into())
@@ -267,14 +265,8 @@ mod tests {
 
         let resp = err.api_error().expect("should be ApiError");
         assert_eq!(resp.status, 400);
-        assert_eq!(
-            resp.message,
-            "Transaction validation failed: insufficient funds"
-        );
-        assert_eq!(
-            resp.details.as_ref().unwrap()["reason"],
-            "insufficient_balance"
-        );
+        assert_eq!(resp.message, "Transaction validation failed: insufficient funds");
+        assert_eq!(resp.details.as_ref().unwrap()["reason"], "insufficient_balance");
         assert!(!err.is_retryable());
         assert!(err.to_string().contains("insufficient funds"));
     }
@@ -308,9 +300,7 @@ mod tests {
 
         let client = crate::generated::Client::new(&server.uri());
         let result = client
-            .submit_tx(&crate::generated::types::SubmitTxRequest {
-                body: "dGVzdA==".into(),
-            })
+            .submit_tx(&crate::generated::types::SubmitTxRequest { body: "dGVzdA==".into() })
             .await;
 
         let err: SDKError = result.unwrap_err().into();

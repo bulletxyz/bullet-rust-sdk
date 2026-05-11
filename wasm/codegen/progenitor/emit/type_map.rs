@@ -293,9 +293,7 @@ pub fn param_mapping(ty: &RustType, name: &Ident) -> (TokenStream, TokenStream) 
 
         // Option<primitive> → Option<wasm_primitive>
         RustType::Option(inner) if matches!(inner.as_ref(), RustType::Primitive(_)) => {
-            let RustType::Primitive(p) = inner.as_ref() else {
-                unreachable!()
-            };
+            let RustType::Primitive(p) = inner.as_ref() else { unreachable!() };
             let wasm_ty = primitive_type(p);
             (quote! { Option<#wasm_ty> }, quote! { #name })
         }
