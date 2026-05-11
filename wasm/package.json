@@ -21,7 +21,7 @@
   ],
   "type": "module",
   "scripts": {
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test": "node node_modules/jest/bin/jest.js",
     "build": "cd .. && just build-wasm",
     "prepublishOnly": "[ -n \"$CI\" ] || npm run build"
   },
