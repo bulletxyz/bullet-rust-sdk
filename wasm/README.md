@@ -64,12 +64,32 @@ client.hasKeypair()          // whether a default keypair is set
 await client.sendTransaction(signedTx)  // returns JSON string
 await client.sendOffChainTransaction(offchainTx)
 ```
-
 By default the client validates every exchange `CallMessage` group (`User`,
 `Vault`, `Keeper`, `Public`, and `Admin`) against the server schema when it
 connects. `.userActions(...)` intentionally narrows validation to only the
 listed `UserAction` variants; when enabled, non-`User` call messages and
 unlisted user actions are rejected before signing.
+
+### Errors
+
+Fallible WASM calls throw `BulletSdkError`, a JavaScript `Error` subclass with
+parseable SDK metadata.
+
+```typescript
+import { BulletSdkError } from '@bulletxyz/sdk-wasm';
+
+try {
+    await client.accountBalance(address);
+} catch (err) {
+    if (err instanceof BulletSdkError) {
+        err.kind       // 'api' | 'http' | 'websocket' | 'validation' | ...
+        err.status     // HTTP status when the API returned one
+        err.details    // structured JSON details when available
+        err.retryable  // whether retry/backoff is reasonable
+        err.message    // human-readable message
+    }
+}
+```
 
 ### Transaction Builder
 
@@ -332,7 +352,7 @@ await client.chainInfo()
 |----------|--------|
 | Node.js  | `import { Client } from '@bulletxyz/sdk-wasm'` |
 | Deno     | `import { Client } from '@bulletxyz/sdk-wasm'` |
-| Browser  | `import init, { Client } from '@bulletxyz/sdk-wasm/pkg/bullet_rust_sdk_wasm.js'` then `await init()` |
+| Browser  | `import init, { Client } from '@bulletxyz/sdk-wasm'` then `await init()` |
 
 ## License
 
