@@ -1,5 +1,9 @@
 # Bullet Rust SDK
 
+[![Crates.io](https://img.shields.io/crates/v/bullet-rust-sdk.svg)](https://crates.io/crates/bullet-rust-sdk)
+[![Documentation](https://docs.rs/bullet-rust-sdk/badge.svg)](https://docs.rs/bullet-rust-sdk)
+[![License: MIT](https://img.shields.io/crates/l/bullet-rust-sdk.svg)](LICENSE)
+
 A Rust SDK for interacting with the Bullet trading API, with WASM bindings for JavaScript/TypeScript.
 
 ## Project Structure
@@ -14,19 +18,16 @@ bullet-rust-sdk/
 ## Features
 
 - **REST API Client**: Type-safe client generated from OpenAPI spec using Progenitor
-- **WebSocket Support**: Real-time market data and order submission
+- **WebSocket Support**: Real-time market data and order submission — including a portable `ManagedWebsocket` (auto-reconnect, exponential backoff, subscription replay, idle-stream detection, backoff reset on stable uptime, subscribe dedup) that works on both native and WASM
 - **Transaction Building**: Fluent builder pattern for constructing and signing transactions
 - **Cross-platform**: Works on native Rust and WASM (browser/Node.js)
 - **Client Defaults**: Configure keypair, max fee, etc. once on the client
 
 ## Quick Start (Rust)
 
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-bullet-rust-sdk = { git = "https://github.com/bulletxyz/bullet-rust-sdk.git" }
-tokio = { version = "1", features = ["full"] }
+```sh
+cargo add bullet-rust-sdk
+cargo add tokio --features full
 ```
 
 ### Basic Usage

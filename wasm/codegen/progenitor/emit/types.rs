@@ -29,9 +29,7 @@ fn sdk_qualified_path(module_path: &[String], name: &str) -> TokenStream {
 
 /// Check if derives contain Serialize.
 fn has_serialize(derives: &[String]) -> bool {
-    derives
-        .iter()
-        .any(|d| d == "Serialize" || d.ends_with("::Serialize"))
+    derives.iter().any(|d| d == "Serialize" || d.ends_with("::Serialize"))
 }
 
 // ── Struct emission ──────────────────────────────────────────────────────────
@@ -67,11 +65,7 @@ pub fn emit_struct(s: &StructDetails, enum_names: &HashSet<&str>) -> TokenStream
         };
     }
 
-    let getters: Vec<TokenStream> = s
-        .fields
-        .iter()
-        .map(|f| emit_getter(f, enum_names))
-        .collect();
+    let getters: Vec<TokenStream> = s.fields.iter().map(|f| emit_getter(f, enum_names)).collect();
 
     let to_json_method = if serializable {
         quote! {
@@ -103,10 +97,7 @@ fn emit_getter(f: &FieldDetails, enum_names: &HashSet<&str>) -> TokenStream {
     let (method, js_name, field_accessor): (_, String, TokenStream) = match &f.kind {
         FieldKind::Named(name) => {
             let method = format_ident!("{}", name);
-            let js_name = f
-                .serde_rename
-                .clone()
-                .unwrap_or_else(|| name.to_lower_camel_case());
+            let js_name = f.serde_rename.clone().unwrap_or_else(|| name.to_lower_camel_case());
             let accessor = quote! { #method };
             (method, js_name, accessor)
         }
@@ -150,17 +141,11 @@ pub fn emit_enum(e: &EnumDetails) -> TokenStream {
     let wrapper = format_ident!("Wasm{}", e.name);
     let js_name = type_map::js_name(&e.name);
 
-    let variants: Vec<_> = e
-        .variants
-        .iter()
-        .map(|v| format_ident!("{}", v.name))
-        .collect();
+    let variants: Vec<_> = e.variants.iter().map(|v| format_ident!("{}", v.name)).collect();
     let indices: Vec<_> = (0..e.variants.len()).map(|i| i as isize).collect();
 
-    let arms: Vec<TokenStream> = variants
-        .iter()
-        .map(|v| quote! { #wrapper::#v => #sdk_type::#v })
-        .collect();
+    let arms: Vec<TokenStream> =
+        variants.iter().map(|v| quote! { #wrapper::#v => #sdk_type::#v }).collect();
 
     quote! {
         #[wasm_bindgen(js_name = #js_name)]

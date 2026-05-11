@@ -10,7 +10,7 @@ repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 
 [workspace.dependencies]
 bon = "3.9.0"
-
+bullet-exchange-interface = { version = "0.2", features = ["schema"] }
 # Optimize WASM binary size without affecting the rust crate
 [profile.release]
 lto = true
@@ -18,4 +18,3 @@ lto = true
 [profile.release.package.bullet-rust-sdk-wasm]
 opt-level = "z"
 codegen-units = 1
-

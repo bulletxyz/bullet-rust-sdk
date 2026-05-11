@@ -12,8 +12,7 @@ test("SSR — exchange info is pre-rendered", async ({ page }) => {
   });
 
   // Should show market and asset counts
-  await expect(page.getByText("markets")).toBeVisible();
-  await expect(page.getByText("assets")).toBeVisible();
+  await expect(page.getByText(/\d+ markets, \d+ assets/)).toBeVisible();
 });
 
 test("CSR — transaction is built client-side", async ({ page }) => {

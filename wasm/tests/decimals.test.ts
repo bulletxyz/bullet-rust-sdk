@@ -11,10 +11,8 @@
 
 import { jest } from '@jest/globals';
 
-import { Client, Decimal } from "../pkg/node";
-
-const ENDPOINT =
-  process.env.BULLET_API_ENDPOINT ?? 'https://tradingapi.bullet.xyz';
+import { Decimal } from "../pkg/node";
+import { connectReadOnlyClient } from './helpers';
 
 jest.setTimeout(30_000);
 
@@ -317,7 +315,7 @@ describe('API responses return Decimal wrappers', () => {
   let client: any;
 
   beforeAll(async () => {
-    client = await Client.connect(ENDPOINT);
+    client = await connectReadOnlyClient();
   });
 
   test('PriceTicker.price is a Decimal', async () => {

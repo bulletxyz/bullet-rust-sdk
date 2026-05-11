@@ -1,0 +1,26 @@
+[workspace]
+semver_check = true
+changelog_update = true
+pr_branch_prefix = "release-plz/"
+
+[changelog]
+commit_parsers = [
+    { message = "^feat", group = "Features" },
+    { message = "^fix", group = "Bug Fixes" },
+    { message = "^perf", group = "Performance" },
+    { message = "^doc", group = "Documentation" },
+    { message = "^refactor", group = "Refactor" },
+    { message = "^style", skip = true },
+    { message = "^test", skip = true },
+    { message = "^chore", skip = true },
+    { message = "^ci", skip = true },
+    { message = "^build", skip = true },
+]
+
+# wasm crate ships to npm as @bulletxyz/sdk-wasm via a separate workflow_dispatch
+# flow; release-plz only manages the Rust crate.
+# `publish = false` mirrors wasm/Cargo.toml so release-plz's consistency check passes.
+[[package]]
+name = "bullet-rust-sdk-wasm"
+release = false
+publish = false

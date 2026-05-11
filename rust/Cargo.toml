@@ -1,25 +1,33 @@
 [package]
 name = "bullet-rust-sdk"
-version.workspace = true
+version.workspace = "0.0.13"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Rust SDK for the Bullet trading platform"
+homepage = "https://www.bullet.xyz"
+readme = "../README.md"
+keywords = ["bullet", "trading", "exchange", "sdk"]
+categories = ["api-bindings", "cryptography::cryptocurrencies"]
 links = "bullet_rust_codegen"
+
+[package.metadata.docs.rs]
+all-features = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bullet-exchange-interface = { git = "https://github.com/bulletxyz/bullet-exchange-interface.git" }
-bullet-ws-interface = { git = "https://github.com/bulletxyz/bullet-ws-interface.git" }
+bullet-exchange-interface.workspace = true
+bullet-ws-interface = "0.1"
+sov-universal-wallet = { version = "0.3", features = ["serde"] }
 
 progenitor-client = "0.13"
 reqwest = { version = "0.13", features = ["blocking"] }
 rust_decimal = { version = "1", features = ["serde-with-str"] }
 serde = "1.0.216"
 strum = { version = "0.26", features = ["derive"] }
-serde_json = { version = "1.0.133", features = ["preserve_order"] }
+serde_json = { version = "1.0.133", features = ["arbitrary_precision", "preserve_order"] }
 futures = "0.3"
 thiserror = "2"
 url = "2"
@@ -42,10 +50,12 @@ bon.workspace = true
 # Cross-platform async timer (works on both native and WASM)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 futures-timer = "3"
+tokio = { version = "1", features = ["sync", "rt", "macros", "time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 futures-timer = { version = "3", features = ["wasm-bindgen"] }
 getrandom = { version = "0.2", features = ["js"] }
+wasm-bindgen-futures = "0.4"
 
 [build-dependencies]
 progenitor = "0.13"
@@ -58,9 +68,9 @@ prettyplease = "0.2"
 clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt", "macros", "io-std", "io-util"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-wiremock = "0.6"
+tokio = { version = "=1.52.2", features = ["rt", "macros", "io-std", "io-util"] }
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+wiremock = "=0.6.5"
 
 [features]
 default = []

@@ -101,6 +101,12 @@ pub enum SDKError {
     #[error("Schema outdated - recompile the binary to update bullet-exchange-interface")]
     SchemaOutdated,
 
+    #[error("CallMessage {0} must be added to user-actions")]
+    UnsupportedCallMessage(String),
+
+    #[error("Transaction is outdated - need to re-sign again.")]
+    TransactionOutdated,
+
     #[error(transparent)]
     WebsocketError(#[from] Box<WSErrors>),
 }
@@ -223,9 +229,10 @@ impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::*;
 
     async fn mock_submit_tx(status: u16, body: serde_json::Value) -> (MockServer, SDKError) {
         let server = MockServer::start().await;
@@ -238,9 +245,7 @@ mod tests {
 
         let client = crate::generated::Client::new(&server.uri());
         let result = client
-            .submit_tx(&crate::generated::types::SubmitTxRequest {
-                body: "dGVzdA==".into(),
-            })
+            .submit_tx(&crate::generated::types::SubmitTxRequest { body: "dGVzdA==".into() })
             .await;
 
         (server, result.unwrap_err().into())
@@ -260,14 +265,8 @@ mod tests {
 
         let resp = err.api_error().expect("should be ApiError");
         assert_eq!(resp.status, 400);
-        assert_eq!(
-            resp.message,
-            "Transaction validation failed: insufficient funds"
-        );
-        assert_eq!(
-            resp.details.as_ref().unwrap()["reason"],
-            "insufficient_balance"
-        );
+        assert_eq!(resp.message, "Transaction validation failed: insufficient funds");
+        assert_eq!(resp.details.as_ref().unwrap()["reason"], "insufficient_balance");
         assert!(!err.is_retryable());
         assert!(err.to_string().contains("insufficient funds"));
     }
@@ -301,9 +300,7 @@ mod tests {
 
         let client = crate::generated::Client::new(&server.uri());
         let result = client
-            .submit_tx(&crate::generated::types::SubmitTxRequest {
-                body: "dGVzdA==".into(),
-            })
+            .submit_tx(&crate::generated::types::SubmitTxRequest { body: "dGVzdA==".into() })
             .await;
 
         let err: SDKError = result.unwrap_err().into();

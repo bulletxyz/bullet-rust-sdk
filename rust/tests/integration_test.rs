@@ -22,11 +22,7 @@ impl TestFixture {
         println!("=== Setting up test: {test_name} ===");
         println!("Testing against API endpoint: {}", network.url());
 
-        let client = Client::builder()
-            .network(network)
-            .build()
-            .await
-            .expect("could not connect");
+        let client = Client::builder().network(network).build().await.expect("could not connect");
 
         Self { client, test_name }
     }
@@ -50,11 +46,7 @@ async fn test_health_endpoint() {
 
     let result = fixture.client().health().await;
 
-    assert!(
-        result.is_ok(),
-        "Health endpoint should return successfully: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "Health endpoint should return successfully: {:?}", result.err());
 
     println!("✓ Health check passed");
     // Teardown happens automatically when fixture goes out of scope
@@ -75,19 +67,10 @@ async fn test_exchange_info() {
 
     let exchange_info = result.unwrap().into_inner();
 
-    println!(
-        "Exchange info - Symbols count: {}",
-        exchange_info.symbols.len()
-    );
-    println!(
-        "Exchange info - Assets count: {}",
-        exchange_info.assets.len()
-    );
+    println!("Exchange info - Symbols count: {}", exchange_info.symbols.len());
+    println!("Exchange info - Assets count: {}", exchange_info.assets.len());
 
-    assert!(
-        !exchange_info.symbols.is_empty(),
-        "Exchange info should contain at least one symbol"
-    );
+    assert!(!exchange_info.symbols.is_empty(), "Exchange info should contain at least one symbol");
 
     println!("✓ Exchange info test passed");
     // Teardown happens automatically when fixture goes out of scope
@@ -100,20 +83,13 @@ async fn test_ticker_price() {
 
     let result = fixture.client().ticker_price(None).await;
 
-    assert!(
-        result.is_ok(),
-        "Ticker price endpoint should return successfully: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "Ticker price endpoint should return successfully: {:?}", result.err());
 
     let tickers = result.unwrap().into_inner();
     println!("Ticker prices count: {}", tickers.len());
 
     if !tickers.is_empty() {
-        println!(
-            "First ticker: symbol={}, price={}",
-            tickers[0].symbol, tickers[0].price
-        );
+        println!("First ticker: symbol={}, price={}", tickers[0].symbol, tickers[0].price);
     }
 
     println!("✓ Ticker price test passed");
@@ -131,13 +107,7 @@ async fn test_websocket_subscribe_unsubscribe() {
 
     // First, get a valid symbol from exchange info
     let symbol = match fixture.client().exchange_info().await {
-        Ok(info) => info
-            .into_inner()
-            .symbols
-            .first()
-            .expect("No symbols available")
-            .symbol
-            .clone(),
+        Ok(info) => info.into_inner().symbols.first().expect("No symbols available").symbol.clone(),
         Err(e) => {
             println!("⚠ Skipping test - exchange info not available: {e}");
             println!("  This usually means the rollup backend isn't connected");
@@ -148,12 +118,8 @@ async fn test_websocket_subscribe_unsubscribe() {
     println!("Using symbol: {}", symbol);
 
     // Connect to WebSocket
-    let mut ws = fixture
-        .client()
-        .connect_ws()
-        .call()
-        .await
-        .expect("Failed to connect to WebSocket");
+    let mut ws =
+        fixture.client().connect_ws().call().await.expect("Failed to connect to WebSocket");
 
     println!("✓ Connected to WebSocket");
 
@@ -171,24 +137,24 @@ async fn test_websocket_subscribe_unsubscribe() {
     for _ in 0..10 {
         let msg = ws.recv().await.expect("Failed to receive message");
 
-        if let Some(response_id) = msg.request_id() {
-            if response_id == subscribe_request_id {
-                match &msg {
-                    ServerMessage::Tagged(TaggedMessage::Subscribe(result)) => {
-                        assert_eq!(result.result, "success");
-                        subscribe_confirmed = true;
-                        println!("✓ Subscribe confirmed (id: {})", response_id);
-                        break;
-                    }
-                    ServerMessage::Tagged(TaggedMessage::Error(err)) => {
-                        panic!(
-                            "Subscribe failed with error: {} (code: {})",
-                            err.error.message(),
-                            err.error.code()
-                        );
-                    }
-                    _ => {}
+        if let Some(response_id) = msg.request_id()
+            && response_id == subscribe_request_id
+        {
+            match &msg {
+                ServerMessage::Tagged(TaggedMessage::Subscribe(result)) => {
+                    assert_eq!(result.result, "success");
+                    subscribe_confirmed = true;
+                    println!("✓ Subscribe confirmed (id: {})", response_id);
+                    break;
                 }
+                ServerMessage::Tagged(TaggedMessage::Error(err)) => {
+                    panic!(
+                        "Subscribe failed with error: {} (code: {})",
+                        err.error.message(),
+                        err.error.code()
+                    );
+                }
+                _ => {}
             }
         }
 
@@ -209,42 +175,36 @@ async fn test_websocket_subscribe_unsubscribe() {
     .await
     .expect("Failed to send unsubscribe");
 
-    println!(
-        "✓ Sent unsubscribe request (id: {})",
-        unsubscribe_request_id
-    );
+    println!("✓ Sent unsubscribe request (id: {})", unsubscribe_request_id);
 
     // Wait for unsubscribe confirmation
     let mut unsubscribe_confirmed = false;
     for _ in 0..10 {
         let msg = ws.recv().await.expect("Failed to receive message");
 
-        if let Some(response_id) = msg.request_id() {
-            if response_id == unsubscribe_request_id {
-                match &msg {
-                    ServerMessage::Tagged(TaggedMessage::Unsubscribe(result)) => {
-                        assert_eq!(result.result, "success");
-                        unsubscribe_confirmed = true;
-                        println!("✓ Unsubscribe confirmed (id: {})", response_id);
-                        break;
-                    }
-                    ServerMessage::Tagged(TaggedMessage::Error(err)) => {
-                        panic!(
-                            "Unsubscribe failed with error: {} (code: {})",
-                            err.error.message(),
-                            err.error.code()
-                        );
-                    }
-                    _ => {}
+        if let Some(response_id) = msg.request_id()
+            && response_id == unsubscribe_request_id
+        {
+            match &msg {
+                ServerMessage::Tagged(TaggedMessage::Unsubscribe(result)) => {
+                    assert_eq!(result.result, "success");
+                    unsubscribe_confirmed = true;
+                    println!("✓ Unsubscribe confirmed (id: {})", response_id);
+                    break;
                 }
+                ServerMessage::Tagged(TaggedMessage::Error(err)) => {
+                    panic!(
+                        "Unsubscribe failed with error: {} (code: {})",
+                        err.error.message(),
+                        err.error.code()
+                    );
+                }
+                _ => {}
             }
         }
     }
 
-    assert!(
-        unsubscribe_confirmed,
-        "Unsubscribe confirmation not received"
-    );
+    assert!(unsubscribe_confirmed, "Unsubscribe confirmation not received");
 
     println!("✓ WebSocket subscribe/unsubscribe test passed");
 }
@@ -260,13 +220,7 @@ async fn test_websocket_list_subscriptions() {
 
     // First, get valid symbols from exchange info
     let symbols: Vec<String> = match fixture.client().exchange_info().await {
-        Ok(info) => info
-            .into_inner()
-            .symbols
-            .iter()
-            .take(2)
-            .map(|s| s.symbol.clone())
-            .collect(),
+        Ok(info) => info.into_inner().symbols.iter().take(2).map(|s| s.symbol.clone()).collect(),
         Err(e) => {
             println!("⚠ Skipping test - exchange info not available: {e}");
             println!("  This usually means the rollup backend isn't connected");
@@ -275,34 +229,22 @@ async fn test_websocket_list_subscriptions() {
     };
 
     if symbols.len() < 2 {
-        println!(
-            "⚠ Skipping test - need at least 2 symbols, got {}",
-            symbols.len()
-        );
+        println!("⚠ Skipping test - need at least 2 symbols, got {}", symbols.len());
         return;
     }
 
     println!("Using symbols: {:?}", symbols);
 
-    let mut ws = fixture
-        .client()
-        .connect_ws()
-        .call()
-        .await
-        .expect("Failed to connect to WebSocket");
+    let mut ws =
+        fixture.client().connect_ws().call().await.expect("Failed to connect to WebSocket");
 
     println!("✓ Connected to WebSocket");
 
     // Subscribe to a couple of topics
-    let topics = [
-        Topic::agg_trade(&symbols[0]),
-        Topic::book_ticker(&symbols[1]),
-    ];
+    let topics = [Topic::agg_trade(&symbols[0]), Topic::book_ticker(&symbols[1])];
 
     let subscribe_id = RequestId::new(1);
-    ws.subscribe(topics.clone(), Some(subscribe_id))
-        .await
-        .expect("Failed to subscribe");
+    ws.subscribe(topics.clone(), Some(subscribe_id)).await.expect("Failed to subscribe");
 
     // Wait for subscribe confirmation
     for _ in 0..10 {
@@ -327,9 +269,7 @@ async fn test_websocket_list_subscriptions() {
 
     // List subscriptions
     let list_id = RequestId::new(2);
-    ws.list_subscriptions(Some(list_id))
-        .await
-        .expect("Failed to list subscriptions");
+    ws.list_subscriptions(Some(list_id)).await.expect("Failed to list subscriptions");
 
     println!("✓ Sent list_subscriptions request (id: {})", list_id);
 
@@ -337,16 +277,16 @@ async fn test_websocket_list_subscriptions() {
     for _ in 0..10 {
         let msg = ws.recv().await.expect("Failed to receive message");
 
-        if msg.request_id() == Some(list_id) {
-            if let ServerMessage::Tagged(TaggedMessage::ListSubscriptions(result)) = msg {
-                println!("✓ Active subscriptions: {:?}", result.result);
-                assert!(
-                    result.result.len() >= 2,
-                    "Expected at least 2 subscriptions, got: {:?}",
-                    result.result
-                );
-                break;
-            }
+        if msg.request_id() == Some(list_id)
+            && let ServerMessage::Tagged(TaggedMessage::ListSubscriptions(result)) = msg
+        {
+            println!("✓ Active subscriptions: {:?}", result.result);
+            assert!(
+                result.result.len() >= 2,
+                "Expected at least 2 subscriptions, got: {:?}",
+                result.result
+            );
+            break;
         }
     }
 

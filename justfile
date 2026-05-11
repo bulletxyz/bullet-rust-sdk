@@ -20,9 +20,13 @@ build-release:
 
 # Build the WASM package (web target + Node.js wrapper)
 build-wasm:
+    rm -rf wasm/pkg
     wasm-pack build wasm --target web --out-dir pkg
     # Remove wasm-pack generated package.json and .gitignore that interfere with npm install --install-links
     rm -f wasm/pkg/.gitignore wasm/pkg/package.json
+    # Copy JS error class used by Rust wasm-bindgen imports and package exports
+    cp wasm/js/bullet-sdk-error.js wasm/pkg/bullet-sdk-error.js
+    cp wasm/js/bullet-sdk-error.d.ts wasm/pkg/bullet-sdk-error.d.ts
     # Copy the real README into pkg/ (wasm-pack generates a stub from Cargo.toml description)
     cp wasm/README.md wasm/pkg/README.md
     # Generate Node.js auto-init wrapper (uses web target's initSync)
@@ -31,10 +35,27 @@ build-wasm:
         'import { initSync } from "./bullet_rust_sdk_wasm.js";' \
         'const wasm = readFileSync(new URL("./bullet_rust_sdk_wasm_bg.wasm", import.meta.url));' \
         'initSync({ module: wasm });' \
+        'export { BulletSdkError } from "./bullet-sdk-error.js";' \
         'export * from "./bullet_rust_sdk_wasm.js";' \
         > wasm/pkg/node.js
     # Generate type re-exports
-    echo 'export * from "./bullet_rust_sdk_wasm.js";' > wasm/pkg/node.d.ts
+    printf '%s\n' \
+        'export { BulletSdkError } from "./bullet-sdk-error.js";' \
+        'export type { BulletSdkErrorDetails, BulletSdkErrorDetailsByKind, BulletSdkErrorKind, BulletSdkErrorOptions, BulletSdkErrorStatus, JsonValue } from "./bullet-sdk-error.js";' \
+        'export * from "./bullet_rust_sdk_wasm.js";' \
+        > wasm/pkg/node.d.ts
+    # Generate browser/default package wrapper
+    printf '%s\n' \
+        'export { BulletSdkError } from "./bullet-sdk-error.js";' \
+        'export * from "./bullet_rust_sdk_wasm.js";' \
+        'export { default } from "./bullet_rust_sdk_wasm.js";' \
+        > wasm/pkg/index.js
+    printf '%s\n' \
+        'export { BulletSdkError } from "./bullet-sdk-error.js";' \
+        'export type { BulletSdkErrorDetails, BulletSdkErrorDetailsByKind, BulletSdkErrorKind, BulletSdkErrorOptions, BulletSdkErrorStatus, JsonValue } from "./bullet-sdk-error.js";' \
+        'export * from "./bullet_rust_sdk_wasm.js";' \
+        'export { default } from "./bullet_rust_sdk_wasm.js";' \
+        > wasm/pkg/index.d.ts
 
 # Remove generated WASM build artifacts
 clean-wasm:
@@ -54,8 +75,9 @@ test-doc:
 test-integration endpoint="https://tradingapi.bullet.xyz":
     BULLET_API_ENDPOINT={{ endpoint }} cargo nextest run --features integration
 
-# Run WASM Jest tests (requires build-wasm-node first)
+# Run WASM Jest tests (requires build-wasm first)
 test-wasm:
+    if [ ! -x wasm/node_modules/.bin/jest ]; then cd wasm && corepack pnpm install --frozen-lockfile; fi
     cd wasm && npm test
 
 # Run all tests (Rust unit + doc + WASM)
@@ -69,11 +91,11 @@ lint:
 
 # Format all source files
 fmt:
-    cargo fmt
+    cargo +nightly fmt --all -- --config-path rustfmt.nightly.toml
 
 # Check formatting without modifying files
 fmt-check:
-    cargo fmt -- --check
+    cargo +nightly fmt --all -- --check --config-path rustfmt.nightly.toml
 
 # ── Examples ──────────────────────────────────────────────────────────────────
 
@@ -91,7 +113,7 @@ example-node: build-wasm
 
 # Run the Deno WASM example
 example-deno: build-wasm
-    cd examples/deno && deno task start
+    cd examples/deno && (command -v deno >/dev/null 2>&1 && deno task start || npx --yes deno task start)
 
 # Run the web WASM example (Next.js)
 example-web: build-wasm
@@ -103,7 +125,7 @@ test-example-node: build-wasm
 
 # Run Deno WASM example tests
 test-example-deno: build-wasm
-    cd examples/deno && deno task test
+    cd examples/deno && (command -v deno >/dev/null 2>&1 && deno task test || npx --yes deno task test)
 
 # Run all example tests (Node + Deno)
 test-examples: test-example-node test-example-deno
@@ -114,41 +136,49 @@ test-examples: test-example-node test-example-deno
 ci:
     #!/usr/bin/env bash
     set -euo pipefail
+    export npm_config_cache="${TMPDIR:-/tmp}/bullet-rust-sdk-npm-cache"
 
     step() { printf '\n\033[1;34m══ %s\033[0m\n' "$1"; }
+    run_deno() {
+        if command -v deno >/dev/null 2>&1; then
+            deno "$@"
+        else
+            npx --yes deno "$@"
+        fi
+    }
 
     step "Rust: format check"
-    cargo fmt -- --check
+    just fmt-check
 
     step "Rust: clippy"
-    cargo clippy --all-targets -- -D warnings
+    just lint
 
     step "Rust: build"
-    cargo build
+    just build
 
     step "Rust: unit tests"
-    cargo nextest run
+    just test
 
     step "Rust: doc tests"
-    cargo test --doc
+    just test-doc
 
     step "WASM: build"
     just build-wasm
 
     step "WASM: Jest tests"
-    cd wasm && npm test && cd ..
+    just test-wasm
 
     step "Examples: install"
-    cd examples && npm install && cd ..
+    (cd examples && npm ci --install-links)
 
     step "Examples: Node.js tests"
-    cd examples/node && npm test && cd ../..
+    (cd examples/node && npm test)
 
     step "Examples: Deno tests"
-    cd examples/deno && deno task test && cd ../..
+    (cd examples/deno && run_deno task test)
 
     step "Examples: Next.js build"
-    cd examples/web && npm install --install-links && npx next build && cd ../..
+    (cd examples/web && npx next build)
 
     printf '\n\033[1;32m✓ All checks passed\033[0m\n'
 
@@ -173,4 +203,4 @@ publish-wasm level="patch":
 
 # Fetch and cache the latest OpenAPI spec from mainnet
 fetch-spec endpoint="https://tradingapi.bullet.xyz":
-    curl -sSf {{ endpoint }}/docs/rest/openapi.json | nix run nixpkgs#jq -- . > rust/openapi.json
+    curl -sSf {{ endpoint }}/docs/rest/openapi.json | jq -- . > rust/openapi.json

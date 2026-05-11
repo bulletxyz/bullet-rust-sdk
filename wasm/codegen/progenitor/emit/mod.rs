@@ -44,17 +44,13 @@ pub fn emit_all(model: &CodeModel) -> String {
     let enum_names: HashSet<&str> = enums.iter().map(|e| e.name.as_str()).collect();
 
     // Filter to only unit-variant enums (C-style enums usable in wasm-bindgen).
-    let unit_enums: Vec<&&EnumDetails> = enums
-        .iter()
-        .filter(|e| e.variants.iter().all(|v| v.fields.is_empty()))
-        .collect();
+    let unit_enums: Vec<&&EnumDetails> =
+        enums.iter().filter(|e| e.variants.iter().all(|v| v.fields.is_empty())).collect();
 
     let enum_tokens: Vec<TokenStream> = unit_enums.iter().map(|e| types::emit_enum(e)).collect();
 
-    let struct_tokens: Vec<TokenStream> = structs
-        .iter()
-        .map(|s| types::emit_struct(s, &enum_names))
-        .collect();
+    let struct_tokens: Vec<TokenStream> =
+        structs.iter().map(|s| types::emit_struct(s, &enum_names)).collect();
 
     let client_tokens = if client_methods.is_empty() {
         quote! {}

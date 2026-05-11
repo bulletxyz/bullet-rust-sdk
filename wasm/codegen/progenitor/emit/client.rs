@@ -13,10 +13,7 @@ use super::type_map;
 const SKIP_METHODS: &[&str] = &["new", "new_with_client", "api_version"];
 
 /// Emit the full `impl WasmTradingApi` block.
-pub fn emit_client_impl(
-    methods: &[&MethodDetails],
-    enum_names: &HashSet<&str>,
-) -> TokenStream {
+pub fn emit_client_impl(methods: &[&MethodDetails], enum_names: &HashSet<&str>) -> TokenStream {
     let method_tokens: Vec<TokenStream> = methods
         .iter()
         .filter(|m| m.is_async && !SKIP_METHODS.contains(&m.name.as_str()))
@@ -72,11 +69,7 @@ fn emit_method(m: &MethodDetails, enum_names: &HashSet<&str>) -> TokenStream {
     for p in &m.params {
         let js_ty = type_map::param_js_type(&p.ty, enum_names);
         let optional = matches!(p.ty, super::super::RustType::Option(_));
-        let name_str = if optional {
-            format!("[{}]", p.name)
-        } else {
-            p.name.clone()
-        };
+        let name_str = if optional { format!("[{}]", p.name) } else { p.name.clone() };
         doc_lines.push(format!("@param {{{js_ty}}} {name_str}"));
     }
     let ret_js = match &m.return_type {

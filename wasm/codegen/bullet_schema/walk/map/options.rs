@@ -17,11 +17,7 @@ pub fn map_option(inner: ParamMapping) -> ParamMapping {
 
     let conversion = build_option_conversion(&inner);
 
-    ParamMapping {
-        param_type,
-        conversion,
-        is_optional: true,
-    }
+    ParamMapping { param_type, conversion, is_optional: true }
 }
 
 fn build_option_conversion(inner: &ParamMapping) -> String {
@@ -42,24 +38,30 @@ fn build_option_conversion(inner: &ParamMapping) -> String {
         if inner_expr.contains('?') {
             let expr_no_q = inner_expr.trim_end_matches('?');
             format!("{{v}}.map(|v| {expr_no_q}).transpose()?")
-        } else if is_simple_constructor(&inner.conversion) {
+        } else if let Some(converter) = simple_callable(&inner.conversion) {
             // e.g. "ClientOrderId({v})" → "{v}.map(ClientOrderId)"
-            let ctor = inner.conversion.split('(').next().unwrap();
-            format!("{{v}}.map({ctor})")
+            // e.g. "UnixTimestampMicros::from_micros({v})" →
+            // "{v}.map(UnixTimestampMicros::from_micros)"
+            format!("{{v}}.map({converter})")
         } else {
             format!("{{v}}.map(|v| {inner_expr})")
         }
     }
 }
 
-/// Check if a conversion is a simple constructor like "TypeName({v})".
-fn is_simple_constructor(conversion: &str) -> bool {
-    if let Some(rest) = conversion.strip_suffix("({v})") {
-        // Must be a valid identifier (alphanumeric + underscore, starts with letter).
-        !rest.is_empty() && rest.chars().all(|c| c.is_alphanumeric() || c == '_')
-    } else {
-        false
-    }
+/// Extract simple callable conversions like `TypeName({v})` or `Type::function({v})`.
+fn simple_callable(conversion: &str) -> Option<&str> {
+    let path = conversion.strip_suffix("({v})")?;
+    if path.split("::").all(is_rust_ident) { Some(path) } else { None }
+}
+
+fn is_rust_ident(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 fn build_str_option_conversion(inner: &ParamMapping) -> String {
@@ -79,6 +81,27 @@ fn build_str_option_conversion(inner: &ParamMapping) -> String {
         "{{v}}.as_deref().map(from_json).transpose()?".into()
     } else {
         let inner_expr = inner.conversion.replace("{v}", "s");
-        format!("{{v}}.as_deref().map(|s| {inner_expr})")
+        if inner_expr.contains('?') {
+            let expr_no_q = inner_expr.trim_end_matches('?');
+            format!("{{v}}.as_deref().map(|s| {expr_no_q}).transpose()?")
+        } else {
+            format!("{{v}}.as_deref().map(|s| {inner_expr})")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ParamMapping, map_option};
+
+    #[test]
+    fn option_mapping_uses_associated_function_without_redundant_closure() {
+        let mapping = map_option(ParamMapping {
+            param_type: "i64".into(),
+            conversion: "UnixTimestampMicros::from_micros({v})".into(),
+            is_optional: false,
+        });
+
+        assert_eq!(mapping.conversion, "{v}.map(UnixTimestampMicros::from_micros)");
     }
 }

@@ -1,7 +1,8 @@
-use schemars::schema::{InstanceType, SchemaObject};
-use serde_json::Value;
 use std::env;
 use std::path::PathBuf;
+
+use schemars::schema::{InstanceType, SchemaObject};
+use serde_json::Value;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let spec_json = fetch_spec().unwrap_or_else(|| {
@@ -42,10 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let spec: openapiv3::OpenAPI = serde_json::from_value(spec.clone()).map_err(|e| {
         // Save the problematic spec for debugging
-        let _ = std::fs::write(
-            "openapi-debug.json",
-            serde_json::to_string_pretty(&spec).unwrap(),
-        );
+        let _ = std::fs::write("openapi-debug.json", serde_json::to_string_pretty(&spec).unwrap());
         format!("Failed to parse OpenAPI spec: {e}. Saved debug output to openapi-debug.json")
     })?;
     let tokens = generator.generate_tokens(&spec)?;
@@ -177,17 +175,15 @@ fn ensure_error_responses(spec: &mut Value) {
         });
 
         if let Some(components) = spec.get_mut("components").and_then(|c| c.as_object_mut())
-            && let Some(schemas) = components
-                .get_mut("schemas")
-                .and_then(|s| s.as_object_mut())
+            && let Some(schemas) = components.get_mut("schemas").and_then(|s| s.as_object_mut())
         {
             schemas.insert("ApiErrorResponse".to_string(), error_schema);
         }
     }
 
-    // 2. For operations missing error responses, add 4XX/5XX with ApiErrorResponse.
-    //    Strip any non-200 responses that don't reference ApiErrorResponse (e.g. old
-    //    501/503 stubs without a body schema) to avoid confusing progenitor.
+    // 2. For operations missing error responses, add 4XX/5XX with ApiErrorResponse. Strip any
+    //    non-200 responses that don't reference ApiErrorResponse (e.g. old 501/503 stubs without a
+    //    body schema) to avoid confusing progenitor.
     let error_response = serde_json::json!({
         "description": "Error response",
         "content": {
@@ -204,9 +200,8 @@ fn ensure_error_responses(spec: &mut Value) {
             if let Some(path_obj) = path_item.as_object_mut() {
                 for operation in path_obj.values_mut() {
                     if let Some(operation_obj) = operation.as_object_mut()
-                        && let Some(responses) = operation_obj
-                            .get_mut("responses")
-                            .and_then(|r| r.as_object_mut())
+                        && let Some(responses) =
+                            operation_obj.get_mut("responses").and_then(|r| r.as_object_mut())
                     {
                         // Check if this operation already has error responses referencing
                         // ApiErrorResponse via $ref (i.e., from the updated trading API spec).
@@ -250,10 +245,7 @@ fn fetch_spec() -> Option<String> {
     if response.status().is_success() {
         return response.text().ok();
     } else {
-        println!(
-            "cargo::warning=Spec fetch at '{url}' failed with: {}",
-            response.status()
-        );
+        println!("cargo::warning=Spec fetch at '{url}' failed with: {}", response.status());
     }
     None
 }
