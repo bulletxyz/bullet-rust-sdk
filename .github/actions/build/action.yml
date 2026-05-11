@@ -21,22 +21,22 @@ runs:
         registry-url: ${{ inputs.setup-npm-registry == 'true' && 'https://registry.npmjs.org' || '' }}
 
     - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       with:
         targets: wasm32-unknown-unknown
 
     - name: Rust cache
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
     - name: Install cargo-binstall
-      uses: cargo-bins/cargo-binstall@main
+      uses: cargo-bins/cargo-binstall@aaa84a43aec4955a42c5ffc65d258961e39f276e # v1.19.1
 
     - name: Install wasm-pack
       shell: bash
       run: cargo binstall wasm-pack -y
 
     - name: Install just
-      uses: extractions/setup-just@v2
+      uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
 
     - name: Install npm dependencies
       shell: bash
