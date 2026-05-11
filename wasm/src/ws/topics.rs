@@ -119,9 +119,7 @@ impl WasmTopic {
     /// @returns {Topic}
     #[wasm_bindgen(js_name = userOrders)]
     pub fn user_orders(address: &str) -> WasmTopic {
-        WasmTopic {
-            inner: SdkTopic::user_orders(address).to_string(),
-        }
+        WasmTopic { inner: SdkTopic::user_orders(address).to_string() }
     }
 
     /// Subscribe to all market tickers.
