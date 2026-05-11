@@ -1,5 +1,8 @@
 # Publishes @bulletxyz/sdk-wasm to npm. Triggered by the `v<version>` git tag
-# that release-plz creates after a release PR is merged (see release-plz.yml).
+# release-plz creates after a release PR is merged (see release-plz.yml).
+# release-plz.toml pins this to a single workspace-wide `v<version>` tag rather
+# than per-crate tags, so both crates ship under one release.
+#
 # The version is already baked into wasm/Cargo.toml and wasm/package.json at this
 # point, so this workflow only builds and publishes — no version bump, no commits.
 #
