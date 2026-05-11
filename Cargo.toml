@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.dependencies]
 bon = "3.9.0"
-bullet-exchange-interface = { version = "0.2", features = ["schema"] }
+bullet-exchange-interface = { version = "0.3", features = ["schema"] }
 # Optimize WASM binary size without affecting the rust crate
 [profile.release]
 lto = true
