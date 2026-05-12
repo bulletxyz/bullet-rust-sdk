@@ -46,12 +46,13 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ steps.cargo-auth.outputs.token }}
 
-      # release-plz bumps Rust crate versions in Cargo.toml, but doesn't know about
-      # wasm/package.json. Mirror the new wasm/Cargo.toml version onto the same
-      # release PR so the Rust crate and the @bulletxyz/sdk-wasm npm package stay
-      # in lockstep. The actual `npm publish` is handled by npm-publish.yml,
-      # which is triggered by the v<version> tag release-plz creates after merge.
-      - name: Sync wasm/package.json to release PR
+      # release-plz bumps the Rust crate version, but the WASM crate ships to npm
+      # and can be skipped by release-plz's release/tag logic. Mirror the Rust
+      # crate version onto both WASM manifests so the Rust crate and
+      # @bulletxyz/sdk-wasm stay in lockstep. The actual `npm publish` is handled
+      # by npm-publish.yml, which is triggered by the v<version> tag release-plz
+      # creates after merge.
+      - name: Sync WASM manifests to release PR
         if: ${{ steps.release-plz.outputs.pr != '' }}
         env:
           PR_JSON: ${{ steps.release-plz.outputs.pr }}
@@ -64,25 +65,28 @@ jobs:
             exit 0
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git fetch origin "$BRANCH"
           git checkout "$BRANCH"
 
-          # cargo pkgid outputs "path+file:///…/wasm#bullet-rust-sdk-wasm@0.0.14" on
-          # modern Cargo, or "…#0.0.14" on older versions. Take whatever follows the
-          # final '#' or '@'.
-          V=$(cargo pkgid -p bullet-rust-sdk-wasm | sed -E 's/^.*[#@]([^#@]+)$/\1/')
-          echo "Syncing wasm/package.json to version $V"
+          # cargo pkgid outputs "path+file:///…/rust#bullet-rust-sdk@0.0.14" on
+          # modern Cargo, or "…#0.0.14" on older versions. Take whatever follows
+          # the final '#' or '@'.
+          V=$(cargo pkgid -p bullet-rust-sdk | sed -E 's/^.*[#@]([^#@]+)$/\1/')
+          export V
+          echo "Syncing WASM manifests to version $V"
 
+          perl -0pi -e 's/(\[package\]\s+name = "bullet-rust-sdk-wasm"\s+version = ")[^"]+/\1$ENV{V}/' wasm/Cargo.toml
+          perl -0pi -e 's/(\[\[package\]\]\s+name = "bullet-rust-sdk-wasm"\s+version = ")[^"]+/\1$ENV{V}/' Cargo.lock
           (cd wasm && npm version "$V" --no-git-tag-version --allow-same-version)
 
-          if git diff --quiet -- wasm/package.json; then
-            echo "wasm/package.json already at $V; nothing to commit"
+          if git diff --quiet -- wasm/Cargo.toml Cargo.lock wasm/package.json; then
+            echo "WASM manifests already at $V; nothing to commit"
             exit 0
           fi
 
-          git add wasm/package.json
-          git commit -m "chore: sync wasm/package.json to $V"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add wasm/Cargo.toml Cargo.lock wasm/package.json
+          git commit -m "chore: sync WASM manifests to $V"
           git push origin "$BRANCH"
