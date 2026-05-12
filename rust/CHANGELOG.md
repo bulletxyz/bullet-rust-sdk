@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.14](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.13...v0.0.14) - 2026-05-11
+
+### Features
+
+- *(ci)* Add Release Pipeline (NPM) ([#13](https://github.com/bulletxyz/bullet-rust-sdk/pull/13))
+
 ## [0.0.6](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.5...v0.0.6) - 2026-05-11
 
 ### Bug Fixes
