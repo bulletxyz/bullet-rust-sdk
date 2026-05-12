@@ -150,9 +150,9 @@ transaction contents before asking the wallet to sign `toBytes()`.
 
 For external Solana wallets where the wallet confirmation should show readable
 JSON, use the Solana offchain path instead. `toMessageBytes()` returns the
-readable JSON payload; `SolanaOffchainTransaction.fromParts(...)` carries the
-chain hash in the offchain envelope so the signature is bound to the target
-rollup chain:
+readable JSON payload with `chain_name` and `chain_id` as the domain fields.
+`SolanaOffchainTransaction.fromParts(...)` also carries the chain hash required
+by the current sequencer offchain authenticator envelope:
 
 ```typescript
 const unsigned = Transaction.builder()

@@ -98,13 +98,10 @@ impl UnsignedTransaction {
                 "unsigned transaction serialized to non-object JSON".to_string(),
             ));
         };
-        if let Some(max_fee) = message
-            .get_mut("details")
-            .and_then(Value::as_object_mut)
-            .and_then(|d| d.get_mut("max_fee"))
-        {
-            *max_fee = Value::String(self.inner.details.max_fee.0.to_string());
-        }
+        // The Solana offchain authenticator expects only `max_fee` as a JSON
+        // string today because it is the interface's only u128 transaction
+        // detail. Other integer fields must remain JSON numbers.
+        stringify_offchain_max_fee(&mut message, self.inner.details.max_fee.0)?;
         message.insert("chain_name".to_string(), Value::String(self.chain_name.clone()));
         serde_json::to_vec(&Value::Object(message)).map_err(Into::into)
     }
@@ -175,7 +172,7 @@ impl UnsignedTransaction {
 pub struct SolanaOffchainTransaction {
     /// JSON message bytes signed by the Solana wallet.
     pub signed_message: Vec<u8>,
-    /// Chain hash authenticated by the Solana offchain envelope.
+    /// Chain hash required by the current Solana offchain Borsh envelope.
     pub chain_hash: [u8; 32],
     /// Solana Ed25519 public key.
     pub pubkey: [u8; 32],
@@ -368,6 +365,24 @@ impl Client {
     }
 }
 
+fn stringify_offchain_max_fee(
+    message: &mut serde_json::Map<String, Value>,
+    max_fee: u128,
+) -> SDKResult<()> {
+    let details = message.get_mut("details").and_then(Value::as_object_mut).ok_or_else(|| {
+        SDKError::SerializationError(
+            "unsigned transaction JSON missing object field details".to_string(),
+        )
+    })?;
+    let max_fee_value = details.get_mut("max_fee").ok_or_else(|| {
+        SDKError::SerializationError(
+            "unsigned transaction JSON missing field details.max_fee".to_string(),
+        )
+    })?;
+    *max_fee_value = Value::String(max_fee.to_string());
+    Ok(())
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -524,6 +539,36 @@ mod tests {
         let message: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         assert_eq!(message["details"]["max_fee"], max_fee.to_string());
+    }
+
+    #[test]
+    fn stringify_offchain_max_fee_errors_when_details_shape_changes() {
+        let mut message = serde_json::json!({
+            "runtime_call": {},
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+
+        let err = stringify_offchain_max_fee(&mut message, 1).unwrap_err();
+
+        assert!(err.to_string().contains("missing object field details"));
+    }
+
+    #[test]
+    fn stringify_offchain_max_fee_errors_when_max_fee_is_missing() {
+        let mut message = serde_json::json!({
+            "details": {
+                "chain_id": 1,
+            },
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+
+        let err = stringify_offchain_max_fee(&mut message, 1).unwrap_err();
+
+        assert!(err.to_string().contains("missing field details.max_fee"));
     }
 
     #[test]
