@@ -172,6 +172,7 @@ describe('external signing', () => {
     expect(messageBytes).toBeInstanceOf(Uint8Array);
 
     const message = JSON.parse(new TextDecoder().decode(messageBytes));
+    expect(message.chain_hash).toBeUndefined();
     expect(message.chain_name).toBe(client.chainName());
     expect(message.runtime_call).toBeDefined();
     expect(BigInt(message.details.chain_id)).toBe(client.chainId());

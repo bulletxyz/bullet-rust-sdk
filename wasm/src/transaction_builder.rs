@@ -139,8 +139,8 @@ impl WasmUnsignedTransaction {
     /// Serialize into readable JSON bytes for offchain signing.
     ///
     /// External Solana wallets should sign these bytes when the backend uses
-    /// the `solanaSimple` authenticator. The JSON includes the chain hash as
-    /// the signed domain separator. Assemble the result with
+    /// the `solanaSimple` authenticator. The chain hash is carried in the
+    /// offchain envelope assembled by
     /// `SolanaOffchainTransaction.fromParts(...)` and submit it with
     /// `client.sendOffChainTransaction(...)`.
     ///
