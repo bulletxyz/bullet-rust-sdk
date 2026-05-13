@@ -7,12 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.15](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.14...v0.0.15) - 2026-05-13
-
-### Bug Fixes
-
-- serialize Solana offchain auth envelope ([#56](https://github.com/bulletxyz/bullet-rust-sdk/pull/56))
-
 ## [0.0.14](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.13...v0.0.14) - 2026-05-11
 
 ### Features
