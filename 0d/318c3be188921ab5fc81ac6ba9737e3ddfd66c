@@ -1,0 +1,24 @@
+.github/actions/build/action.yml
+  s_314e48b1179c01::t_db341b9c543da6 32-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "0d318c3be188921ab5fc81ac6ba9737e3ddfd66c",
+  "prompts": {},
+  "humans": {
+    "h_1d80f5eb993971": {
+      "author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_314e48b1179c01": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "377a02b7-0260-4dab-a11a-b7b1adb35c91",
+        "model": "unknown"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
