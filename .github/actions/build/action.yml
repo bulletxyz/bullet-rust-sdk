@@ -28,12 +28,13 @@ runs:
     - name: Rust cache
       uses: Swatinem/rust-cache@v2
 
-    - name: Install cargo-binstall
-      uses: cargo-bins/cargo-binstall@main
-
     - name: Install wasm-pack
-      shell: bash
-      run: cargo binstall wasm-pack -y
+      # Don't use `cargo binstall` here — rust-cache (above) restores
+      # `.crates2.json` metadata so binstall no-ops without placing the
+      # binary on PATH.
+      uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-pack
 
     - name: Install just
       uses: extractions/setup-just@v2
