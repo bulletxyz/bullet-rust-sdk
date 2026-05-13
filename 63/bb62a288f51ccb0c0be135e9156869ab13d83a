@@ -1,0 +1,21 @@
+rust/src/ws/models.rs
+  s_314e48b1179c01::t_a7c952f867dd9d 41-87,99-109
+  s_314e48b1179c01::t_5384e9deb81e2b 154-157
+  s_314e48b1179c01::t_a2b816f36c56e0 452-523
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "63bb62a288f51ccb0c0be135e9156869ab13d83a",
+  "prompts": {},
+  "sessions": {
+    "s_314e48b1179c01": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "377a02b7-0260-4dab-a11a-b7b1adb35c91",
+        "model": "unknown"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
