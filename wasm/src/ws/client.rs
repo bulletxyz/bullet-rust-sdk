@@ -144,6 +144,24 @@ impl WasmWebsocketHandle {
         Ok(self.inner.order_cancel(tx, id.map(RequestId::new)).await?)
     }
 
+    /// Amend an order.
+    /// @param {string} tx - Base64-encoded signed transaction.
+    /// @param {number} [id] - Optional request ID for correlating the server response.
+    /// @returns {Promise<void>}
+    #[wasm_bindgen(js_name = orderAmend)]
+    pub async fn order_amend(&mut self, tx: &str, id: Option<u64>) -> WasmResult<()> {
+        Ok(self.inner.order_amend(tx, id.map(RequestId::new)).await?)
+    }
+
+    /// Cancel all open orders for a market.
+    /// @param {string} tx - Base64-encoded signed transaction.
+    /// @param {number} [id] - Optional request ID for correlating the server response.
+    /// @returns {Promise<void>}
+    #[wasm_bindgen(js_name = orderCancelAll)]
+    pub async fn order_cancel_all(&mut self, tx: &str, id: Option<u64>) -> WasmResult<()> {
+        Ok(self.inner.order_cancel_all(tx, id.map(RequestId::new)).await?)
+    }
+
     /// Place an order using a signed transaction object.
     ///
     /// Convenience wrapper that handles base64 encoding internally.
@@ -172,6 +190,36 @@ impl WasmWebsocketHandle {
         id: Option<u64>,
     ) -> WasmResult<()> {
         Ok(self.inner.cancel_order(&tx.inner, id.map(RequestId::new)).await?)
+    }
+
+    /// Amend an order using a signed transaction object.
+    ///
+    /// Convenience wrapper that handles base64 encoding internally.
+    /// @param {Transaction} tx - A signed transaction.
+    /// @param {number} [id] - Optional request ID for correlating the server response.
+    /// @returns {Promise<void>}
+    #[wasm_bindgen(js_name = amendOrder)]
+    pub async fn amend_order(
+        &mut self,
+        tx: &crate::transaction_builder::WasmTransaction,
+        id: Option<u64>,
+    ) -> WasmResult<()> {
+        Ok(self.inner.amend_order(&tx.inner, id.map(RequestId::new)).await?)
+    }
+
+    /// Cancel all open orders using a signed transaction object.
+    ///
+    /// Convenience wrapper that handles base64 encoding internally.
+    /// @param {Transaction} tx - A signed transaction.
+    /// @param {number} [id] - Optional request ID for correlating the server response.
+    /// @returns {Promise<void>}
+    #[wasm_bindgen(js_name = cancelAllOrders)]
+    pub async fn cancel_all_orders(
+        &mut self,
+        tx: &crate::transaction_builder::WasmTransaction,
+        id: Option<u64>,
+    ) -> WasmResult<()> {
+        Ok(self.inner.cancel_all_orders(&tx.inner, id.map(RequestId::new)).await?)
     }
 }
 
@@ -374,6 +422,24 @@ impl WasmManagedWebsocket {
         Ok(())
     }
 
+    /// Amend an order over the managed socket.
+    /// @param {string} tx - Base64-encoded signed transaction.
+    /// @param {number} [id]
+    #[wasm_bindgen(js_name = orderAmend)]
+    pub fn order_amend(&self, tx: &str, id: Option<u64>) -> WasmResult<()> {
+        self.inner.order_amend(tx.to_string(), id.map(RequestId::new))?;
+        Ok(())
+    }
+
+    /// Cancel all open orders for a market over the managed socket.
+    /// @param {string} tx - Base64-encoded signed transaction.
+    /// @param {number} [id]
+    #[wasm_bindgen(js_name = orderCancelAll)]
+    pub fn order_cancel_all(&self, tx: &str, id: Option<u64>) -> WasmResult<()> {
+        self.inner.order_cancel_all(tx.to_string(), id.map(RequestId::new))?;
+        Ok(())
+    }
+
     /// Place an order using a signed transaction object. Handles base64 internally.
     /// @param {Transaction} tx
     /// @param {number} [id]
@@ -397,6 +463,32 @@ impl WasmManagedWebsocket {
         id: Option<u64>,
     ) -> WasmResult<()> {
         self.inner.cancel_order(&tx.inner, id.map(RequestId::new))?;
+        Ok(())
+    }
+
+    /// Amend an order using a signed transaction object. Handles base64 internally.
+    /// @param {Transaction} tx
+    /// @param {number} [id]
+    #[wasm_bindgen(js_name = amendOrder)]
+    pub fn amend_order(
+        &self,
+        tx: &crate::transaction_builder::WasmTransaction,
+        id: Option<u64>,
+    ) -> WasmResult<()> {
+        self.inner.amend_order(&tx.inner, id.map(RequestId::new))?;
+        Ok(())
+    }
+
+    /// Cancel all open orders using a signed transaction object. Handles base64 internally.
+    /// @param {Transaction} tx
+    /// @param {number} [id]
+    #[wasm_bindgen(js_name = cancelAllOrders)]
+    pub fn cancel_all_orders(
+        &self,
+        tx: &crate::transaction_builder::WasmTransaction,
+        id: Option<u64>,
+    ) -> WasmResult<()> {
+        self.inner.cancel_all_orders(&tx.inner, id.map(RequestId::new))?;
         Ok(())
     }
 }
