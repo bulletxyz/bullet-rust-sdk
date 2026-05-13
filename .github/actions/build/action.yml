@@ -29,15 +29,9 @@ runs:
       uses: Swatinem/rust-cache@v2
 
     - name: Install wasm-pack
-      # `taiki-e/install-action` handles its own binary cache and verifies the
-      # tool is on PATH after install. The previous `cargo binstall` approach
-      # combined with `Swatinem/rust-cache@v2` (above) was broken: rust-cache
-      # restores `~/.cargo/.crates2.json` metadata showing wasm-pack as
-      # installed, so `cargo binstall wasm-pack -y` no-ops with
-      # "wasm-pack vX.Y.Z is already installed, use --force to override" —
-      # even when the binary isn't actually present on PATH. The subsequent
-      # `wasm-pack build` then dies with `command not found`. See the
-      # release-2026-05-13 npm-publish failure for the symptom.
+      # Don't use `cargo binstall` here — rust-cache (above) restores
+      # `.crates2.json` metadata so binstall no-ops without placing the
+      # binary on PATH.
       uses: taiki-e/install-action@v2
       with:
         tool: wasm-pack
