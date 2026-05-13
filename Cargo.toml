@@ -14,7 +14,7 @@ bullet-exchange-interface = { version = "0.3", features = ["schema"] }
 # crate (otherwise a path-only dep is treated as "no version requirement" and
 # the wasm crate's version stays frozen while rust bumps). release-plz keeps
 # the version field in lockstep with rust/Cargo.toml on every release PR.
-bullet-rust-sdk = { path = "rust", version = "0.0.14" }
+bullet-rust-sdk = { path = "rust", version = "0.0.15" }
 # Optimize WASM binary size without affecting the rust crate
 [profile.release]
 lto = true
