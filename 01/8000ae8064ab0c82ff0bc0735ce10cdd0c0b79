@@ -1,0 +1,19 @@
+wasm/README.md
+  s_752887c966340c::t_8d777ba1367a92 267
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "018000ae8064ab0c82ff0bc0735ce10cdd0c0b79",
+  "prompts": {},
+  "sessions": {
+    "s_752887c966340c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4cbed1ac-2dda-4fa2-b766-49131f02f9dd",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
