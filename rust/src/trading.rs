@@ -233,7 +233,10 @@ impl Client {
         symbol: &str,
     ) -> SDKResult<Vec<crate::generated::types::BinanceOrder>> {
         let address = self.address()?;
-        let resp = self.query_open_orders(&address, symbol).await?;
+        // The generated client made `symbol` optional (None = all markets);
+        // this wrapper preserves the single-symbol semantics by always
+        // passing `Some`.
+        let resp = self.query_open_orders(&address, Some(symbol)).await?;
         Ok(resp.into_inner())
     }
 
