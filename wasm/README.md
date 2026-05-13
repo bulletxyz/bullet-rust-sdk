@@ -264,6 +264,9 @@ const tx = Transaction.builder()
     .build(client);
 
 await ws.orderPlace(tx.toBase64());
+// also: ws.orderCancel(tx.toBase64()), ws.orderAmend(tx.toBase64()), ws.orderCancelAll(tx.toBase64())
+// or the convenience forms that take a Transaction directly:
+// ws.placeOrder(tx), ws.cancelOrder(tx), ws.amendOrder(tx), ws.cancelAllOrders(tx)
 ```
 
 ### Managed WebSocket (auto-reconnect)
@@ -300,6 +303,8 @@ while (true) {
 // Order submission — fire-and-forget; acks arrive as 'message' events
 ws.placeOrder(tx);
 ws.cancelOrder(cancelTx);
+ws.amendOrder(amendTx);
+ws.cancelAllOrders(cancelAllTx);
 ```
 
 ### Decimal
