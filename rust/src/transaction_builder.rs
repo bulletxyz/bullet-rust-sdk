@@ -140,10 +140,15 @@ impl UnsignedTransaction {
         }
 
         let runtime_call = RuntimeCall::Exchange(call_message);
+        // Microseconds, not milliseconds: the sequencer's uniqueness check
+        // compares against `latest_known_generation` which is stored in μs
+        // (16-digit unix-time value). A ms timestamp (13 digits) is treated
+        // as ancient (~1000x older than the cutoff) and rejected with
+        // CheckUniquenessFailed.
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| SDKError::SystemTimeError)?
-            .as_millis() as u64;
+            .as_micros() as u64;
         let uniqueness = UniquenessData::Generation(timestamp);
         let details = TxDetails {
             chain_id: client.chain_id(),
