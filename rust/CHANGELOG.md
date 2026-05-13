@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.15](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.14...v0.0.15) - 2026-05-13
+
+### Bug Fixes
+
+- *(trading)* wrap symbol in Some for query_open_orders after generated-client drift ([#61](https://github.com/bulletxyz/bullet-rust-sdk/pull/61))
+- serialize Solana offchain auth envelope ([#56](https://github.com/bulletxyz/bullet-rust-sdk/pull/56))
+
+### Features
+
+- *(ws)* add order_amend and order_cancel_all to ManagedWebsocket + WebsocketHandle ([#59](https://github.com/bulletxyz/bullet-rust-sdk/pull/59))
+
+### Revert
+
+- undo abandoned v0.0.15 release bump ([#57](https://github.com/bulletxyz/bullet-rust-sdk/pull/57)) ([#62](https://github.com/bulletxyz/bullet-rust-sdk/pull/62))
+
 ## [0.0.14](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.13...v0.0.14) - 2026-05-11
 
 ### Features
