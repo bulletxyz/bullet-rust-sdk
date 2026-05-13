@@ -30,7 +30,7 @@ use bullet_exchange_interface::types::{MarketId, OrderType, Side};
 
 use crate::generated::types::SubmitTxResponse;
 use crate::types::{CallMessage, UserAction};
-use crate::{Client, SDKError, SDKResult, Transaction};
+use crate::{Client, SDKError, SDKResult};
 
 // ── Order construction helpers ──────────────────────────────────────────────
 
@@ -127,8 +127,7 @@ impl Client {
             replace,
             sub_account_index,
         });
-        let signed = Transaction::builder().call_message(call_msg).client(self).build()?;
-        self.send_transaction(&signed).await
+        self.send_call_message(call_msg).await
     }
 
     /// Cancel specific orders on a market. Signs and submits the transaction.
@@ -157,8 +156,7 @@ impl Client {
     ) -> SDKResult<SubmitTxResponse> {
         let call_msg =
             CallMessage::User(UserAction::CancelOrders { market_id, orders, sub_account_index });
-        let signed = Transaction::builder().call_message(call_msg).client(self).build()?;
-        self.send_transaction(&signed).await
+        self.send_call_message(call_msg).await
     }
 
     /// Cancel all orders on a specific market. Signs and submits the transaction.
@@ -175,8 +173,7 @@ impl Client {
     ) -> SDKResult<SubmitTxResponse> {
         let call_msg =
             CallMessage::User(UserAction::CancelMarketOrders { market_id, sub_account_index });
-        let signed = Transaction::builder().call_message(call_msg).client(self).build()?;
-        self.send_transaction(&signed).await
+        self.send_call_message(call_msg).await
     }
 
     /// Cancel all orders across all markets. Signs and submits the transaction.
@@ -191,8 +188,7 @@ impl Client {
         sub_account_index: Option<u8>,
     ) -> SDKResult<SubmitTxResponse> {
         let call_msg = CallMessage::User(UserAction::CancelAllOrders { sub_account_index });
-        let signed = Transaction::builder().call_message(call_msg).client(self).build()?;
-        self.send_transaction(&signed).await
+        self.send_call_message(call_msg).await
     }
 
     // ── Account query convenience methods ─────────────────────────────────
@@ -292,8 +288,7 @@ impl Client {
     ) -> SDKResult<SubmitTxResponse> {
         let call_msg =
             CallMessage::User(UserAction::AmendOrders { market_id, orders, sub_account_index });
-        let signed = Transaction::builder().call_message(call_msg).client(self).build()?;
-        self.send_transaction(&signed).await
+        self.send_call_message(call_msg).await
     }
 }
 

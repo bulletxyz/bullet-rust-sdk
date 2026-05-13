@@ -480,9 +480,7 @@ impl WasmTradingApi {
         &self,
         msg: WasmCallMessage,
     ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
-        let signed =
-            RustTransaction::builder().call_message(msg.inner).client(&self.inner).build()?;
-        let resp = self.inner.send_transaction(&signed).await?;
+        let resp = self.inner.send_call_message(msg.inner).await?;
         Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
 }
