@@ -1,14 +1,13 @@
 //! WebSocket message models for the Trading SDK.
 //!
-//! NOTE: This module is temporarily added here until we have a better solution.
-//! This enum is only used in the trading-sdk for deserializing server messages.
-//! It does NOT live in trading-api-types because:
-//! 1. The server uses optimized types with `&'static str` and `Arc<str>` that can't deserialize
-//! 2. This struct is only needed by SDK clients, not the server
+//! Client-side deserialization types for server messages. These do not live in
+//! `bullet-ws-interface` because the server uses optimized internal types
+//! (`&'static str`, `Arc<str>`) that can't implement `Deserialize`.
 //!
 //! IMPORTANT: When new message types are added to the server, they must be manually
 //! added to the `ServerMessage` enum below.
 
+pub use bullet_ws_interface::{OrderResultMessage, OrderResultPayload, TxStatus};
 use serde::{Deserialize, Serialize};
 
 use crate::types::{
@@ -49,6 +48,22 @@ pub enum TaggedMessage {
     Subscribe(MethodResult),
     Unsubscribe(MethodResult),
     ListSubscriptions(ListSubscriptionsResult),
+    // Order RPC acks. The four `e` tags are dotted, not snake_case, so we
+    // override the default rename. Aliases match the WS spec's
+    // case-insensitive `ORDER.PLACE` form just like client.rs does.
+    #[serde(rename = "order.place", alias = "ORDER.PLACE")]
+    OrderPlace(OrderResultMessage),
+    #[serde(rename = "order.cancel", alias = "ORDER.CANCEL")]
+    OrderCancel(OrderResultMessage),
+    #[serde(
+        rename = "order.amend",
+        alias = "ORDER.AMEND",
+        alias = "order.modify",
+        alias = "ORDER.MODIFY"
+    )]
+    OrderAmend(OrderResultMessage),
+    #[serde(rename = "order.cancelAll", alias = "ORDER.CANCEL_ALL")]
+    OrderCancelAll(OrderResultMessage),
 }
 
 /// All possible server messages.
@@ -93,6 +108,10 @@ impl ServerMessage {
                 TaggedMessage::Subscribe(m) => m.id,
                 TaggedMessage::Unsubscribe(m) => m.id,
                 TaggedMessage::ListSubscriptions(m) => m.id,
+                TaggedMessage::OrderPlace(m)
+                | TaggedMessage::OrderCancel(m)
+                | TaggedMessage::OrderAmend(m)
+                | TaggedMessage::OrderCancelAll(m) => m.id,
                 _ => None,
             },
             ServerMessage::Error(m) => m.id,
@@ -386,5 +405,145 @@ mod tests {
             assert_eq!(l.result.len(), 2);
             assert_eq!(l.result[0], "btcusdt@depth10");
         }
+    }
+
+    #[test]
+    fn test_order_place_result() {
+        let json = r#"{
+            "e": "order.place",
+            "id": 10,
+            "E": 1706745600000000,
+            "results": {
+                "tx_id": "0xabc",
+                "status": "processed",
+                "order_ids": [1, 2],
+                "client_order_ids": [100, 101]
+            }
+        }"#;
+
+        let msg: ServerMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderPlace(_))));
+        assert_eq!(msg.request_id(), Some(RequestId::from(10)));
+        if let ServerMessage::Tagged(TaggedMessage::OrderPlace(r)) = msg {
+            assert_eq!(r.results.tx_id, "0xabc");
+            assert_eq!(r.results.status, TxStatus::Processed);
+            assert_eq!(r.results.order_ids, vec![1, 2]);
+            assert_eq!(r.results.client_order_ids, vec![100, 101]);
+        }
+    }
+
+    #[test]
+    fn test_order_amend_with_alias() {
+        // The spec accepts `order.amend`, `order.modify`, and `ORDER.AMEND`.
+        for tag in ["order.amend", "order.modify"] {
+            let json = format!(
+                r#"{{"e":"{tag}","id":11,"E":1706745600000000,
+                   "results":{{"tx_id":"0xdef","status":"published"}}}}"#
+            );
+            let msg: ServerMessage = serde_json::from_str(&json).unwrap();
+            assert!(
+                matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderAmend(_))),
+                "tag={tag}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_order_cancel_all_result() {
+        let json = r#"{
+            "e": "order.cancelAll",
+            "id": 12,
+            "E": 1706745600000000,
+            "results": {
+                "tx_id": "0xghi",
+                "status": "processed",
+                "order_ids": [1, 2, 3]
+            }
+        }"#;
+
+        let msg: ServerMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderCancelAll(_))));
+        assert_eq!(msg.request_id(), Some(RequestId::from(12)));
+        if let ServerMessage::Tagged(TaggedMessage::OrderCancelAll(r)) = msg {
+            assert_eq!(r.results.order_ids.len(), 3);
+            // client_order_ids is optional — absent in payload means empty Vec.
+            assert!(r.results.client_order_ids.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_order_cancel_result() {
+        let json = r#"{
+            "e": "order.cancel",
+            "id": 20,
+            "E": 1706745600000000,
+            "results": {
+                "tx_id": "0xcancel",
+                "status": "processed",
+                "order_ids": [5],
+                "client_order_ids": [50]
+            }
+        }"#;
+        let msg: ServerMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderCancel(_))));
+        assert_eq!(msg.request_id(), Some(RequestId::from(20)));
+    }
+
+    #[test]
+    fn test_screaming_snake_aliases() {
+        // Each SCREAMING alias must map to the specific expected variant, not just any order
+        // variant.
+        let cases: &[(&str, &str)] = &[
+            ("ORDER.PLACE", "OrderPlace"),
+            ("ORDER.CANCEL", "OrderCancel"),
+            ("ORDER.AMEND", "OrderAmend"),
+            ("ORDER.MODIFY", "OrderAmend"),
+            ("ORDER.CANCEL_ALL", "OrderCancelAll"),
+        ];
+        for (tag, expected) in cases {
+            let json = format!(
+                r#"{{"e":"{tag}","id":1,"E":1706745600000000,"results":{{"tx_id":"0x1","status":"processed"}}}}"#
+            );
+            let msg: ServerMessage = serde_json::from_str(&json)
+                .unwrap_or_else(|e| panic!("failed to parse '{tag}': {e}"));
+            let ServerMessage::Tagged(ref inner) = msg else {
+                panic!("'{tag}' did not parse as Tagged");
+            };
+            let actual = match inner {
+                TaggedMessage::OrderPlace(_) => "OrderPlace",
+                TaggedMessage::OrderCancel(_) => "OrderCancel",
+                TaggedMessage::OrderAmend(_) => "OrderAmend",
+                TaggedMessage::OrderCancelAll(_) => "OrderCancelAll",
+                other => panic!("'{tag}' mapped to unexpected variant: {}", other.as_ref()),
+            };
+            assert_eq!(actual, *expected, "'{tag}' mapped to wrong variant");
+        }
+    }
+
+    #[test]
+    fn test_order_result_id_absent() {
+        // Server may omit `id` on unsolicited pushes; request_id() must return None.
+        let json = r#"{"e":"order.place","E":1706745600000000,"results":{"tx_id":"0x1","status":"processed"}}"#;
+        let msg: ServerMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderPlace(_))));
+        assert_eq!(msg.request_id(), None);
+    }
+
+    #[test]
+    fn test_tx_status_is_success() {
+        assert!(TxStatus::Processed.is_success());
+        assert!(TxStatus::Published.is_success());
+        assert!(TxStatus::Submitted.is_success());
+        assert!(TxStatus::Finalized.is_success());
+        assert!(!TxStatus::Dropped.is_success());
+        assert!(!TxStatus::Unknown.is_success());
+    }
+
+    #[test]
+    fn test_order_result_does_not_steal_other_tagged() {
+        // Status messages must NOT be misclassified as an order result.
+        let json = r#"{"e":"status","E":1234567890,"status":"connected","clientId":"x"}"#;
+        let msg: ServerMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::Status(_))));
     }
 }
