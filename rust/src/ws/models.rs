@@ -57,6 +57,16 @@ pub enum TxStatus {
     Unknown,
 }
 
+impl TxStatus {
+    /// Returns `true` for statuses that mean the order is (or will be) live on
+    /// the book. `Dropped` and `Unknown` are non-success — the caller should
+    /// treat the operation as failed and reconcile.
+    #[must_use]
+    pub fn is_success(self) -> bool {
+        matches!(self, Self::Processed | Self::Published | Self::Submitted | Self::Finalized)
+    }
+}
+
 /// Inner `results` payload for a successful order RPC ack.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrderResultPayload {
@@ -512,6 +522,61 @@ mod tests {
             // client_order_ids is optional — absent in payload means empty Vec.
             assert!(r.results.client_order_ids.is_empty());
         }
+    }
+
+    #[test]
+    fn test_order_cancel_result() {
+        let json = r#"{
+            "e": "order.cancel",
+            "id": 20,
+            "E": 1706745600000000,
+            "results": {
+                "tx_id": "0xcancel",
+                "status": "processed",
+                "order_ids": [5],
+                "client_order_ids": [50]
+            }
+        }"#;
+        let msg: ServerMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderCancel(_))));
+        assert_eq!(msg.request_id(), Some(RequestId::from(20)));
+    }
+
+    #[test]
+    fn test_screaming_snake_aliases() {
+        // The spec defines SCREAMING.SNAKE_CASE aliases for all four ops.
+        for (tag, pat) in [
+            ("ORDER.PLACE", "OrderPlace"),
+            ("ORDER.CANCEL", "OrderCancel"),
+            ("ORDER.AMEND", "OrderAmend"),
+            ("ORDER.CANCEL_ALL", "OrderCancelAll"),
+        ] {
+            let json = format!(
+                r#"{{"e":"{tag}","id":1,"E":1706745600000000,"results":{{"tx_id":"0x1","status":"processed"}}}}"#
+            );
+            let msg: ServerMessage = serde_json::from_str(&json)
+                .unwrap_or_else(|e| panic!("{pat}: failed to parse '{tag}': {e}"));
+            assert!(
+                matches!(
+                    &msg,
+                    ServerMessage::Tagged(TaggedMessage::OrderPlace(_))
+                        | ServerMessage::Tagged(TaggedMessage::OrderCancel(_))
+                        | ServerMessage::Tagged(TaggedMessage::OrderAmend(_))
+                        | ServerMessage::Tagged(TaggedMessage::OrderCancelAll(_))
+                ),
+                "{pat}: wrong variant for tag '{tag}'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tx_status_is_success() {
+        assert!(TxStatus::Processed.is_success());
+        assert!(TxStatus::Published.is_success());
+        assert!(TxStatus::Submitted.is_success());
+        assert!(TxStatus::Finalized.is_success());
+        assert!(!TxStatus::Dropped.is_success());
+        assert!(!TxStatus::Unknown.is_success());
     }
 
     #[test]
