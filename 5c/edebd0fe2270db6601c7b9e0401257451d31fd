@@ -1,0 +1,30 @@
+rust/src/transaction_builder.rs
+  s_c99e3e8724b7d9::t_c7acb91bfa9fcf 158-161,170-175,177
+  s_c99e3e8724b7d9::t_f127c859cb603b 176
+  s_c99e3e8724b7d9::t_4c31f4dff6a58c 353,369
+wasm/README.md
+  s_c99e3e8724b7d9::t_f12f1b5fdd9bc3 115-116,121
+  s_c99e3e8724b7d9::t_21a1d5210c4a81 114,117-120,122-125
+wasm/src/transaction_builder.rs
+  s_c99e3e8724b7d9::t_e7f93d79711620 442,444-447,449-450
+  s_c99e3e8724b7d9::t_aa949b1b8c13e7 443,448,451-453
+  s_c99e3e8724b7d9::t_88653601cdbba7 385,393,404
+  s_c99e3e8724b7d9::t_4280e43a282287 488
+  s_c99e3e8724b7d9::t_b3a59cd4c450db 508
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "5cedebd0fe2270db6601c7b9e0401257451d31fd",
+  "prompts": {},
+  "sessions": {
+    "s_c99e3e8724b7d9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a48ca2e-e992-49bd-b8ee-02866721ef4d",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
