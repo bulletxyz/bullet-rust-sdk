@@ -365,9 +365,8 @@ dependencies = [
 
 [[package]]
 name = "bullet-ws-interface"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6ffe6f5f65e0fcbd8b25d5b185d1d6a9c5ff1aac4f3c5f2df68f587afffca59"
+version = "0.1.1"
+source = "git+https://github.com/bulletxyz/bullet-ws-interface?branch=feat%2Forder-rpc-response-types#b46b93f411f13d881e6f19c5d7ee283ca0da26b7"
 dependencies = [
  "serde",
  "serde_json",
