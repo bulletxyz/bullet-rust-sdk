@@ -1,22 +1,20 @@
 //! WebSocket message models for the Trading SDK.
 //!
-//! NOTE: This module is temporarily added here until we have a better solution.
-//! This enum is only used in the trading-sdk for deserializing server messages.
-//! It does NOT live in trading-api-types because:
-//! 1. The server uses optimized types with `&'static str` and `Arc<str>` that can't deserialize
-//! 2. This struct is only needed by SDK clients, not the server
+//! Client-side deserialization types for server messages. These do not live in
+//! `bullet-ws-interface` because the server uses optimized internal types
+//! (`&'static str`, `Arc<str>`) that can't implement `Deserialize`.
 //!
 //! IMPORTANT: When new message types are added to the server, they must be manually
 //! added to the `ServerMessage` enum below.
 
 use serde::{Deserialize, Serialize};
 
-pub use bullet_ws_interface::{OrderResultMessage, OrderResultPayload, TxStatus};
-
 use crate::types::{
     AggTradeMessage, BookTickerMessage, DepthUpdate, ErrorMessage, ForceOrderMessage,
     MarkPriceMessage, OrderUpdateMessage, PongMessage, RequestId, StatusMessage,
 };
+
+pub use bullet_ws_interface::{OrderResultMessage, OrderResultPayload, TxStatus};
 
 /// Result message for subscribe/unsubscribe success
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -512,6 +510,15 @@ mod tests {
                 "{pat}: wrong variant for tag '{tag}'"
             );
         }
+    }
+
+    #[test]
+    fn test_order_result_id_absent() {
+        // Server may omit `id` on unsolicited pushes; request_id() must return None.
+        let json = r#"{"e":"order.place","E":1706745600000000,"results":{"tx_id":"0x1","status":"processed"}}"#;
+        let msg: ServerMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderPlace(_))));
+        assert_eq!(msg.request_id(), None);
     }
 
     #[test]

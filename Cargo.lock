@@ -366,7 +366,7 @@ dependencies = [
 [[package]]
 name = "bullet-ws-interface"
 version = "0.1.1"
-source = "git+https://github.com/bulletxyz/bullet-ws-interface?branch=feat%2Forder-rpc-response-types#b46b93f411f13d881e6f19c5d7ee283ca0da26b7"
+source = "git+https://github.com/bulletxyz/bullet-ws-interface?branch=feat%2Forder-rpc-response-types#c554ee75b24826710b484355e9dc3bdbeec391f9"
 dependencies = [
  "serde",
  "serde_json",
