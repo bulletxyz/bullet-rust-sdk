@@ -153,9 +153,6 @@ ci:
     step "Rust: clippy"
     just lint
 
-    step "Rust: build"
-    just build
-
     step "Rust: unit tests"
     just test
 
