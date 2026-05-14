@@ -1,0 +1,29 @@
+rust/src/transaction_builder.rs
+  s_449c01b818d505::t_65f07061a52e50 752-857
+  s_449c01b818d505::t_6f3a70f9bc52b7 184-210
+  s_449c01b818d505::t_c6cdccaa2fe5ec 262-310
+  s_449c01b818d505::t_91e6cd64572ec4 455-487
+  s_449c01b818d505::t_7100b8be8ca7cb 87-102
+rust/src/lib.rs
+  s_449c01b818d505::t_b36079be90823a 19-21
+wasm/src/transaction_builder.rs
+  s_449c01b818d505::t_1b4d68e7024707 545-561
+  s_449c01b818d505::t_e8e2467b79d6fc 41
+  s_449c01b818d505::t_2f62ba654fb280 162-241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "f0957936f837d46c50440bf8aee171b273b4f5cf",
+  "prompts": {},
+  "sessions": {
+    "s_449c01b818d505": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72a148e4-0df4-4ff9-8a31-a57c776123b3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
