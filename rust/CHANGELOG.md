@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.16](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.15...v0.0.16) - 2026-05-14
+
+### Bug Fixes
+
+- *(transaction)* use microseconds for UniquenessData::Generation, not milliseconds ([#65](https://github.com/bulletxyz/bullet-rust-sdk/pull/65))
+
 ## [0.0.15](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.14...v0.0.15) - 2026-05-13
 
 ### Bug Fixes
