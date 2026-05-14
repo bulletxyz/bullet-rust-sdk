@@ -84,6 +84,22 @@ impl UnsignedTransaction {
         schema.display(0, &bytes).map_err(|e| SDKError::SerializationError(e.to_string()))
     }
 
+    /// Build the bytes a Ledger hardware wallet must sign.
+    ///
+    /// Prepends the 85-byte Solana off-chain message preamble (using `chain_hash`
+    /// as the application domain) to the JSON message bytes. This is the spec-
+    /// compliant format required by Ledger firmware. Pass the resulting bytes to
+    /// `wallet.signMessage`; then assemble and submit with
+    /// [`SolanaLedgerTransaction::from_parts`] and [`Client::send_ledger_transaction`].
+    pub fn to_ledger_signable_bytes(&self, pubkey: &[u8; 32]) -> SDKResult<Vec<u8>> {
+        let json_bytes = self.to_message_bytes()?;
+        let preamble = make_solana_preamble(pubkey, &self.chain_hash, json_bytes.len() as u16);
+        let mut result = Vec::with_capacity(preamble.len() + json_bytes.len());
+        result.extend_from_slice(&preamble);
+        result.extend_from_slice(&json_bytes);
+        Ok(result)
+    }
+
     /// Serialize into the human-readable JSON bytes for offchain signing.
     ///
     /// This is the message external Solana wallets should sign when the backend
@@ -165,6 +181,33 @@ impl UnsignedTransaction {
     }
 }
 
+// ── Solana preamble ──────────────────────────────────────────────────────────
+
+// Solana off-chain signing domain: 0xff followed by "solana offchain" (15 bytes).
+const SOLANA_SIGNING_DOMAIN: [u8; 16] = *b"\xffsolana offchain";
+
+/// Build the 85-byte Solana off-chain message preamble.
+///
+/// Layout (85 bytes):
+///   [0..16]  signing domain (0xff + "solana offchain")
+///   [16]     header_version = 0
+///   [17..49] application_domain = chain_hash (32 bytes)
+///   [49]     message_format = 0
+///   [50]     signer_count = 1
+///   [51..83] pubkey (32 bytes)
+///   [83..85] message_length as LE u16
+fn make_solana_preamble(pubkey: &[u8; 32], chain_hash: &[u8; 32], message_length: u16) -> [u8; 85] {
+    let mut preamble = [0u8; 85];
+    preamble[0..16].copy_from_slice(&SOLANA_SIGNING_DOMAIN);
+    // header_version = 0 (already 0)
+    preamble[17..49].copy_from_slice(chain_hash);
+    // message_format = 0 (already 0)
+    preamble[50] = 1; // signer_count
+    preamble[51..83].copy_from_slice(pubkey);
+    preamble[83..85].copy_from_slice(&message_length.to_le_bytes());
+    preamble
+}
+
 // ── Solana offchain transaction ──────────────────────────────────────────────
 
 /// A Solana offchain transaction ready for sequencer submission.
@@ -213,6 +256,55 @@ impl SolanaOffchainTransaction {
     pub fn to_base64(&self) -> SDKResult<String> {
         let bytes = self.to_bytes()?;
         Ok(BASE64.encode(&bytes))
+    }
+}
+
+// ── Solana Ledger transaction ────────────────────────────────────────────────
+
+/// A Solana offchain transaction using the spec-compliant Ledger wire format.
+///
+/// Use this for Ledger hardware wallets. Sign the bytes from
+/// [`UnsignedTransaction::to_ledger_signable_bytes`], assemble with
+/// [`SolanaLedgerTransaction::from_parts`], then submit via
+/// [`Client::send_ledger_transaction`].
+///
+/// Wire format: `[u32 LE: message_len][preamble + json][64-byte sig]`, base64-
+/// encoded and posted as `{"body":"..."}`.
+#[derive(Clone, Debug)]
+pub struct SolanaLedgerTransaction {
+    /// Preamble (85 bytes) concatenated with JSON message bytes.
+    pub signed_message: Vec<u8>,
+    /// Ed25519 signature over `signed_message`.
+    pub signature: [u8; 64],
+}
+
+impl SolanaLedgerTransaction {
+    /// Assemble a Ledger transaction from an unsigned transaction, a 32-byte
+    /// public key, and a 64-byte Ed25519 signature.
+    ///
+    /// Use after signing [`UnsignedTransaction::to_ledger_signable_bytes`].
+    pub fn from_parts(
+        tx: UnsignedTransaction,
+        pubkey: [u8; 32],
+        signature: [u8; 64],
+    ) -> SDKResult<Self> {
+        Ok(Self { signed_message: tx.to_ledger_signable_bytes(&pubkey)?, signature })
+    }
+
+    /// Serialize to the raw binary wire format.
+    ///
+    /// Layout: `[u32 LE: message_len][signed_message][signature]`
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(4 + self.signed_message.len() + 64);
+        buf.extend_from_slice(&(self.signed_message.len() as u32).to_le_bytes());
+        buf.extend_from_slice(&self.signed_message);
+        buf.extend_from_slice(&self.signature);
+        buf
+    }
+
+    /// Serialize to wire format and base64-encode.
+    pub fn to_base64(&self) -> String {
+        BASE64.encode(self.to_bytes())
     }
 }
 
@@ -337,6 +429,39 @@ impl Client {
         signed: &SolanaOffchainTransaction,
     ) -> SDKResult<SubmitTxResponse> {
         let body = signed.to_base64()?;
+        let response = self
+            .http_client
+            .post(self.solana_offchain_url())
+            .json(&SubmitTxRequest { body })
+            .send()
+            .await?;
+        let status = response.status();
+        let bytes = response.bytes().await?;
+
+        if status.is_success() {
+            return serde_json::from_slice::<SubmitTxResponse>(&bytes).map_err(Into::into);
+        }
+
+        let error = serde_json::from_slice::<ApiErrorResponse>(&bytes).unwrap_or_else(|_| {
+            ApiErrorResponse {
+                status: status.as_u16(),
+                message: String::from_utf8_lossy(&bytes).into_owned(),
+                details: None,
+            }
+        });
+        Err(self.submit_tx_api_error(error).await?)
+    }
+
+    /// Send a Solana Ledger transaction to the sequencer.
+    ///
+    /// Posts the spec-compliant wire format to `/sequencer/solana_offchain_txs`.
+    /// Use after signing with [`UnsignedTransaction::to_ledger_signable_bytes`]
+    /// and assembling via [`SolanaLedgerTransaction::from_parts`].
+    pub async fn send_ledger_transaction(
+        &self,
+        signed: &SolanaLedgerTransaction,
+    ) -> SDKResult<SubmitTxResponse> {
+        let body = signed.to_base64();
         let response = self
             .http_client
             .post(self.solana_offchain_url())
@@ -621,6 +746,113 @@ mod tests {
             message["runtime_call"]["exchange"]["user"]["cancel_orders"]["orders"][0]["order_id"],
             10_000_000_000u64
         );
+    }
+
+    #[test]
+    fn make_solana_preamble_layout() {
+        let pubkey = [1u8; 32];
+        let chain_hash = [2u8; 32];
+        let message_length: u16 = 0x1234;
+
+        let preamble = make_solana_preamble(&pubkey, &chain_hash, message_length);
+
+        assert_eq!(preamble.len(), 85);
+        // signing domain: 0xff + "solana offchain"
+        assert_eq!(preamble[0], 0xff);
+        assert_eq!(&preamble[1..16], b"solana offchain");
+        // header_version = 0
+        assert_eq!(preamble[16], 0);
+        // application_domain = chain_hash
+        assert_eq!(&preamble[17..49], &chain_hash);
+        // message_format = 0
+        assert_eq!(preamble[49], 0);
+        // signer_count = 1
+        assert_eq!(preamble[50], 1);
+        // pubkey
+        assert_eq!(&preamble[51..83], &pubkey);
+        // message_length LE
+        assert_eq!(&preamble[83..85], &message_length.to_le_bytes());
+    }
+
+    #[test]
+    fn to_ledger_signable_bytes_is_preamble_plus_json() {
+        let keypair = Keypair::generate();
+        let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
+        let unsigned = test_unsigned_tx();
+
+        let json_bytes = unsigned.to_message_bytes().unwrap();
+        let signable = unsigned.to_ledger_signable_bytes(&pub_key).unwrap();
+
+        assert_eq!(signable.len(), 85 + json_bytes.len());
+        assert_eq!(&signable[85..], json_bytes.as_slice());
+        // Preamble starts with signing domain
+        assert_eq!(signable[0], 0xff);
+        assert_eq!(&signable[1..16], b"solana offchain");
+    }
+
+    #[test]
+    fn solana_ledger_transaction_wire_format() {
+        let keypair = Keypair::generate();
+        let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
+        let unsigned = test_unsigned_tx();
+
+        let signable = unsigned.to_ledger_signable_bytes(&pub_key).unwrap();
+        let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
+
+        let tx = SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature)
+            .unwrap();
+
+        let wire = tx.to_bytes();
+        // first 4 bytes: LE u32 message length
+        let len = u32::from_le_bytes(wire[0..4].try_into().unwrap()) as usize;
+        assert_eq!(len, tx.signed_message.len());
+        assert_eq!(&wire[4..4 + len], tx.signed_message.as_slice());
+        assert_eq!(&wire[4 + len..], &signature);
+    }
+
+    #[test]
+    fn solana_ledger_signature_verifies_against_signable_bytes() {
+        let keypair = Keypair::generate();
+        let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
+        let unsigned = test_unsigned_tx();
+
+        let signable = unsigned.to_ledger_signable_bytes(&pub_key).unwrap();
+        let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
+
+        let tx = SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature)
+            .unwrap();
+
+        assert!(verify_signature(pub_key, &tx.signed_message, tx.signature));
+        // Must NOT verify against plain JSON bytes
+        let json_bytes = test_unsigned_tx().to_message_bytes().unwrap();
+        assert!(!verify_signature(pub_key, &json_bytes, tx.signature));
+    }
+
+    #[tokio::test]
+    async fn send_ledger_transaction_requires_resign_on_invalid_signature() {
+        let (server, client) = mock_client_for_offchain_submission(
+            ResponseTemplate::new(401).set_body_json(serde_json::json!({
+                "status": 401,
+                "message": "Invalid signature",
+            })),
+        )
+        .await;
+
+        let keypair = Keypair::generate();
+        let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
+        let unsigned = test_unsigned_tx();
+        let signable = unsigned.to_ledger_signable_bytes(&pub_key).unwrap();
+        let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
+        let tx = SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature)
+            .unwrap();
+
+        let err = client.send_ledger_transaction(&tx).await.unwrap_err();
+
+        assert!(matches!(err, SDKError::TransactionOutdated), "{err:?}");
+        let requests = server.received_requests().await.unwrap();
+        let schema_requests =
+            requests.iter().filter(|request| request.url.path() == "/rollup/schema").count();
+        assert_eq!(schema_requests, 2);
     }
 
     #[test]
