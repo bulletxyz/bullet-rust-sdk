@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.17](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.16...v0.0.17) - 2026-05-14
+
+### Features
+
+- add Ledger spec-compliant offchain signing path ([#68](https://github.com/bulletxyz/bullet-rust-sdk/pull/68))
+
 ## [0.0.16](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.15...v0.0.16) - 2026-05-14
 
 ### Bug Fixes
