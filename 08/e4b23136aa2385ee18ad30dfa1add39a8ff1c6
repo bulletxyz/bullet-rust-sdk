@@ -1,0 +1,19 @@
+rust/Cargo.toml
+  s_e092f00af2f9c0::t_d7be64ae56d122 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "08e4b23136aa2385ee18ad30dfa1add39a8ff1c6",
+  "prompts": {},
+  "sessions": {
+    "s_e092f00af2f9c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f0684410-1b1e-4d58-8fa8-602727a5ac28",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
