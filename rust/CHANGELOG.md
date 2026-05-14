@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.18](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.17...v0.0.18) - 2026-05-14
+
+### Features
+
+- *(ws)* add OrderResult variants to TaggedMessage ([#66](https://github.com/bulletxyz/bullet-rust-sdk/pull/66))
+
 ## [0.0.17](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.16...v0.0.17) - 2026-05-14
 
 ### Features
