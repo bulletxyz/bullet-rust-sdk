@@ -1,0 +1,23 @@
+rust-toolchain.toml
+  s_449c01b818d505::t_b581c7e609ec6a 1-3
+.github/workflows/ci.yml
+  s_449c01b818d505::t_36f1b6ec2221c8 18-19
+justfile
+  s_449c01b818d505::t_93b5df327ca66c 94,98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "5a4ce49cd3a8339c46ee681a1c16ee91bc0be49a",
+  "prompts": {},
+  "sessions": {
+    "s_449c01b818d505": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72a148e4-0df4-4ff9-8a31-a57c776123b3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
