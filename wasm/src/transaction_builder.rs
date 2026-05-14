@@ -382,6 +382,7 @@ impl WasmTransactionEntry {
 /// - `maxFee` - Maximum fee willing to pay (in base units)
 /// - `priorityFeeBips` - Priority fee in basis points
 /// - `gasLimit` - Optional gas limit [ref_time, proof_size]
+/// - `generation` - Uniqueness generation value (default: current unix timestamp in milliseconds)
 /// - `signer` - Keypair to sign the transaction (not required for `buildUnsigned`)
 #[wasm_bindgen(js_name = TransactionBuilder)]
 pub struct WasmTransactionBuilder {
@@ -389,6 +390,7 @@ pub struct WasmTransactionBuilder {
     max_fee: Option<u64>,
     priority_fee_bips: Option<u64>,
     gas_limit: Option<[u64; 2]>,
+    generation: Option<u64>,
     signer: Option<WasmKeypair>,
 }
 
@@ -399,6 +401,7 @@ impl WasmTransactionBuilder {
             max_fee: None,
             priority_fee_bips: None,
             gas_limit: None,
+            generation: None,
             signer: None,
         }
     }
@@ -436,6 +439,18 @@ impl WasmTransactionBuilder {
         self
     }
 
+    /// Override the uniqueness generation value.
+    ///
+    /// Defaults to the current unix timestamp in milliseconds, giving a
+    /// ~5-second deduplication window with the sequencer's 5000-generation window.
+    /// Pass a microsecond timestamp for a ~5ms window, or any other value as needed.
+    /// @param {bigint} generation - The generation value to use.
+    /// @returns {TransactionBuilder}
+    pub fn generation(mut self, generation: u64) -> WasmTransactionBuilder {
+        self.generation = Some(generation);
+        self
+    }
+
     /// Set the keypair used to sign this transaction.
     pub fn signer(mut self, keypair: WasmKeypair) -> WasmTransactionBuilder {
         self.signer = Some(keypair);
@@ -470,6 +485,7 @@ impl WasmTransactionBuilder {
             .max_fee(max_fee)
             .priority_fee_bips(priority_fee_bips)
             .maybe_gas_limit(gas_limit)
+            .maybe_generation(self.generation)
             .client(&client.inner)
             .build()?;
 
@@ -489,6 +505,7 @@ impl WasmTransactionBuilder {
             .maybe_max_fee(max_fee)
             .maybe_priority_fee_bips(self.priority_fee_bips)
             .maybe_gas_limit(gas_limit)
+            .maybe_generation(self.generation)
             .maybe_signer(signer_ref)
             .client(&client.inner)
             .build()?;

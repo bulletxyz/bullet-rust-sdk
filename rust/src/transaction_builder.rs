@@ -155,6 +155,10 @@ impl UnsignedTransaction {
         max_fee: u128,
         priority_fee_bips: u64,
         gas_limit: Option<Gas>,
+        /// Uniqueness generation value. Defaults to the current unix timestamp
+        /// in milliseconds, giving a ~5-second deduplication window with the
+        /// sequencer's default 5000-generation window.
+        generation: Option<u64>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
         // Check whether the call message was part of the schema validation.
@@ -163,16 +167,14 @@ impl UnsignedTransaction {
         }
 
         let runtime_call = RuntimeCall::Exchange(call_message);
-        // Microseconds, not milliseconds: the sequencer's uniqueness check
-        // compares against `latest_known_generation` which is stored in μs
-        // (16-digit unix-time value). A ms timestamp (13 digits) is treated
-        // as ancient (~1000x older than the cutoff) and rejected with
-        // CheckUniquenessFailed.
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| SDKError::SystemTimeError)?
-            .as_micros() as u64;
-        let uniqueness = UniquenessData::Generation(timestamp);
+        let generation = match generation {
+            Some(g) => g,
+            None => SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| SDKError::SystemTimeError)?
+                .as_millis() as u64,
+        };
+        let uniqueness = UniquenessData::Generation(generation);
         let details = TxDetails {
             chain_id: client.chain_id(),
             max_fee: Amount(max_fee),
@@ -348,6 +350,7 @@ impl Transaction {
         max_fee: Option<u128>,
         priority_fee_bips: Option<u64>,
         gas_limit: Option<Gas>,
+        generation: Option<u64>,
         signer: Option<&Keypair>,
         client: &Client,
     ) -> SDKResult<SignedTransaction> {
@@ -363,6 +366,7 @@ impl Transaction {
             .max_fee(max_fee)
             .priority_fee_bips(priority_fee_bips)
             .maybe_gas_limit(gas_limit)
+            .maybe_generation(generation)
             .client(client)
             .build()?;
 
