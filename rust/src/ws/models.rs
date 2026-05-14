@@ -493,6 +493,7 @@ mod tests {
     fn test_screaming_snake_aliases() {
         // Each SCREAMING alias must map to the specific expected variant, not just any order
         // variant.
+        #[allow(clippy::type_complexity)]
         let cases: &[(&str, fn(&TaggedMessage) -> bool)] = &[
             ("ORDER.PLACE", |m| matches!(m, TaggedMessage::OrderPlace(_))),
             ("ORDER.CANCEL", |m| matches!(m, TaggedMessage::OrderCancel(_))),
