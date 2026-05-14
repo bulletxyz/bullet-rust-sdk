@@ -805,8 +805,8 @@ mod tests {
         let signable = unsigned.to_ledger_signable_bytes(&pub_key).unwrap();
         let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
 
-        let tx = SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature)
-            .unwrap();
+        let tx =
+            SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature).unwrap();
 
         let wire = tx.to_bytes();
         // first 4 bytes: LE u32 message length
@@ -825,8 +825,8 @@ mod tests {
         let signable = unsigned.to_ledger_signable_bytes(&pub_key).unwrap();
         let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
 
-        let tx = SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature)
-            .unwrap();
+        let tx =
+            SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature).unwrap();
 
         assert!(verify_signature(pub_key, &tx.signed_message, tx.signature));
         // Must NOT verify against plain JSON bytes
@@ -849,8 +849,8 @@ mod tests {
         let unsigned = test_unsigned_tx();
         let signable = unsigned.to_ledger_signable_bytes(&pub_key).unwrap();
         let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
-        let tx = SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature)
-            .unwrap();
+        let tx =
+            SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature).unwrap();
 
         let err = client.send_ledger_transaction(&tx).await.unwrap_err();
 
