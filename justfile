@@ -91,11 +91,11 @@ lint:
 
 # Format all source files
 fmt:
-    cargo +nightly fmt --all -- --config-path rustfmt.nightly.toml
+    cargo fmt --all
 
 # Check formatting without modifying files
 fmt-check:
-    cargo +nightly fmt --all -- --check --config-path rustfmt.nightly.toml
+    cargo fmt --all -- --check
 
 # ── Examples ──────────────────────────────────────────────────────────────────
 
