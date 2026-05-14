@@ -1,0 +1,21 @@
+rust/src/transaction_builder.rs
+  s_449c01b818d505::t_627c5ae63b4ad6 96-103
+  s_449c01b818d505::t_110485a61f024e 438,450-453
+  s_449c01b818d505::t_b5e74dfa8e1463 767-782
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "a2b7bada740e491c7c41ab445513cefa9ac33405",
+  "prompts": {},
+  "sessions": {
+    "s_449c01b818d505": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72a148e4-0df4-4ff9-8a31-a57c776123b3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
