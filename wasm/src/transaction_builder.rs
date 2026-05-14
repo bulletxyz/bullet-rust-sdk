@@ -382,7 +382,7 @@ impl WasmTransactionEntry {
 /// - `maxFee` - Maximum fee willing to pay (in base units)
 /// - `priorityFeeBips` - Priority fee in basis points
 /// - `gasLimit` - Optional gas limit [ref_time, proof_size]
-/// - `generation` - Uniqueness generation value (default: current unix timestamp in milliseconds)
+/// - `generation` - Uniqueness generation value (default: monotonic unix timestamp in microseconds)
 /// - `signer` - Keypair to sign the transaction (not required for `buildUnsigned`)
 #[wasm_bindgen(js_name = TransactionBuilder)]
 pub struct WasmTransactionBuilder {
@@ -441,9 +441,8 @@ impl WasmTransactionBuilder {
 
     /// Override the uniqueness generation value.
     ///
-    /// Defaults to the current unix timestamp in milliseconds, giving a
-    /// ~5-second deduplication window with the sequencer's 5000-generation window.
-    /// Pass a microsecond timestamp for a ~5ms window, or any other value as needed.
+    /// Defaults to a monotonic unix timestamp in microseconds, giving a
+    /// ~5ms deduplication window with the sequencer's 5000-generation window.
     /// @param {bigint} generation - The generation value to use.
     /// @returns {TransactionBuilder}
     pub fn generation(mut self, generation: u64) -> WasmTransactionBuilder {

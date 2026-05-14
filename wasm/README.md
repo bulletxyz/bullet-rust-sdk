@@ -111,14 +111,15 @@ const tx = Transaction.builder()
 await client.sendTransaction(tx);
 ```
 
-By default the uniqueness generation is a millisecond unix timestamp, giving
-a ~5-second deduplication window. Override with `.generation()` to pass any
-value — for example a microsecond timestamp for a ~5ms window:
+By default the uniqueness generation is a monotonic microsecond unix timestamp,
+giving a ~5ms deduplication window. Multiple transactions built in the same
+millisecond are incremented locally so generations remain strictly increasing.
+Override with `.generation()` only when you need to supply a custom value:
 
 ```typescript
 const tx = Transaction.builder()
     .callMessage(msg)
-    .generation(BigInt(Date.now()) * 1000n)  // microseconds
+    .generation(customGeneration)
     .signer(keypair)
     .send(client);
 ```

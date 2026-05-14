@@ -29,6 +29,8 @@
 //! client.send_transaction(&signed).await?;
 //! ```
 
+use std::sync::Mutex;
+
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use bon::bon;
@@ -45,6 +47,28 @@ use crate::codegen::Error::ErrorResponse;
 use crate::generated::types::{ApiErrorResponse, SubmitTxRequest, SubmitTxResponse};
 use crate::types::CallMessage;
 use crate::{Client, Keypair, SDKError, SDKResult};
+
+static LAST_GENERATION: Mutex<u64> = Mutex::new(0);
+
+fn next_monotonic_generation(now_microseconds: u64, last_generation: u64) -> u64 {
+    now_microseconds.max(last_generation.saturating_add(1))
+}
+
+fn unix_microseconds() -> SDKResult<u64> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| SDKError::SystemTimeError)?
+        .as_micros() as u64)
+}
+
+fn default_generation() -> SDKResult<u64> {
+    let now_microseconds = unix_microseconds()?;
+    let mut last_generation =
+        LAST_GENERATION.lock().expect("Taking the generation lock can never fail.");
+    let generation = next_monotonic_generation(now_microseconds, *last_generation);
+    *last_generation = generation;
+    Ok(generation)
+}
 
 // ── UnsignedTransaction ──────────────────────────────────────────────────────
 
@@ -155,8 +179,8 @@ impl UnsignedTransaction {
         max_fee: u128,
         priority_fee_bips: u64,
         gas_limit: Option<Gas>,
-        /// Uniqueness generation value. Defaults to the current unix timestamp
-        /// in milliseconds, giving a ~5-second deduplication window with the
+        /// Uniqueness generation value. Defaults to a monotonic unix timestamp
+        /// in microseconds, giving a ~5ms deduplication window with the
         /// sequencer's default 5000-generation window.
         generation: Option<u64>,
         client: &Client,
@@ -169,10 +193,7 @@ impl UnsignedTransaction {
         let runtime_call = RuntimeCall::Exchange(call_message);
         let generation = match generation {
             Some(g) => g,
-            None => SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(|_| SDKError::SystemTimeError)?
-                .as_millis() as u64,
+            None => default_generation()?,
         };
         let uniqueness = UniquenessData::Generation(generation);
         let details = TxDetails {
@@ -604,6 +625,53 @@ mod tests {
         let verifying_key = VerifyingKey::from_bytes(&pub_key).unwrap();
         let signature = Signature::from_bytes(&signature);
         verifying_key.verify(message, &signature).is_ok()
+    }
+
+    fn generation_of(unsigned: &UnsignedTransaction) -> u64 {
+        match unsigned.inner.uniqueness {
+            UniquenessData::Generation(generation) => generation,
+            _ => panic!("expected generation uniqueness"),
+        }
+    }
+
+    #[test]
+    fn default_generation_uses_microsecond_scale_above_millisecond_values() {
+        let millis = 1_778_775_961_692;
+        let generation = next_monotonic_generation(millis * 1000, millis);
+
+        assert_eq!(generation, millis * 1000);
+        assert!(generation > millis);
+    }
+
+    #[test]
+    fn default_generation_is_strictly_increasing_within_same_millisecond() {
+        let now_microseconds = 1_778_775_961_692_000;
+        let first = next_monotonic_generation(now_microseconds, 0);
+        let second = next_monotonic_generation(now_microseconds, first);
+
+        assert_eq!(first, now_microseconds);
+        assert_eq!(second, first + 1);
+    }
+
+    #[tokio::test]
+    async fn unsigned_builder_defaults_to_microsecond_generation() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+        let before = unix_microseconds().unwrap();
+
+        let unsigned = UnsignedTransaction::builder()
+            .call_message(CallMessage::User(UserAction::CancelAllOrders {
+                sub_account_index: None,
+            }))
+            .max_fee(10_000_000)
+            .priority_fee_bips(0)
+            .client(&client)
+            .build()
+            .unwrap();
+
+        let generation = generation_of(&unsigned);
+        assert!(generation >= before, "{generation} should be >= {before}");
+        assert!(generation > before / 1000, "{generation} should be microsecond-scale");
     }
 
     #[test]

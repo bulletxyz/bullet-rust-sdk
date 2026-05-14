@@ -105,6 +105,36 @@ describe('Transaction.builder()', () => {
 // ── External signing ─────────────────────────────────────────────────────────
 
 describe('external signing', () => {
+  test('buildUnsigned generates monotonic microsecond generations', async () => {
+    const client = await connectForUserActions(['CancelAllOrders']);
+    const originalDateNow = Date.now;
+    const fixedMillis = 1_778_775_961_692;
+
+    try {
+      Date.now = jest.fn(() => fixedMillis) as unknown as typeof Date.now;
+
+      const first = Transaction.builder()
+        .callMessage(User.cancelAllOrders())
+        .maxFee(10_000_000n)
+        .buildUnsigned(client);
+      const second = Transaction.builder()
+        .callMessage(User.cancelAllOrders())
+        .maxFee(10_000_000n)
+        .buildUnsigned(client);
+
+      const firstMessage = JSON.parse(new TextDecoder().decode(first.toMessageBytes()));
+      const secondMessage = JSON.parse(new TextDecoder().decode(second.toMessageBytes()));
+      const firstGeneration = BigInt(firstMessage.uniqueness.generation);
+      const secondGeneration = BigInt(secondMessage.uniqueness.generation);
+
+      expect(firstGeneration).toBeGreaterThanOrEqual(BigInt(fixedMillis) * 1000n);
+      expect(firstGeneration).toBeGreaterThan(BigInt(fixedMillis));
+      expect(secondGeneration).toBe(firstGeneration + 1n);
+    } finally {
+      Date.now = originalDateNow;
+    }
+  });
+
   test('buildUnsigned → toBytes → fromParts', async () => {
     const client = await connectForUserActions(['CancelAllOrders']);
     const keypair = Keypair.generate();
