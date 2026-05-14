@@ -7,14 +7,13 @@
 //! IMPORTANT: When new message types are added to the server, they must be manually
 //! added to the `ServerMessage` enum below.
 
+pub use bullet_ws_interface::{OrderResultMessage, OrderResultPayload, TxStatus};
 use serde::{Deserialize, Serialize};
 
 use crate::types::{
     AggTradeMessage, BookTickerMessage, DepthUpdate, ErrorMessage, ForceOrderMessage,
     MarkPriceMessage, OrderUpdateMessage, PongMessage, RequestId, StatusMessage,
 };
-
-pub use bullet_ws_interface::{OrderResultMessage, OrderResultPayload, TxStatus};
 
 /// Result message for subscribe/unsubscribe success
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -56,7 +55,12 @@ pub enum TaggedMessage {
     OrderPlace(OrderResultMessage),
     #[serde(rename = "order.cancel", alias = "ORDER.CANCEL")]
     OrderCancel(OrderResultMessage),
-    #[serde(rename = "order.amend", alias = "ORDER.AMEND", alias = "order.modify")]
+    #[serde(
+        rename = "order.amend",
+        alias = "ORDER.AMEND",
+        alias = "order.modify",
+        alias = "ORDER.MODIFY"
+    )]
     OrderAmend(OrderResultMessage),
     #[serde(rename = "order.cancelAll", alias = "ORDER.CANCEL_ALL")]
     OrderCancelAll(OrderResultMessage),
@@ -487,28 +491,26 @@ mod tests {
 
     #[test]
     fn test_screaming_snake_aliases() {
-        // The spec defines SCREAMING.SNAKE_CASE aliases for all four ops.
-        for (tag, pat) in [
-            ("ORDER.PLACE", "OrderPlace"),
-            ("ORDER.CANCEL", "OrderCancel"),
-            ("ORDER.AMEND", "OrderAmend"),
-            ("ORDER.CANCEL_ALL", "OrderCancelAll"),
-        ] {
+        // Each SCREAMING alias must map to the specific expected variant, not just any order
+        // variant.
+        let cases: &[(&str, fn(&TaggedMessage) -> bool)] = &[
+            ("ORDER.PLACE", |m| matches!(m, TaggedMessage::OrderPlace(_))),
+            ("ORDER.CANCEL", |m| matches!(m, TaggedMessage::OrderCancel(_))),
+            ("ORDER.AMEND", |m| matches!(m, TaggedMessage::OrderAmend(_))),
+            ("ORDER.MODIFY", |m| matches!(m, TaggedMessage::OrderAmend(_))),
+            ("ORDER.CANCEL_ALL", |m| matches!(m, TaggedMessage::OrderCancelAll(_))),
+        ];
+        for (tag, check) in cases {
             let json = format!(
                 r#"{{"e":"{tag}","id":1,"E":1706745600000000,"results":{{"tx_id":"0x1","status":"processed"}}}}"#
             );
             let msg: ServerMessage = serde_json::from_str(&json)
-                .unwrap_or_else(|e| panic!("{pat}: failed to parse '{tag}': {e}"));
-            assert!(
-                matches!(
-                    &msg,
-                    ServerMessage::Tagged(TaggedMessage::OrderPlace(_))
-                        | ServerMessage::Tagged(TaggedMessage::OrderCancel(_))
-                        | ServerMessage::Tagged(TaggedMessage::OrderAmend(_))
-                        | ServerMessage::Tagged(TaggedMessage::OrderCancelAll(_))
-                ),
-                "{pat}: wrong variant for tag '{tag}'"
-            );
+                .unwrap_or_else(|e| panic!("failed to parse '{tag}': {e}"));
+            if let ServerMessage::Tagged(ref inner) = msg {
+                assert!(check(inner), "'{tag}' mapped to wrong variant");
+            } else {
+                panic!("'{tag}' did not parse as Tagged");
+            }
         }
     }
 
