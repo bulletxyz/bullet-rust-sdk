@@ -38,6 +38,7 @@ use bullet_exchange_interface::types::{
 };
 use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{
+    SolanaLedgerTransaction as RustSolanaLedgerTransaction,
     SolanaOffchainTransaction as RustSolanaOffchainTransaction, Transaction as RustTransaction,
     UnsignedTransaction,
 };
@@ -157,6 +158,86 @@ impl WasmUnsignedTransaction {
     #[wasm_bindgen(js_name = toMessageBytes)]
     pub fn to_message_bytes(&self) -> WasmResult<Vec<u8>> {
         Ok(self.inner.to_message_bytes()?)
+    }
+
+    /// Build the bytes a Ledger hardware wallet must sign.
+    ///
+    /// Returns the 85-byte Solana off-chain preamble (using the chain hash as
+    /// application domain) concatenated with the JSON message bytes. Pass the
+    /// result to `wallet.signMessage`; then assemble and submit with
+    /// `SolanaLedgerTransaction.fromParts(unsigned, pubKey, signature)` and
+    /// `client.sendLedgerTransaction(tx)`.
+    ///
+    /// @param {Uint8Array} pubKey - 32-byte Solana public key.
+    /// @returns {Uint8Array} Bytes to pass to `wallet.signMessage`.
+    /// @example
+    /// ```js
+    /// const unsigned = Transaction.builder().callMessage(msg).buildUnsigned(client);
+    /// const pubKey = ledgerWallet.publicKey.toBytes();
+    /// const signableBytes = unsigned.toLedgerSignableBytes(pubKey);
+    /// const signature = await ledgerWallet.signMessage(signableBytes);
+    /// const tx = SolanaLedgerTransaction.fromParts(unsigned, pubKey, signature);
+    /// await client.sendLedgerTransaction(tx);
+    /// ```
+    #[wasm_bindgen(js_name = toLedgerSignableBytes)]
+    pub fn to_ledger_signable_bytes(&self, pub_key: &[u8]) -> WasmResult<Vec<u8>> {
+        let pub_key: [u8; 32] = pub_key
+            .try_into()
+            .map_err(|_| format!("expected 32-byte public key, got {}", pub_key.len()))?;
+        Ok(self.inner.to_ledger_signable_bytes(&pub_key)?)
+    }
+}
+
+// ── WasmSolanaLedgerTransaction ──────────────────────────────────────────────
+
+/// A Solana offchain transaction using the spec-compliant Ledger wire format.
+///
+/// Use this for Ledger hardware wallets. Obtain bytes to sign from
+/// `unsigned.toLedgerSignableBytes(pubKey)`, sign with the Ledger, then
+/// assemble with `fromParts` and submit via `client.sendLedgerTransaction`.
+#[wasm_bindgen(js_name = SolanaLedgerTransaction)]
+pub struct WasmSolanaLedgerTransaction {
+    pub(crate) inner: RustSolanaLedgerTransaction,
+}
+
+#[wasm_bindgen(js_class = SolanaLedgerTransaction)]
+impl WasmSolanaLedgerTransaction {
+    /// Assemble a Ledger transaction from an unsigned transaction, a 32-byte
+    /// public key, and a 64-byte Ed25519 signature.
+    ///
+    /// @param {UnsignedTransaction} unsignedTx - The unsigned transaction.
+    /// @param {Uint8Array} pubKey - 32-byte Solana public key.
+    /// @param {Uint8Array} signature - 64-byte Ed25519 signature.
+    /// @returns {SolanaLedgerTransaction}
+    #[wasm_bindgen(js_name = fromParts)]
+    pub fn from_parts(
+        unsigned_tx: WasmUnsignedTransaction,
+        pub_key: &[u8],
+        signature: &[u8],
+    ) -> WasmResult<WasmSolanaLedgerTransaction> {
+        let pub_key: [u8; 32] = pub_key
+            .try_into()
+            .map_err(|_| format!("expected 32-byte public key, got {}", pub_key.len()))?;
+        let signature: [u8; 64] = signature
+            .try_into()
+            .map_err(|_| format!("expected 64-byte signature, got {}", signature.len()))?;
+        Ok(WasmSolanaLedgerTransaction {
+            inner: RustSolanaLedgerTransaction::from_parts(unsigned_tx.inner, pub_key, signature)?,
+        })
+    }
+
+    /// Serialize to the raw binary wire format.
+    /// @returns {Uint8Array}
+    #[wasm_bindgen(js_name = toBytes)]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.inner.to_bytes()
+    }
+
+    /// Serialize to wire format and base64-encode.
+    /// @returns {string}
+    #[wasm_bindgen(js_name = toBase64)]
+    pub fn to_base64(&self) -> String {
+        self.inner.to_base64()
     }
 }
 
@@ -458,6 +539,23 @@ impl WasmTradingApi {
         tx: &WasmSolanaOffchainTransaction,
     ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
         let resp = self.inner.send_offchain_transaction(&tx.inner).await?;
+        Ok(crate::generated::WasmSubmitTxResponse(resp))
+    }
+
+    /// Send a Ledger-signed transaction to the sequencer via REST.
+    ///
+    /// Use this with Ledger hardware wallets. Sign with
+    /// `unsigned.toLedgerSignableBytes(pubKey)`, then assemble via
+    /// `SolanaLedgerTransaction.fromParts(unsigned, pubKey, signature)`.
+    ///
+    /// @param {SolanaLedgerTransaction} tx - A signed Ledger transaction.
+    /// @returns {Promise<SubmitTxResponse>}
+    #[wasm_bindgen(js_name = sendLedgerTransaction)]
+    pub async fn send_ledger_transaction(
+        &self,
+        tx: &WasmSolanaLedgerTransaction,
+    ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
+        let resp = self.inner.send_ledger_transaction(&tx.inner).await?;
         Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
 

@@ -16,7 +16,9 @@ pub use generated::types::ApiErrorResponse;
 pub use keypair::Keypair;
 // Re-export WebSocket close code for pattern matching
 pub use reqwest_websocket::CloseCode;
-pub use transaction_builder::{SolanaOffchainTransaction, Transaction, UnsignedTransaction};
+pub use transaction_builder::{
+    SolanaLedgerTransaction, SolanaOffchainTransaction, Transaction, UnsignedTransaction,
+};
 pub use types::CallMessage;
 
 // Re-export WebSocket module and types
