@@ -19,7 +19,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bullet-exchange-interface.workspace = true
-bullet-ws-interface = { git = "https://github.com/bulletxyz/bullet-ws-interface", branch = "feat/order-rpc-response-types" }
+bullet-ws-interface = "0.1.2"
 sov-universal-wallet = { version = "0.3", features = ["serde"] }
 
 progenitor-client = "0.13"
