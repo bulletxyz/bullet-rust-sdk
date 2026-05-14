@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.19](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.18...v0.0.19) - 2026-05-14
+
+### Features
+
+- *(transaction)* default generation to unix millis, allow override ([#71](https://github.com/bulletxyz/bullet-rust-sdk/pull/71))
+
 ## [0.0.18](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.17...v0.0.18) - 2026-05-14
 
 ### Features
