@@ -93,7 +93,14 @@ impl UnsignedTransaction {
     /// [`SolanaLedgerTransaction::from_parts`] and [`Client::send_ledger_transaction`].
     pub fn to_ledger_signable_bytes(&self, pubkey: &[u8; 32]) -> SDKResult<Vec<u8>> {
         let json_bytes = self.to_message_bytes()?;
-        let preamble = make_solana_preamble(pubkey, &self.chain_hash, json_bytes.len() as u16);
+        let message_len = u16::try_from(json_bytes.len()).map_err(|_| {
+            SDKError::SerializationError(format!(
+                "JSON message too large for Solana preamble: {} bytes (max {})",
+                json_bytes.len(),
+                u16::MAX
+            ))
+        })?;
+        let preamble = make_solana_preamble(pubkey, &self.chain_hash, message_len);
         let mut result = Vec::with_capacity(preamble.len() + json_bytes.len());
         result.extend_from_slice(&preamble);
         result.extend_from_slice(&json_bytes);
@@ -428,28 +435,7 @@ impl Client {
         &self,
         signed: &SolanaOffchainTransaction,
     ) -> SDKResult<SubmitTxResponse> {
-        let body = signed.to_base64()?;
-        let response = self
-            .http_client
-            .post(self.solana_offchain_url())
-            .json(&SubmitTxRequest { body })
-            .send()
-            .await?;
-        let status = response.status();
-        let bytes = response.bytes().await?;
-
-        if status.is_success() {
-            return serde_json::from_slice::<SubmitTxResponse>(&bytes).map_err(Into::into);
-        }
-
-        let error = serde_json::from_slice::<ApiErrorResponse>(&bytes).unwrap_or_else(|_| {
-            ApiErrorResponse {
-                status: status.as_u16(),
-                message: String::from_utf8_lossy(&bytes).into_owned(),
-                details: None,
-            }
-        });
-        Err(self.submit_tx_api_error(error).await?)
+        self.post_to_solana_offchain_url(signed.to_base64()?).await
     }
 
     /// Send a Solana Ledger transaction to the sequencer.
@@ -461,7 +447,10 @@ impl Client {
         &self,
         signed: &SolanaLedgerTransaction,
     ) -> SDKResult<SubmitTxResponse> {
-        let body = signed.to_base64();
+        self.post_to_solana_offchain_url(signed.to_base64()).await
+    }
+
+    async fn post_to_solana_offchain_url(&self, body: String) -> SDKResult<SubmitTxResponse> {
         let response = self
             .http_client
             .post(self.solana_offchain_url())
@@ -772,6 +761,23 @@ mod tests {
         assert_eq!(&preamble[51..83], &pubkey);
         // message_length LE
         assert_eq!(&preamble[83..85], &message_length.to_le_bytes());
+    }
+
+    #[test]
+    fn to_ledger_signable_bytes_errors_when_json_exceeds_u16() {
+        let pub_key = [1u8; 32];
+        let mut unsigned = test_unsigned_tx();
+        // Inject a payload large enough to exceed u16::MAX bytes when serialized
+        unsigned.inner.runtime_call =
+            RuntimeCall::Exchange(CallMessage::Public(PublicAction::ApplyFunding {
+                addresses: vec![
+                    bullet_exchange_interface::address::Address([0u8; 32]);
+                    3000 // ~3000 * ~44 bytes each ≈ 132 KB > 65535
+                ],
+            }));
+
+        let err = unsigned.to_ledger_signable_bytes(&pub_key).unwrap_err();
+        assert!(err.to_string().contains("too large"), "{err}");
     }
 
     #[test]
