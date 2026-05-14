@@ -60,3 +60,4 @@ jobs:
         run: cd examples && npm ci --install-links
       - run: cd examples/node && npm test
       - run: cd examples/deno && deno task test
+      - run: cd examples/web && npx next build
