@@ -1,0 +1,20 @@
+rust/src/ws/models.rs
+  s_e092f00af2f9c0::t_ccffde3210060b 528-581
+  s_e092f00af2f9c0::t_3d3b89719faf95 60-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "43083f33743f0c5c655e7533f545de4b0c4b6f3c",
+  "prompts": {},
+  "sessions": {
+    "s_e092f00af2f9c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f0684410-1b1e-4d58-8fa8-602727a5ac28",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
