@@ -493,25 +493,30 @@ mod tests {
     fn test_screaming_snake_aliases() {
         // Each SCREAMING alias must map to the specific expected variant, not just any order
         // variant.
-        #[allow(clippy::type_complexity)]
-        let cases: &[(&str, fn(&TaggedMessage) -> bool)] = &[
-            ("ORDER.PLACE", |m| matches!(m, TaggedMessage::OrderPlace(_))),
-            ("ORDER.CANCEL", |m| matches!(m, TaggedMessage::OrderCancel(_))),
-            ("ORDER.AMEND", |m| matches!(m, TaggedMessage::OrderAmend(_))),
-            ("ORDER.MODIFY", |m| matches!(m, TaggedMessage::OrderAmend(_))),
-            ("ORDER.CANCEL_ALL", |m| matches!(m, TaggedMessage::OrderCancelAll(_))),
+        let cases: &[(&str, &str)] = &[
+            ("ORDER.PLACE", "OrderPlace"),
+            ("ORDER.CANCEL", "OrderCancel"),
+            ("ORDER.AMEND", "OrderAmend"),
+            ("ORDER.MODIFY", "OrderAmend"),
+            ("ORDER.CANCEL_ALL", "OrderCancelAll"),
         ];
-        for (tag, check) in cases {
+        for (tag, expected) in cases {
             let json = format!(
                 r#"{{"e":"{tag}","id":1,"E":1706745600000000,"results":{{"tx_id":"0x1","status":"processed"}}}}"#
             );
             let msg: ServerMessage = serde_json::from_str(&json)
                 .unwrap_or_else(|e| panic!("failed to parse '{tag}': {e}"));
-            if let ServerMessage::Tagged(ref inner) = msg {
-                assert!(check(inner), "'{tag}' mapped to wrong variant");
-            } else {
+            let ServerMessage::Tagged(ref inner) = msg else {
                 panic!("'{tag}' did not parse as Tagged");
-            }
+            };
+            let actual = match inner {
+                TaggedMessage::OrderPlace(_) => "OrderPlace",
+                TaggedMessage::OrderCancel(_) => "OrderCancel",
+                TaggedMessage::OrderAmend(_) => "OrderAmend",
+                TaggedMessage::OrderCancelAll(_) => "OrderCancelAll",
+                other => panic!("'{tag}' mapped to unexpected variant: {}", other.as_ref()),
+            };
+            assert_eq!(actual, *expected, "'{tag}' mapped to wrong variant");
         }
     }
 
