@@ -527,7 +527,10 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FundingRate"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FundingRate"
+                  }
                 }
               }
             }
@@ -588,10 +591,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/InsuranceBalance"
-                  }
+                  "$ref": "#/components/schemas/InsuranceBalance"
                 }
               }
             }
@@ -876,10 +876,13 @@
           {
             "name": "symbol",
             "in": "query",
-            "description": "Trading pair symbol",
-            "required": true,
+            "description": "Trading pair symbol — optional, omit to return open orders across all markets",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -2412,6 +2415,7 @@
         "required": [
           "orderId",
           "symbol",
+          "marketId",
           "status",
           "price",
           "avgPrice",
@@ -2464,6 +2468,11 @@
             "format": "uint64",
             "minimum": 0
           },
+          "marketId": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0
+          },
           "orderId": {
             "type": "integer",
             "format": "uint64",
@@ -2478,6 +2487,17 @@
           },
           "origType": {
             "type": "string"
+          },
+          "pendingTpsl": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PendingTpsl",
+                "description": "reserved TP/SL pair attached to this parent limit order. only present\nwhile the parent is unfilled — once filled, the trigger orders are\nactivated and listed independently"
+              }
+            ]
           },
           "positionSide": {
             "type": "string"
@@ -2502,7 +2522,8 @@
             "type": "string"
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "one of: NEW, PARTIALLY_FILLED, FILLED"
           },
           "stopPrice": {
             "type": [
@@ -2835,7 +2856,8 @@
             "type": "string"
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "one of: NEW, PARTIALLY_FILLED, FILLED, CANCELED, EXPIRED"
           },
           "symbol": {
             "type": "string"
@@ -3119,7 +3141,8 @@
                   "type": "string"
                 },
                 "status": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "one of: NEW, PARTIALLY_FILLED, FILLED, CANCELED, EXPIRED"
                 },
                 "symbol": {
                   "type": "string"
@@ -3386,6 +3409,14 @@
                 "buyer": {
                   "type": "boolean"
                 },
+                "clientOrderId": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint64",
+                  "minimum": 0
+                },
                 "commission": {
                   "type": "string",
                   "format": "decimal"
@@ -3510,6 +3541,38 @@
             "type": [
               "string",
               "null"
+            ]
+          }
+        }
+      },
+      "PendingTpsl": {
+        "type": "object",
+        "required": [
+          "dynamicSize"
+        ],
+        "properties": {
+          "dynamicSize": {
+            "type": "boolean",
+            "description": "if true, the activated trigger orders track the parent's filled size;\notherwise they use the size baked in at placement"
+          },
+          "sl": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TpslLeg"
+              }
+            ]
+          },
+          "tp": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TpslLeg"
+              }
             ]
           }
         }
@@ -3914,6 +3977,45 @@
           }
         }
       },
+      "TpslLeg": {
+        "type": "object",
+        "required": [
+          "triggerOrderId",
+          "orderPrice",
+          "triggerPrice",
+          "priceCondition",
+          "orderType",
+          "timeInForce"
+        ],
+        "properties": {
+          "orderPrice": {
+            "type": "string",
+            "format": "decimal"
+          },
+          "orderType": {
+            "type": "string",
+            "description": "LIMIT (bullet's TPSL legs are always limit orders — see `time_in_force`\nfor the actual TIF behaviour)"
+          },
+          "priceCondition": {
+            "type": "string",
+            "description": "MARK_PRICE | ORACLE_PRICE | LAST_PRICE"
+          },
+          "timeInForce": {
+            "type": "string",
+            "description": "GTC | GTX (post-only) | FOK | IOC — matches the parent BinanceOrder's\n`timeInForce` shape"
+          },
+          "triggerOrderId": {
+            "type": "integer",
+            "format": "uint64",
+            "description": "the reserved TriggerOrderId this leg will activate as",
+            "minimum": 0
+          },
+          "triggerPrice": {
+            "type": "string",
+            "format": "decimal"
+          }
+        }
+      },
       "Trade": {
         "type": "object",
         "required": [
@@ -4154,6 +4256,14 @@
           },
           "buyer": {
             "type": "boolean"
+          },
+          "clientOrderId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
           },
           "commission": {
             "type": "string",
