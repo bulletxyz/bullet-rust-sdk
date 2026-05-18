@@ -22,11 +22,12 @@ bullet-exchange-interface.workspace = true
 bullet-ws-interface = "0.1.2"
 sov-universal-wallet = { version = "0.3", features = ["serde"] }
 
+
 progenitor-client = "0.13"
 reqwest = { version = "0.13", features = ["blocking"] }
 rust_decimal = { version = "1", features = ["serde-with-str"] }
-serde = "1.0.216"
-strum = { version = "0.26", features = ["derive"] }
+serde = "1"
+strum = { version = "0.28", features = ["derive"] }
 serde_json = { version = "1.0.133", features = ["arbitrary_precision", "preserve_order"] }
 futures = "0.3"
 thiserror = "2"
