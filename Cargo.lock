@@ -288,8 +288,9 @@ checksum = "e67218f4455dc3cffdccd9ce3623157bd990102e466199969c5834543baa9121"
 
 [[package]]
 name = "bullet-exchange-interface"
-version = "0.3.0"
-source = "git+https://github.com/bulletxyz/bullet-exchange-interface?rev=2e613972b8c7c028fb59c1e1d27c04692b16042a#2e613972b8c7c028fb59c1e1d27c04692b16042a"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3a232b6f2290ebb2b41fe04a9ed1063482e0d306ae36f74bf529e8d538dda90"
 dependencies = [
  "borsh",
  "bullet-bs58",
@@ -2539,8 +2540,9 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet"
-version = "0.3.0"
-source = "git+https://github.com/Sovereign-Labs/sovereign-sdk.git?rev=cf2641b7a39a2171d6747ce7b9c01ab4e5e7b6a4#cf2641b7a39a2171d6747ce7b9c01ab4e5e7b6a4"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e48bd6b958280067f285ef8db9f4e0421be052f36580217ceaab4690d7e60a4d"
 dependencies = [
  "alloy-primitives",
  "arrayvec",
@@ -2560,8 +2562,9 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macro-helpers"
-version = "0.3.0"
-source = "git+https://github.com/Sovereign-Labs/sovereign-sdk.git?rev=cf2641b7a39a2171d6747ce7b9c01ab4e5e7b6a4#cf2641b7a39a2171d6747ce7b9c01ab4e5e7b6a4"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92a999d7c3d0e91f56d4469e3c4af1814dba75ef49bdba86e3fa034295566362"
 dependencies = [
  "bech32",
  "borsh",
@@ -2575,8 +2578,9 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macros"
-version = "0.3.0"
-source = "git+https://github.com/Sovereign-Labs/sovereign-sdk.git?rev=cf2641b7a39a2171d6747ce7b9c01ab4e5e7b6a4#cf2641b7a39a2171d6747ce7b9c01ab4e5e7b6a4"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab4fd1bd5b0046e4de30007fdc7687f4036f6d12ff9181add53d94b53e63dd39"
 dependencies = [
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.117",
