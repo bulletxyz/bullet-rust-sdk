@@ -32,7 +32,7 @@ getrandom = { version = "0.2", features = ["js"] }
 
 [build-dependencies]
 bullet-exchange-interface = { workspace = true, features = ["schema"] }
-sov-universal-wallet = { version = "0.3", features = ["serde"] }
+sov-universal-wallet = { version = "0.4", features = ["serde"] }
 heck = "0.5"
 quote = "1"
 proc-macro2 = "1"
