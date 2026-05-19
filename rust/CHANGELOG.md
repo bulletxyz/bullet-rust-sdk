@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.20](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.19...v0.0.20) - 2026-05-19
+
+### Bug Fixes
+
+- refresh cached OpenAPI spec ([#76](https://github.com/bulletxyz/bullet-rust-sdk/pull/76))
+
 ## [0.0.19](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.18...v0.0.19) - 2026-05-14
 
 ### Features
