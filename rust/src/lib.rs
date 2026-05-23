@@ -1,3 +1,10 @@
+// `ApiErrorResponse` carries optional details/error_id strings, pushing the
+// `SDKError::ApiError` variant past clippy's default 128-byte threshold. Boxing
+// the variant would silence this but changes the public API of `SDKError`; that
+// is a deliberate decision worth its own PR rather than a side effect of
+// tracking an upstream schema change.
+#![allow(clippy::result_large_err)]
+
 mod client;
 mod keypair;
 mod metadata;
