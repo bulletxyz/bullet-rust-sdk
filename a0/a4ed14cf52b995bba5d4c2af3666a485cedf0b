@@ -1,0 +1,21 @@
+rust/src/ws/models.rs
+  s_a068e3425f46f9::t_eba578651a7920 3-8,10-11,13-15,33
+rust/Cargo.toml
+  s_a068e3425f46f9::t_1c9228f03ffa57 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "a0a4ed14cf52b995bba5d4c2af3666a485cedf0b",
+  "prompts": {},
+  "sessions": {
+    "s_a068e3425f46f9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e66d48ef-4a95-4429-911e-330dbd877c07",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
