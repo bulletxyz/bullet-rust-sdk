@@ -372,9 +372,9 @@ dependencies = [
 
 [[package]]
 name = "bullet-ws-interface"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52ab3394304fe682eeaf2eff0c602c4420348cae5bed468bc9d7291bc0982637"
+checksum = "11f8489f91ca8d12bfbd69082cdb381ab85754b4087784d393954777cb66c8ac"
 dependencies = [
  "serde",
  "serde_json",
