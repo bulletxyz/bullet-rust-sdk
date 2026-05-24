@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.21](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.20...v0.0.21) - 2026-05-24
+
+### Bug Fixes
+
+- track trading-api ApiErrorResponse schema + tighten error handling ([#78](https://github.com/bulletxyz/bullet-rust-sdk/pull/78))
+
+### Features
+
+- bump bullet-ws-interface to 0.2 + adopt upstream response types ([#81](https://github.com/bulletxyz/bullet-rust-sdk/pull/81))
+
 ## [0.0.20](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.19...v0.0.20) - 2026-05-19
 
 ### Bug Fixes
