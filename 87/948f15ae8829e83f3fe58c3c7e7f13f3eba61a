@@ -1,0 +1,25 @@
+rust/src/errors.rs
+  s_a068e3425f46f9::t_b9bc7ae4a9c839 234,239
+  s_a068e3425f46f9::t_e1ee5467dfa9a3 247,252
+  s_a068e3425f46f9::t_cf45717362e79f 82-87,89
+  s_a068e3425f46f9::t_3b65ca52bb62c6 212
+  s_a068e3425f46f9::t_862d7019984219 223-225
+rust/src/transaction_builder.rs
+  s_a068e3425f46f9::t_0fc1cfc9773703 488
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "87948f15ae8829e83f3fe58c3c7e7f13f3eba61a",
+  "prompts": {},
+  "sessions": {
+    "s_a068e3425f46f9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e66d48ef-4a95-4429-911e-330dbd877c07",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
