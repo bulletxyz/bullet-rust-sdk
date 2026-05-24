@@ -1,41 +1,24 @@
 //! WebSocket message models for the Trading SDK.
 //!
-//! Client-side deserialization types for server messages. These do not live in
-//! `bullet-ws-interface` because the server uses optimized internal types
-//! (`&'static str`, `Arc<str>`) that can't implement `Deserialize`.
+//! Re-exports server-message types from `bullet-ws-interface`, and stitches
+//! them into the `TaggedMessage` / `ServerMessage` enums used by the SDK's
+//! WS client. As of `bullet-ws-interface = "0.2"`, response envelope types
+//! (`MethodResult`, `ListSubscriptionsMessage`, `OrderResultMessage`) all
+//! derive both `Serialize` and `Deserialize` upstream, so the local
+//! deserialization-only duplicates of the past are no longer needed.
 //!
-//! IMPORTANT: When new message types are added to the server, they must be manually
-//! added to the `ServerMessage` enum below.
+//! IMPORTANT: When new message types are added to the server, they must be
+//! manually added to the `ServerMessage` enum below.
 
-pub use bullet_ws_interface::{OrderResultMessage, OrderResultPayload, TxStatus};
+pub use bullet_ws_interface::{
+    ListSubscriptionsMessage, MethodResult, OrderResultMessage, OrderResultPayload, TxStatus,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::types::{
     AggTradeMessage, BookTickerMessage, DepthUpdate, ErrorMessage, ForceOrderMessage,
     MarkPriceMessage, OrderUpdateMessage, PongMessage, RequestId, StatusMessage,
 };
-
-/// Result message for subscribe/unsubscribe success
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct MethodResult {
-    #[serde(default)]
-    pub id: Option<RequestId>,
-    /// Event time (ms)
-    #[serde(rename = "E")]
-    pub event_time: u64,
-    pub result: String,
-}
-
-/// Result message for list_subscriptions
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ListSubscriptionsResult {
-    #[serde(default)]
-    pub id: Option<RequestId>,
-    /// Event time (ms)
-    #[serde(rename = "E")]
-    pub event_time: u64,
-    pub result: Vec<String>,
-}
 
 /// Tagged messages from the server (have an "e" event type field)
 #[derive(Serialize, Deserialize, Clone, Debug, strum::AsRefStr)]
@@ -47,7 +30,7 @@ pub enum TaggedMessage {
     Error(ErrorMessage),
     Subscribe(MethodResult),
     Unsubscribe(MethodResult),
-    ListSubscriptions(ListSubscriptionsResult),
+    ListSubscriptions(ListSubscriptionsMessage),
     // Order RPC acks. The four `e` tags are dotted, not snake_case, so we
     // override the default rename. Aliases match the WS spec's
     // case-insensitive `ORDER.PLACE` form just like client.rs does.
