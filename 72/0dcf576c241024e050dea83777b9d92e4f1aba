@@ -1,0 +1,23 @@
+wasm/js/bullet-sdk-error.d.ts
+  s_a068e3425f46f9::t_ddea13ba1b5e89 50-51,59-60
+wasm/js/bullet-sdk-error.js
+  s_a068e3425f46f9::t_11049580679228 8
+wasm/tests/errors.test.ts
+  s_a068e3425f46f9::t_08f4bbfb45edc3 52-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "720dcf576c241024e050dea83777b9d92e4f1aba",
+  "prompts": {},
+  "sessions": {
+    "s_a068e3425f46f9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e66d48ef-4a95-4429-911e-330dbd877c07",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
