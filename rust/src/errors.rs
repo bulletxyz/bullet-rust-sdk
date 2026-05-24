@@ -79,8 +79,14 @@ pub enum SDKError {
     HttpError(#[from] reqwest::Error),
 
     /// Structured API error from the trading API.
+    ///
+    /// Boxed because `ApiErrorResponse` carries optional details + error_id
+    /// strings and a nested enum, making the variant large enough to bloat
+    /// every `SDKResult<T>` on the stack (clippy::result_large_err). Boxing
+    /// pushes the cost to error-construction time (negligible — happy paths
+    /// don't allocate) and keeps Result types cheap to pass around.
     #[error("API error: {0}")]
-    ApiError(ApiErrorResponse),
+    ApiError(Box<ApiErrorResponse>),
 
     /// Client-side request error (not from the server).
     #[error("Request error: {0}")]
@@ -203,7 +209,7 @@ impl SDKError {
     /// If this is an API error, returns the structured response.
     pub fn api_error(&self) -> Option<&ApiErrorResponse> {
         match self {
-            SDKError::ApiError(resp) => Some(resp),
+            SDKError::ApiError(resp) => Some(resp.as_ref()),
             _ => None,
         }
     }
@@ -214,7 +220,9 @@ pub type SDKResult<T, E = SDKError> = Result<T, E>;
 impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
     fn from(err: progenitor_client::Error<ApiErrorResponse>) -> Self {
         match err {
-            progenitor_client::Error::ErrorResponse(resp) => SDKError::ApiError(resp.into_inner()),
+            progenitor_client::Error::ErrorResponse(resp) => {
+                SDKError::ApiError(Box::new(resp.into_inner()))
+            }
             progenitor_client::Error::CommunicationError(e) => SDKError::HttpError(e),
             progenitor_client::Error::ResponseBodyError(e) => SDKError::HttpError(e),
             progenitor_client::Error::InvalidUpgrade(e) => SDKError::HttpError(e),
@@ -223,12 +231,12 @@ impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
             // synchronously so we only preserve the status code.
             progenitor_client::Error::UnexpectedResponse(resp) => {
                 let status = resp.status().as_u16();
-                SDKError::ApiError(ApiErrorResponse {
+                SDKError::ApiError(Box::new(ApiErrorResponse {
                     status,
                     message: format!("HTTP {status}"),
                     details: None,
                     error_id: None,
-                })
+                }))
             }
             // Server returned 4XX/5XX but the body couldn't be deserialized as
             // ApiErrorResponse (e.g., HTML from a load balancer, plain text, etc).
@@ -236,12 +244,12 @@ impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
             // can't determine retryability. We surface the raw body as the message.
             progenitor_client::Error::InvalidResponsePayload(bytes, _) => {
                 let body = String::from_utf8_lossy(&bytes);
-                SDKError::ApiError(ApiErrorResponse {
+                SDKError::ApiError(Box::new(ApiErrorResponse {
                     status: 0,
                     message: body.into_owned(),
                     details: None,
                     error_id: None,
-                })
+                }))
             }
             // Client-side errors (InvalidRequest, PreHookError) that aren't HTTP
             // responses at all.

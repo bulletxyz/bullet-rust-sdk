@@ -485,7 +485,7 @@ impl Client {
             // The transaction was signed against an old chain hash and must be re-signed.
             return Ok(SDKError::TransactionOutdated);
         }
-        Ok(SDKError::ApiError(error))
+        Ok(SDKError::ApiError(Box::new(error)))
     }
 }
 
