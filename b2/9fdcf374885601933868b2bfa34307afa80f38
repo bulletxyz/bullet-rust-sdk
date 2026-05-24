@@ -1,0 +1,23 @@
+rust/build.rs
+  s_a068e3425f46f9::t_1c58a5afc84e18 9-18
+justfile
+  s_a068e3425f46f9::t_13ee6eacf22324 184-188
+AGENTS.md
+  s_a068e3425f46f9::t_649dcee46e4d1b 145-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "b29fdcf374885601933868b2bfa34307afa80f38",
+  "prompts": {},
+  "sessions": {
+    "s_a068e3425f46f9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e66d48ef-4a95-4429-911e-330dbd877c07",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
