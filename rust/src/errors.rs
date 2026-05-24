@@ -6,14 +6,20 @@ use thiserror::Error;
 
 use crate::generated::types::{ApiErrorDetail, ApiErrorResponse};
 
-// `ApiErrorDetail` is an untagged enum and progenitor does not derive `Display` for
-// these. Render it as JSON so callers (and the WASM wrapper codegen, which calls
-// `.to_string()` on enum-typed fields) can treat it as a string.
+/// Render each variant for human consumption.
+///
+/// `JsonValidationErrorDetail` surfaces its `rule` + `message` inline — what
+/// you actually want to see in a log line. The catch-all `Object` variant
+/// is free-form upstream data we don't try to interpret, so it falls back
+/// to a compact JSON dump.
 impl std::fmt::Display for ApiErrorDetail {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match serde_json::to_string(self) {
-            Ok(s) => f.write_str(&s),
-            Err(_) => write!(f, "{self:?}"),
+        match self {
+            Self::JsonValidationErrorDetail(d) => write!(f, "{}: {}", d.rule, d.message),
+            Self::Object(map) => match serde_json::to_string(map) {
+                Ok(s) => f.write_str(&s),
+                Err(_) => write!(f, "{map:?}"),
+            },
         }
     }
 }
