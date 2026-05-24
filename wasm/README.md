@@ -85,6 +85,7 @@ try {
         err.kind       // 'api' | 'http' | 'websocket' | 'validation' | ...
         err.status     // HTTP status when the API returned one
         err.details    // structured JSON details when available
+        err.errorId    // server-side correlation id, when present (for support)
         err.retryable  // whether retry/backoff is reasonable
         err.message    // human-readable message
     }

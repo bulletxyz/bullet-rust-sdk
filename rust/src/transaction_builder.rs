@@ -473,6 +473,7 @@ impl Client {
                 status: status.as_u16(),
                 message: String::from_utf8_lossy(&bytes).into_owned(),
                 details: None,
+                error_id: None,
             }
         });
         Err(self.submit_tx_api_error(error).await?)
@@ -484,7 +485,7 @@ impl Client {
             // The transaction was signed against an old chain hash and must be re-signed.
             return Ok(SDKError::TransactionOutdated);
         }
-        Ok(SDKError::ApiError(error))
+        Ok(SDKError::ApiError(Box::new(error)))
     }
 }
 
@@ -552,6 +553,14 @@ mod tests {
             "assets": [],
             "rateLimits": [],
             "symbols": [],
+            "globalConfig": {
+                "maxOrdersPerUser": 0,
+                "maxTriggerOrdersPerUser": 0,
+                "maxTriggerOrdersToExecutePerMsg": 0,
+                "minNotionalTwapValue": "0",
+                "minNotionalTwapValuePerOrder": "0",
+                "twapExecutionIntervalSeconds": 0,
+            },
         })
     }
 

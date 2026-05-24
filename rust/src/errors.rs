@@ -4,13 +4,34 @@ use std::string::FromUtf8Error;
 
 use thiserror::Error;
 
-use crate::generated::types::ApiErrorResponse;
+use crate::generated::types::{ApiErrorDetail, ApiErrorResponse};
+
+/// Render each variant for human consumption.
+///
+/// `JsonValidationErrorDetail` surfaces its `rule` + `message` inline — what
+/// you actually want to see in a log line. The catch-all `Object` variant
+/// is free-form upstream data we don't try to interpret, so it falls back
+/// to a compact JSON dump.
+impl std::fmt::Display for ApiErrorDetail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::JsonValidationErrorDetail(d) => write!(f, "{}: {}", d.rule, d.message),
+            Self::Object(map) => match serde_json::to_string(map) {
+                Ok(s) => f.write_str(&s),
+                Err(_) => write!(f, "{map:?}"),
+            },
+        }
+    }
+}
 
 impl std::fmt::Display for ApiErrorResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "HTTP {}: {}", self.status, self.message)?;
         if let Some(details) = &self.details {
             write!(f, " ({details})")?;
+        }
+        if let Some(error_id) = &self.error_id {
+            write!(f, " [error_id={error_id}]")?;
         }
         Ok(())
     }
@@ -58,8 +79,14 @@ pub enum SDKError {
     HttpError(#[from] reqwest::Error),
 
     /// Structured API error from the trading API.
+    ///
+    /// Boxed because `ApiErrorResponse` carries optional details + error_id
+    /// strings and a nested enum, making the variant large enough to bloat
+    /// every `SDKResult<T>` on the stack (clippy::result_large_err). Boxing
+    /// pushes the cost to error-construction time (negligible — happy paths
+    /// don't allocate) and keeps Result types cheap to pass around.
     #[error("API error: {0}")]
-    ApiError(ApiErrorResponse),
+    ApiError(Box<ApiErrorResponse>),
 
     /// Client-side request error (not from the server).
     #[error("Request error: {0}")]
@@ -182,7 +209,7 @@ impl SDKError {
     /// If this is an API error, returns the structured response.
     pub fn api_error(&self) -> Option<&ApiErrorResponse> {
         match self {
-            SDKError::ApiError(resp) => Some(resp),
+            SDKError::ApiError(resp) => Some(resp.as_ref()),
             _ => None,
         }
     }
@@ -193,7 +220,9 @@ pub type SDKResult<T, E = SDKError> = Result<T, E>;
 impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
     fn from(err: progenitor_client::Error<ApiErrorResponse>) -> Self {
         match err {
-            progenitor_client::Error::ErrorResponse(resp) => SDKError::ApiError(resp.into_inner()),
+            progenitor_client::Error::ErrorResponse(resp) => {
+                SDKError::ApiError(Box::new(resp.into_inner()))
+            }
             progenitor_client::Error::CommunicationError(e) => SDKError::HttpError(e),
             progenitor_client::Error::ResponseBodyError(e) => SDKError::HttpError(e),
             progenitor_client::Error::InvalidUpgrade(e) => SDKError::HttpError(e),
@@ -202,11 +231,12 @@ impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
             // synchronously so we only preserve the status code.
             progenitor_client::Error::UnexpectedResponse(resp) => {
                 let status = resp.status().as_u16();
-                SDKError::ApiError(ApiErrorResponse {
+                SDKError::ApiError(Box::new(ApiErrorResponse {
                     status,
                     message: format!("HTTP {status}"),
                     details: None,
-                })
+                    error_id: None,
+                }))
             }
             // Server returned 4XX/5XX but the body couldn't be deserialized as
             // ApiErrorResponse (e.g., HTML from a load balancer, plain text, etc).
@@ -214,11 +244,12 @@ impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
             // can't determine retryability. We surface the raw body as the message.
             progenitor_client::Error::InvalidResponsePayload(bytes, _) => {
                 let body = String::from_utf8_lossy(&bytes);
-                SDKError::ApiError(ApiErrorResponse {
+                SDKError::ApiError(Box::new(ApiErrorResponse {
                     status: 0,
                     message: body.into_owned(),
                     details: None,
-                })
+                    error_id: None,
+                }))
             }
             // Client-side errors (InvalidRequest, PreHookError) that aren't HTTP
             // responses at all.
@@ -253,6 +284,8 @@ mod tests {
 
     #[tokio::test]
     async fn error_response_is_structured() {
+        use crate::generated::types::ApiErrorDetail;
+
         let (_server, err) = mock_submit_tx(
             400,
             serde_json::json!({
@@ -266,7 +299,12 @@ mod tests {
         let resp = err.api_error().expect("should be ApiError");
         assert_eq!(resp.status, 400);
         assert_eq!(resp.message, "Transaction validation failed: insufficient funds");
-        assert_eq!(resp.details.as_ref().unwrap()["reason"], "insufficient_balance");
+        match resp.details.as_ref().expect("details present") {
+            ApiErrorDetail::Object(map) => {
+                assert_eq!(map["reason"], "insufficient_balance");
+            }
+            other => panic!("expected Object variant, got {other:?}"),
+        }
         assert!(!err.is_retryable());
         assert!(err.to_string().contains("insufficient funds"));
     }
@@ -314,5 +352,49 @@ mod tests {
         // Callers can use is_status_unknown() to decide for themselves.
         assert!(!err.is_retryable());
         assert!(resp.is_status_unknown());
+    }
+
+    #[tokio::test]
+    async fn error_response_surfaces_error_id() {
+        let (_server, err) = mock_submit_tx(
+            400,
+            serde_json::json!({
+                "status": 400,
+                "message": "Transaction validation failed",
+                "error_id": "8b2e4d9f-7a1c-4f0e-9c5d-3e6a8b1c2d4f"
+            }),
+        )
+        .await;
+
+        let resp = err.api_error().expect("should be ApiError");
+        assert_eq!(resp.error_id.as_deref(), Some("8b2e4d9f-7a1c-4f0e-9c5d-3e6a8b1c2d4f"));
+        assert!(err.to_string().contains("8b2e4d9f-7a1c-4f0e-9c5d-3e6a8b1c2d4f"));
+    }
+
+    #[tokio::test]
+    async fn error_response_parses_json_validation_detail() {
+        use crate::generated::types::ApiErrorDetail;
+
+        let (_server, err) = mock_submit_tx(
+            400,
+            serde_json::json!({
+                "status": 400,
+                "message": "Invalid request payload",
+                "details": {
+                    "rule": "wrong_type",
+                    "message": "invalid type: integer, expected a string at line 4 column 30"
+                }
+            }),
+        )
+        .await;
+
+        let resp = err.api_error().expect("should be ApiError");
+        match resp.details.as_ref().expect("details present") {
+            ApiErrorDetail::JsonValidationErrorDetail(d) => {
+                assert_eq!(d.rule, "wrong_type");
+                assert!(d.message.contains("expected a string"));
+            }
+            other => panic!("expected JsonValidationErrorDetail variant, got {other:?}"),
+        }
     }
 }
