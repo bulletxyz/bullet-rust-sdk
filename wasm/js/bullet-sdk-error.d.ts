@@ -47,6 +47,8 @@ export interface BulletSdkErrorOptions<K extends BulletSdkErrorKind = BulletSdkE
     kind?: K;
     status?: BulletSdkErrorStatus<K>;
     details?: BulletSdkErrorDetailsByKind[K];
+    /** Server-side correlation id for support (only set for `kind === "api"`). */
+    errorId?: string;
     retryable?: boolean;
 }
 
@@ -54,6 +56,8 @@ export class BulletSdkError<K extends BulletSdkErrorKind = BulletSdkErrorKind> e
     readonly kind: K;
     readonly status?: BulletSdkErrorStatus<K>;
     readonly details?: BulletSdkErrorDetailsByKind[K];
+    /** Server-side correlation id for support (only set for `kind === "api"`). */
+    readonly errorId?: string;
     readonly retryable: boolean;
 
     constructor(message: string, options?: BulletSdkErrorOptions<K>);
