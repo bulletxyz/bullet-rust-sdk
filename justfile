@@ -181,6 +181,9 @@ ci:
 
 # ── OpenAPI spec ──────────────────────────────────────────────────────────────
 
-# Fetch and cache the latest OpenAPI spec from mainnet
-fetch-spec endpoint="https://tradingapi.bullet.xyz":
+# Refresh rust/openapi.json from the live trading-api endpoint. Use this
+# when upstream spec changes need to be tracked in the SDK; commit the
+# resulting diff alongside any hand-written code updates the new spec
+# requires. The SDK build itself uses the committed file — see build.rs.
+refresh-spec endpoint="https://tradingapi.bullet.xyz":
     curl -sSf {{ endpoint }}/docs/rest/openapi.json | jq -- . > rust/openapi.json
