@@ -112,8 +112,8 @@ pub(crate) fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
         RustType::String => quote! { String },
         RustType::Bool => quote! { bool },
         RustType::Primitive(p) => primitive_type(p),
-        RustType::Map(_, _) => quote! { String },
-        RustType::Named { name, .. } if name == "Value" => quote! { String },
+        RustType::Map(_, _) => quote! { JsValue },
+        RustType::Named { name, .. } if name == "Value" => quote! { JsValue },
         RustType::Named { name, .. } if enums.contains(name.as_str()) => quote! { String },
         RustType::Named { name, .. } => {
             let w = format_ident!("Wasm{}", name);
@@ -225,10 +225,10 @@ fn vec_getter(
     // wasm-bindgen boundaries. Serialize to JSON string instead.
     match inner {
         RustType::Vec(_) | RustType::Map(_, _) => {
-            return (quote! { String }, quote! { to_json(&self.0.#field) });
+            return (quote! { JsValue }, quote! { to_json(&self.0.#field) });
         }
         RustType::Named { name, .. } if name == "Value" => {
-            return (quote! { String }, quote! { to_json(&self.0.#field) });
+            return (quote! { JsValue }, quote! { to_json(&self.0.#field) });
         }
         _ => {}
     }

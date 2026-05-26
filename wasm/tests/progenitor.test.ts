@@ -133,8 +133,8 @@ describe('struct getters via live API', () => {
     const resp = await client.ping();
     expect(resp).toBeDefined();
     const json = resp.toJSON();
-    expect(typeof json).toBe('string');
-    expect(() => JSON.parse(json)).not.toThrow();
+    expect(json).toBeDefined();
+    expect(typeof json).toBe('object');
   });
 
   test('time returns TimeResponse with serverTime getter', async () => {
@@ -142,9 +142,8 @@ describe('struct getters via live API', () => {
     expect(resp).toBeDefined();
     expect(typeof resp.serverTime).toBe('bigint');
     expect(resp.serverTime).toBeGreaterThan(0n);
-    // toJSON round-trips
-    const parsed = JSON.parse(resp.toJSON());
-    expect(parsed.serverTime).toBeDefined();
+    const json = resp.toJSON();
+    expect(json.serverTime).toBeDefined();
   });
 
   test('exchangeInfo returns nested typed arrays', async () => {
@@ -160,7 +159,7 @@ describe('struct getters via live API', () => {
     expect(typeof asset.asset).toBe('string');
     expect(typeof asset.marginAvailable).toBe('boolean');
     expect(typeof asset.assetId).toBe('number');
-    expect(typeof asset.toJSON()).toBe('string');
+    expect(typeof asset.toJSON()).toBe('object');
 
     // symbols getter returns TradingSymbol[]
     const symbols = info.symbols;
@@ -189,10 +188,9 @@ describe('struct getters via live API', () => {
       expect(typeof rl.limit).toBe('number');
     }
 
-    // toJSON round-trips
-    const parsed = JSON.parse(info.toJSON());
-    expect(Array.isArray(parsed.assets)).toBe(true);
-    expect(Array.isArray(parsed.symbols)).toBe(true);
+    const json = info.toJSON();
+    expect(Array.isArray(json.assets)).toBe(true);
+    expect(Array.isArray(json.symbols)).toBe(true);
   });
 
   test('tickerPrice returns PriceTicker[] with getters', async () => {
@@ -232,11 +230,9 @@ describe('struct getters via live API', () => {
     expect(typeof ob.E).toBe('bigint');
     expect(typeof ob.T).toBe('bigint');
     expect(typeof ob.lastUpdateId).toBe('bigint');
-    // bids/asks are Vec<Vec<String>> → serialized as JSON string
     const json = ob.toJSON();
-    const parsed = JSON.parse(json);
-    expect(Array.isArray(parsed.asks)).toBe(true);
-    expect(Array.isArray(parsed.bids)).toBe(true);
+    expect(Array.isArray(json.asks)).toBe(true);
+    expect(Array.isArray(json.bids)).toBe(true);
   });
 
   test('constants returns RollupConstants with getters', async () => {

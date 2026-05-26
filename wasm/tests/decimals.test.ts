@@ -391,12 +391,12 @@ describe('API responses return Decimal wrappers', () => {
     expect(borrowed.gte(Decimal.zero())).toBe(true);
   });
 
-  test('Decimal toJSON round-trips through JSON.parse', async () => {
+  test('REST wrapper toJSON returns a typed object with decimal strings', async () => {
     const tickers = await client.tickerPrice();
     expect(tickers.length).toBeGreaterThan(0);
 
     const t = tickers[0];
-    const parsed = JSON.parse(t.toJSON());
+    const parsed = t.toJSON();
 
     // The price in JSON should be a string matching the Decimal's toString
     const priceFromJson = new Decimal(parsed.price);

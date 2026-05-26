@@ -53,7 +53,9 @@ pub fn emit_all(model: &CodeModel) -> String {
     let data_enum_tokens: Vec<TokenStream> =
         data_enums.iter().map(|e| types::emit_data_enum(e)).collect();
     let data_enum_ts_tokens: Vec<TokenStream> =
-        data_enums.iter().map(|e| types::emit_data_enum_typescript(e)).collect();
+        data_enums.iter().map(|e| types::emit_data_enum_typescript(e, &unit_enum_names)).collect();
+    let struct_ts_tokens: Vec<TokenStream> =
+        structs.iter().map(|s| types::emit_struct_typescript(s, &unit_enum_names)).collect();
 
     let struct_tokens: Vec<TokenStream> =
         structs.iter().map(|s| types::emit_struct(s, &unit_enum_names)).collect();
@@ -71,8 +73,8 @@ pub fn emit_all(model: &CodeModel) -> String {
 
         use wasm_bindgen::prelude::*;
 
-        fn to_json<T: serde::Serialize>(v: &T) -> String {
-            serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())
+        fn to_json<T: serde::Serialize>(v: &T) -> JsValue {
+            serde_wasm_bindgen::to_value(v).unwrap_or(JsValue::NULL)
         }
 
         /// Extract elements from a JS Array into a Vec of wrapper types.
@@ -93,6 +95,8 @@ pub fn emit_all(model: &CodeModel) -> String {
         #(#enum_tokens)*
 
         #(#data_enum_ts_tokens)*
+
+        #(#struct_ts_tokens)*
 
         #(#data_enum_tokens)*
 

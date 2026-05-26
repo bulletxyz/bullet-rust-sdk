@@ -40,13 +40,14 @@ pub fn emit_struct(s: &StructDetails, enum_names: &HashSet<&str>) -> TokenStream
     let wrapper = format_ident!("Wasm{}", s.name);
     let js_name = type_map::js_name(&s.name);
     let serializable = has_serialize(&s.derives);
+    let json_type = format!("{}Json", type_map::js_name(&s.name));
 
     // Newtype or empty struct → only expose toJSON (if serializable).
     if s.is_newtype || s.fields.is_empty() {
         let to_json_method = if serializable {
             quote! {
-                #[wasm_bindgen(js_name = toJSON)]
-                pub fn to_json(&self) -> String {
+                #[wasm_bindgen(js_name = toJSON, unchecked_return_type = #json_type)]
+                pub fn to_json(&self) -> JsValue {
                     to_json(&self.0)
                 }
             }
@@ -69,8 +70,8 @@ pub fn emit_struct(s: &StructDetails, enum_names: &HashSet<&str>) -> TokenStream
 
     let to_json_method = if serializable {
         quote! {
-            #[wasm_bindgen(js_name = toJSON)]
-            pub fn to_json(&self) -> String {
+            #[wasm_bindgen(js_name = toJSON, unchecked_return_type = #json_type)]
+            pub fn to_json(&self) -> JsValue {
                 to_json(&self.0)
             }
         }
@@ -88,6 +89,54 @@ pub fn emit_struct(s: &StructDetails, enum_names: &HashSet<&str>) -> TokenStream
 
             #(#getters)*
         }
+    }
+}
+
+pub fn emit_struct_typescript(s: &StructDetails, enum_names: &HashSet<&str>) -> TokenStream {
+    if !has_serialize(&s.derives) {
+        return quote! {};
+    }
+
+    let ident = custom_ts_ident(&format!("{}_STRUCT", s.name));
+    let ts = struct_typescript(s, enum_names);
+
+    quote! {
+        #[wasm_bindgen(typescript_custom_section)]
+        const #ident: &'static str = #ts;
+    }
+}
+
+fn struct_typescript(s: &StructDetails, enum_names: &HashSet<&str>) -> String {
+    let name = type_map::js_name(&s.name);
+
+    if s.is_newtype {
+        if let Some(field) = s.fields.first() {
+            return format!("export type {name}Json = {};\n", json_ts_type(&field.ty, enum_names));
+        }
+    }
+
+    if s.fields.is_empty() {
+        return format!("export type {name}Json = Record<string, never>;\n");
+    }
+
+    let fields = s
+        .fields
+        .iter()
+        .filter_map(struct_ts_field)
+        .map(|(name, ty)| format!("  {name}: {};", json_ts_type(&ty, enum_names)))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("export type {name}Json = {{\n{fields}\n}};\n")
+}
+
+fn struct_ts_field(field: &FieldDetails) -> Option<(String, RustType)> {
+    match &field.kind {
+        FieldKind::Named(name) => {
+            let js_name = field.serde_rename.clone().unwrap_or_else(|| name.to_lower_camel_case());
+            Some((js_name, field.ty.clone()))
+        }
+        FieldKind::Index(i) => Some((format!("field{i}"), field.ty.clone())),
     }
 }
 
@@ -180,8 +229,8 @@ pub fn emit_data_enum(e: &EnumDetails) -> TokenStream {
 
     let to_json_method = if serializable {
         quote! {
-            #[wasm_bindgen(js_name = toJSON)]
-            pub fn to_json(&self) -> String {
+            #[wasm_bindgen(js_name = toJSON, unchecked_return_type = #json_type)]
+            pub fn to_json(&self) -> JsValue {
                 to_json(&self.0)
             }
 
@@ -209,11 +258,11 @@ pub fn emit_data_enum(e: &EnumDetails) -> TokenStream {
     }
 }
 
-pub fn emit_data_enum_typescript(e: &EnumDetails) -> TokenStream {
-    let Some(ts) = data_enum_typescript(e) else {
+pub fn emit_data_enum_typescript(e: &EnumDetails, enum_names: &HashSet<&str>) -> TokenStream {
+    let Some(ts) = data_enum_typescript(e, enum_names) else {
         return quote! {};
     };
-    let ident = custom_ts_ident(e);
+    let ident = custom_ts_ident(&e.name);
 
     quote! {
         #[wasm_bindgen(typescript_custom_section)]
@@ -221,12 +270,12 @@ pub fn emit_data_enum_typescript(e: &EnumDetails) -> TokenStream {
     }
 }
 
-fn custom_ts_ident(e: &EnumDetails) -> Ident {
-    let name = format!("{}_TS_TYPES", e.name.to_snake_case().to_uppercase());
+fn custom_ts_ident(name: &str) -> Ident {
+    let name = format!("{}_TS_TYPES", name.to_snake_case().to_uppercase());
     format_ident!("{}", name)
 }
 
-fn data_enum_typescript(e: &EnumDetails) -> Option<String> {
+fn data_enum_typescript(e: &EnumDetails, enum_names: &HashSet<&str>) -> Option<String> {
     let tag = e.serde_tag.as_ref()?;
     let name = type_map::js_name(&e.name);
     let variants: Vec<String> = e
@@ -237,7 +286,7 @@ fn data_enum_typescript(e: &EnumDetails) -> Option<String> {
             let fields = variant
                 .fields
                 .iter()
-                .filter_map(data_enum_ts_field)
+                .filter_map(|field| data_enum_ts_field(field, enum_names))
                 .map(|(name, ty)| format!("{name}: {ty}"))
                 .collect::<Vec<_>>();
 
@@ -253,26 +302,29 @@ fn data_enum_typescript(e: &EnumDetails) -> Option<String> {
     ))
 }
 
-fn data_enum_ts_field(field: &FieldDetails) -> Option<(String, String)> {
+fn data_enum_ts_field(field: &FieldDetails, enum_names: &HashSet<&str>) -> Option<(String, String)> {
     let FieldKind::Named(name) = &field.kind else {
         return None;
     };
     let js_name = field.serde_rename.clone().unwrap_or_else(|| name.to_lower_camel_case());
-    Some((js_name, json_ts_type(&field.ty)))
+    Some((js_name, json_ts_type(&field.ty, enum_names)))
 }
 
-fn json_ts_type(ty: &RustType) -> String {
+fn json_ts_type(ty: &RustType, enum_names: &HashSet<&str>) -> String {
     match ty {
         RustType::String => "string".to_string(),
         RustType::Bool => "boolean".to_string(),
         RustType::Primitive(_) => "number".to_string(),
         RustType::Named { name, .. } if name == "Decimal" => "string".to_string(),
         RustType::Named { name, .. } if name == "Value" => "unknown".to_string(),
+        RustType::Named { name, .. } if enum_names.contains(name.as_str()) => "string".to_string(),
         RustType::Named { name, .. } => format!("{}Json", type_map::js_name(name)),
-        RustType::Option(inner) => format!("{} | undefined", json_ts_type(inner)),
-        RustType::Vec(inner) | RustType::Slice(inner) => format!("Array<{}>", json_ts_type(inner)),
+        RustType::Option(inner) => format!("{} | undefined", json_ts_type(inner, enum_names)),
+        RustType::Vec(inner) | RustType::Slice(inner) => {
+            format!("Array<{}>", json_ts_type(inner, enum_names))
+        }
         RustType::Map(_, _) => "Record<string, unknown>".to_string(),
-        RustType::Ref(inner) | RustType::ResponseValue(inner) => json_ts_type(inner),
+        RustType::Ref(inner) | RustType::ResponseValue(inner) => json_ts_type(inner, enum_names),
         RustType::Tuple(elems) if elems.is_empty() => "void".to_string(),
         _ => "unknown".to_string(),
     }
