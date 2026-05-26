@@ -179,6 +179,8 @@ pub struct EnumDetails {
     pub name: String,
     /// Variants.
     pub variants: Vec<VariantDetails>,
+    /// Serde internally tagged enum discriminator, e.g. `filterType`.
+    pub serde_tag: Option<String>,
     /// Module path relative to the codegen root, e.g. `["types"]` for `types::TxStatus`.
     pub module_path: Vec<String>,
     /// Derive macros on this enum (e.g., `["Serialize", "Deserialize", "Clone"]`).
@@ -193,6 +195,8 @@ pub struct EnumDetails {
 pub struct VariantDetails {
     /// Variant name in PascalCase, e.g. `Successful`.
     pub name: String,
+    /// JSON name from `#[serde(rename = "...")]`, if present.
+    pub serde_rename: Option<String>,
     /// Fields, if any. Empty for unit variants (C-style enums).
     /// Currently progenitor only generates unit variants for string enums.
     pub fields: Vec<FieldDetails>,

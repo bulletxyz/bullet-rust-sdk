@@ -107,7 +107,7 @@ fn primitive_type(p: &Primitive) -> TokenStream {
 ///
 /// This is the single source of truth for Rust→WASM type mapping.
 /// Primitives pass through directly — wasm-bindgen handles JS conversion automatically.
-fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
+pub(crate) fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
     match ty {
         RustType::String => quote! { String },
         RustType::Bool => quote! { bool },
@@ -228,9 +228,6 @@ fn vec_getter(
             return (quote! { String }, quote! { to_json(&self.0.#field) });
         }
         RustType::Named { name, .. } if name == "Value" => {
-            return (quote! { String }, quote! { to_json(&self.0.#field) });
-        }
-        RustType::Named { name, .. } if enums.contains(name.as_str()) => {
             return (quote! { String }, quote! { to_json(&self.0.#field) });
         }
         _ => {}

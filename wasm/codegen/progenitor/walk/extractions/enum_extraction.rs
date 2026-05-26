@@ -1,11 +1,14 @@
 use syn::ItemEnum;
 
 use super::super::super::{EnumDetails, FieldDetails, FieldKind, VariantDetails};
-use super::super::utils::{extract_derives, extract_serde_rename, parse_rust_type};
+use super::super::utils::{
+    extract_derives, extract_serde_rename, extract_serde_tag, parse_rust_type,
+};
 
 pub fn extract_enum(e: &ItemEnum, module_path: &[String]) -> Option<EnumDetails> {
     let name = e.ident.to_string();
     let derives = extract_derives(&e.attrs);
+    let serde_tag = extract_serde_tag(&e.attrs);
 
     let variants = e
         .variants
@@ -34,13 +37,15 @@ pub fn extract_enum(e: &ItemEnum, module_path: &[String]) -> Option<EnumDetails>
                     .collect(),
                 syn::Fields::Unit => vec![],
             };
-            VariantDetails { name: variant_name, fields }
+            let serde_rename = extract_serde_rename(&v.attrs);
+            VariantDetails { name: variant_name, serde_rename, fields }
         })
         .collect();
 
     Some(EnumDetails {
         name,
         variants,
+        serde_tag,
         module_path: module_path.to_vec(),
         derives,
         methods: Vec::new(),

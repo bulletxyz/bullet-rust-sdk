@@ -40,22 +40,28 @@ pub fn emit_all(model: &CodeModel) -> String {
         }
     }
 
-    // Build enum name set for distinguishing enum refs from struct refs.
-    let enum_names: HashSet<&str> = enums.iter().map(|e| e.name.as_str()).collect();
-
     // Filter to only unit-variant enums (C-style enums usable in wasm-bindgen).
     let unit_enums: Vec<&&EnumDetails> =
         enums.iter().filter(|e| e.variants.iter().all(|v| v.fields.is_empty())).collect();
+    let data_enums: Vec<&&EnumDetails> =
+        enums.iter().filter(|e| e.variants.iter().any(|v| !v.fields.is_empty())).collect();
+
+    // Only unit enums behave like string enums in progenitor's generated code.
+    let unit_enum_names: HashSet<&str> = unit_enums.iter().map(|e| e.name.as_str()).collect();
 
     let enum_tokens: Vec<TokenStream> = unit_enums.iter().map(|e| types::emit_enum(e)).collect();
+    let data_enum_tokens: Vec<TokenStream> =
+        data_enums.iter().map(|e| types::emit_data_enum(e)).collect();
+    let data_enum_ts_tokens: Vec<TokenStream> =
+        data_enums.iter().map(|e| types::emit_data_enum_typescript(e)).collect();
 
     let struct_tokens: Vec<TokenStream> =
-        structs.iter().map(|s| types::emit_struct(s, &enum_names)).collect();
+        structs.iter().map(|s| types::emit_struct(s, &unit_enum_names)).collect();
 
     let client_tokens = if client_methods.is_empty() {
         quote! {}
     } else {
-        client::emit_client_impl(&client_methods, &enum_names)
+        client::emit_client_impl(&client_methods, &unit_enum_names)
     };
 
     let tokens = quote! {
@@ -85,6 +91,10 @@ pub fn emit_all(model: &CodeModel) -> String {
         }
 
         #(#enum_tokens)*
+
+        #(#data_enum_ts_tokens)*
+
+        #(#data_enum_tokens)*
 
         #(#struct_tokens)*
 

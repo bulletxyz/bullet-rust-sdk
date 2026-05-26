@@ -256,6 +256,27 @@ pub fn extract_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
     None
 }
 
+pub fn extract_serde_tag(attrs: &[syn::Attribute]) -> Option<String> {
+    for attr in attrs {
+        if !attr.path().is_ident("serde") {
+            continue;
+        }
+        let mut tag = None;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("tag") {
+                let value = meta.value()?;
+                let s: syn::LitStr = value.parse()?;
+                tag = Some(s.value());
+            }
+            Ok(())
+        });
+        if tag.is_some() {
+            return tag;
+        }
+    }
+    None
+}
+
 // ── Impl Helpers ─────────────────────────────────────────────────────────────
 
 pub fn impl_target_name(imp: &syn::ItemImpl) -> String {
