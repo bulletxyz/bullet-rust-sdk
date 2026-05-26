@@ -230,6 +230,9 @@ fn vec_getter(
         RustType::Named { name, .. } if name == "Value" => {
             return (quote! { String }, quote! { to_json(&self.0.#field) });
         }
+        RustType::Named { name, .. } if enums.contains(name.as_str()) => {
+            return (quote! { String }, quote! { to_json(&self.0.#field) });
+        }
         _ => {}
     }
 
