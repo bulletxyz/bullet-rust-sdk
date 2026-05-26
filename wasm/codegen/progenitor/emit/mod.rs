@@ -51,7 +51,7 @@ pub fn emit_all(model: &CodeModel) -> String {
 
     let enum_tokens: Vec<TokenStream> = unit_enums.iter().map(|e| types::emit_enum(e)).collect();
     let data_enum_tokens: Vec<TokenStream> =
-        data_enums.iter().map(|e| types::emit_data_enum(e)).collect();
+        data_enums.iter().map(|e| types::emit_data_enum(e, &unit_enum_names)).collect();
     let data_enum_ts_tokens: Vec<TokenStream> =
         data_enums.iter().map(|e| types::emit_data_enum_typescript(e, &unit_enum_names)).collect();
     let struct_ts_tokens: Vec<TokenStream> =

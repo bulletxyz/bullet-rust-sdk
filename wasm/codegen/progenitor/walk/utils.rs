@@ -234,44 +234,31 @@ pub fn extract_derives(attrs: &[syn::Attribute]) -> Vec<String> {
 }
 
 pub fn extract_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
-    for attr in attrs {
-        if !attr.path().is_ident("serde") {
-            continue;
-        }
-        // Parse #[serde(rename = "camelCase")] — handles combined attributes like
-        // #[serde(default, rename = "E", skip_serializing_if = "...")]
-        let mut rename = None;
-        let _ = attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("rename") {
-                let value = meta.value()?;
-                let s: syn::LitStr = value.parse()?;
-                rename = Some(s.value());
-            }
-            Ok(())
-        });
-        if rename.is_some() {
-            return rename;
-        }
-    }
-    None
+    // Parse #[serde(rename = "camelCase")] — handles combined attributes like
+    // #[serde(default, rename = "E", skip_serializing_if = "...")]
+    extract_serde_str_param(attrs, "rename")
 }
 
 pub fn extract_serde_tag(attrs: &[syn::Attribute]) -> Option<String> {
+    extract_serde_str_param(attrs, "tag")
+}
+
+fn extract_serde_str_param(attrs: &[syn::Attribute], name: &str) -> Option<String> {
     for attr in attrs {
         if !attr.path().is_ident("serde") {
             continue;
         }
-        let mut tag = None;
+        let mut value = None;
         let _ = attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("tag") {
-                let value = meta.value()?;
-                let s: syn::LitStr = value.parse()?;
-                tag = Some(s.value());
+            if meta.path.is_ident(name) {
+                let meta_value = meta.value()?;
+                let s: syn::LitStr = meta_value.parse()?;
+                value = Some(s.value());
             }
             Ok(())
         });
-        if tag.is_some() {
-            return tag;
+        if value.is_some() {
+            return value;
         }
     }
     None

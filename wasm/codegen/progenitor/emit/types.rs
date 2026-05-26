@@ -218,14 +218,14 @@ pub fn emit_enum(e: &EnumDetails) -> TokenStream {
 /// Progenitor uses Rust enums with payload fields for schemas like `oneOf`
 /// objects. wasm-bindgen cannot expose those variants directly, so expose the
 /// value as a wrapper with JSON access while preserving the named TS type.
-pub fn emit_data_enum(e: &EnumDetails) -> TokenStream {
+pub fn emit_data_enum(e: &EnumDetails, enum_names: &HashSet<&str>) -> TokenStream {
     let sdk_type = sdk_qualified_path(&e.module_path, &e.name);
     let wrapper = format_ident!("Wasm{}", e.name);
     let js_name = type_map::js_name(&e.name);
     let serializable = has_serialize(&e.derives);
     let json_type = format!("{}Json", type_map::js_name(&e.name));
     let tag_getter = emit_data_enum_tag_getter(e, &sdk_type);
-    let getters = emit_data_enum_field_getters(e, &sdk_type, &HashSet::new());
+    let getters = emit_data_enum_field_getters(e, &sdk_type, enum_names);
 
     let to_json_method = if serializable {
         quote! {
