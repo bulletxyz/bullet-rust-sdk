@@ -479,6 +479,35 @@ impl Client {
         Err(self.submit_tx_api_error(error).await?)
     }
 
+    /// Build, sign, and submit a call message, retrying once if the chain hash
+    /// changed since startup (401 invalid signature → schema refresh → re-sign).
+    ///
+    /// Unlike calling `send_transaction` directly, this never returns
+    /// `TransactionOutdated` — the retry is handled internally, and if the
+    /// refreshed hash also fails the error is returned as `ApiError`.
+    pub async fn send_call_message(
+        &self,
+        call_message: CallMessage,
+    ) -> SDKResult<SubmitTxResponse> {
+        let signed =
+            Transaction::builder().call_message(call_message.clone()).client(self).build()?;
+        match self.send_transaction(&signed).await {
+            Err(SDKError::TransactionOutdated) => {
+                // chain hash was refreshed; re-sign with the new hash and retry once.
+                // submit directly so a second 401 comes back as ApiError, not TransactionOutdated
+                let signed =
+                    Transaction::builder().call_message(call_message).client(self).build()?;
+                let body = Transaction::to_base64(&signed)?;
+                match self.client().submit_tx(&SubmitTxRequest { body }).await {
+                    Ok(r) => Ok(r.into_inner()),
+                    Err(ErrorResponse(r)) => Err(SDKError::ApiError(r.into_inner())),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            other => other,
+        }
+    }
+
     async fn submit_tx_api_error(&self, error: ApiErrorResponse) -> SDKResult<SDKError> {
         if error.status == 401 && error.message.contains("Invalid signature") {
             self.update_schema().await?;
