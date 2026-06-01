@@ -500,7 +500,7 @@ impl Client {
                 let body = Transaction::to_base64(&signed)?;
                 match self.client().submit_tx(&SubmitTxRequest { body }).await {
                     Ok(r) => Ok(r.into_inner()),
-                    Err(ErrorResponse(r)) => Err(SDKError::ApiError(r.into_inner())),
+                    Err(ErrorResponse(r)) => Err(SDKError::ApiError(Box::new(r.into_inner()))),
                     Err(e) => Err(e.into()),
                 }
             }
