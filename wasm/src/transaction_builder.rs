@@ -32,9 +32,9 @@ use bullet_exchange_interface::message::*;
 use bullet_exchange_interface::time::UnixTimestampMicros;
 use bullet_exchange_interface::transaction::{Gas, Transaction};
 use bullet_exchange_interface::types::{
-    AdminType, AssetId, ClientOrderId, FeeTier, MarketId, OrderId, OrderType, Side,
-    SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
-    TriggerPriceCondition, TwapId, MarketTradingStatus,
+    AdminType, AssetId, ClientOrderId, FeeTier, MarketId, MarketTradingStatus, OrderId, OrderType,
+    Side, SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
+    TriggerPriceCondition, TwapId,
 };
 use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{
