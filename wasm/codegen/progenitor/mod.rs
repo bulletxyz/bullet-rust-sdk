@@ -181,6 +181,8 @@ pub struct EnumDetails {
     pub variants: Vec<VariantDetails>,
     /// Serde internally tagged enum discriminator, e.g. `filterType`.
     pub serde_tag: Option<String>,
+    /// Whether the enum uses serde's untagged representation.
+    pub serde_untagged: bool,
     /// Module path relative to the codegen root, e.g. `["types"]` for `types::TxStatus`.
     pub module_path: Vec<String>,
     /// Derive macros on this enum (e.g., `["Serialize", "Deserialize", "Clone"]`).

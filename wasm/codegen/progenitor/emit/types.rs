@@ -6,7 +6,7 @@ use heck::{ToLowerCamelCase, ToSnakeCase};
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 
-use super::super::{EnumDetails, FieldDetails, FieldKind, RustType, StructDetails};
+use super::super::{EnumDetails, FieldDetails, FieldKind, RustType, StructDetails, VariantDetails};
 use super::type_map;
 
 // ── SDK Path Helper ──────────────────────────────────────────────────────────
@@ -109,10 +109,10 @@ pub fn emit_struct_typescript(s: &StructDetails, enum_names: &HashSet<&str>) -> 
 fn struct_typescript(s: &StructDetails, enum_names: &HashSet<&str>) -> String {
     let name = type_map::js_name(&s.name);
 
-    if s.is_newtype {
-        if let Some(field) = s.fields.first() {
-            return format!("export type {name}Json = {};\n", json_ts_type(&field.ty, enum_names));
-        }
+    if s.is_newtype
+        && let Some(field) = s.fields.first()
+    {
+        return format!("export type {name}Json = {};\n", json_ts_type(&field.ty, enum_names));
     }
 
     if s.fields.is_empty() {
@@ -259,9 +259,7 @@ pub fn emit_data_enum(e: &EnumDetails, enum_names: &HashSet<&str>) -> TokenStrea
 }
 
 pub fn emit_data_enum_typescript(e: &EnumDetails, enum_names: &HashSet<&str>) -> TokenStream {
-    let Some(ts) = data_enum_typescript(e, enum_names) else {
-        return quote! {};
-    };
+    let ts = data_enum_typescript(e, enum_names);
     let ident = custom_ts_ident(&e.name);
 
     quote! {
@@ -275,8 +273,17 @@ fn custom_ts_ident(name: &str) -> Ident {
     format_ident!("{}", name)
 }
 
-fn data_enum_typescript(e: &EnumDetails, enum_names: &HashSet<&str>) -> Option<String> {
-    let tag = e.serde_tag.as_ref()?;
+fn data_enum_typescript(e: &EnumDetails, enum_names: &HashSet<&str>) -> String {
+    if let Some(tag) = &e.serde_tag {
+        return tagged_data_enum_typescript(e, tag, enum_names);
+    }
+    if e.serde_untagged {
+        return untagged_data_enum_typescript(e, enum_names);
+    }
+    externally_tagged_data_enum_typescript(e, enum_names)
+}
+
+fn tagged_data_enum_typescript(e: &EnumDetails, tag: &str, enum_names: &HashSet<&str>) -> String {
     let name = type_map::js_name(&e.name);
     let variants: Vec<String> = e
         .variants
@@ -296,13 +303,71 @@ fn data_enum_typescript(e: &EnumDetails, enum_names: &HashSet<&str>) -> Option<S
         })
         .collect();
 
-    Some(format!(
-        "export type {name}Json =\n{};\n",
-        variants.join("\n")
-    ))
+    format!("export type {name}Json =\n{};\n", variants.join("\n"))
 }
 
-fn data_enum_ts_field(field: &FieldDetails, enum_names: &HashSet<&str>) -> Option<(String, String)> {
+fn untagged_data_enum_typescript(e: &EnumDetails, enum_names: &HashSet<&str>) -> String {
+    let name = type_map::js_name(&e.name);
+    let variants = e
+        .variants
+        .iter()
+        .map(|variant| format!("  | {}", data_enum_variant_payload_ts(variant, enum_names)))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("export type {name}Json =\n{variants};\n")
+}
+
+fn externally_tagged_data_enum_typescript(e: &EnumDetails, enum_names: &HashSet<&str>) -> String {
+    let name = type_map::js_name(&e.name);
+    let variants = e
+        .variants
+        .iter()
+        .map(|variant| {
+            let variant_name = variant.serde_rename.as_deref().unwrap_or(&variant.name);
+            if variant.fields.is_empty() {
+                format!("  | {}", ts_string_literal(variant_name))
+            } else {
+                let payload = data_enum_variant_payload_ts(variant, enum_names);
+                format!("  | {{ {}: {payload} }}", ts_string_literal(variant_name))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("export type {name}Json =\n{variants};\n")
+}
+
+fn data_enum_variant_payload_ts(variant: &VariantDetails, enum_names: &HashSet<&str>) -> String {
+    let named_fields = variant
+        .fields
+        .iter()
+        .filter_map(|field| data_enum_ts_field(field, enum_names))
+        .map(|(name, ty)| format!("{name}: {ty}"))
+        .collect::<Vec<_>>();
+
+    if !named_fields.is_empty() {
+        return format!("{{ {} }}", named_fields.join("; "));
+    }
+
+    let field_types =
+        variant.fields.iter().map(|field| json_ts_type(&field.ty, enum_names)).collect::<Vec<_>>();
+
+    match field_types.as_slice() {
+        [] => "null".to_string(),
+        [ty] => ty.clone(),
+        _ => format!("[{}]", field_types.join(", ")),
+    }
+}
+
+fn ts_string_literal(value: &str) -> String {
+    format!("{value:?}")
+}
+
+fn data_enum_ts_field(
+    field: &FieldDetails,
+    enum_names: &HashSet<&str>,
+) -> Option<(String, String)> {
     let FieldKind::Named(name) = &field.kind else {
         return None;
     };
@@ -336,7 +401,7 @@ fn emit_data_enum_tag_getter(e: &EnumDetails, sdk_type: &TokenStream) -> TokenSt
     };
 
     let method = format_ident!("{}", tag.to_snake_case());
-    let needs_js_attr = method.to_string() != *tag;
+    let needs_js_attr = method != tag.as_str();
     let attr = if needs_js_attr {
         quote! { #[wasm_bindgen(getter, js_name = #tag)] }
     } else {
@@ -401,7 +466,7 @@ fn emit_data_enum_field_getter(
 
     let method = format_ident!("{}", name);
     let js_name = field.serde_rename.clone().unwrap_or_else(|| name.to_lower_camel_case());
-    let attr = if method.to_string() != js_name {
+    let attr = if method != js_name.as_str() {
         quote! { #[wasm_bindgen(getter, js_name = #js_name)] }
     } else {
         quote! { #[wasm_bindgen(getter)] }
@@ -418,7 +483,8 @@ fn emit_data_enum_field_getter(
         .iter()
         .map(|v| {
             let variant = format_ident!("{}", v.name);
-            let has_field = v.fields.iter().any(|f| matches!(&f.kind, FieldKind::Named(n) if n == name));
+            let has_field =
+                v.fields.iter().any(|f| matches!(&f.kind, FieldKind::Named(n) if n == name));
             if has_field {
                 quote! { #sdk_type::#variant { #binding, .. } => Some(#conv) }
             } else if v.fields.is_empty() {

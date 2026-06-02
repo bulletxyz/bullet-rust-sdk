@@ -11,6 +11,7 @@
  */
 
 import { jest } from '@jest/globals';
+import { readFileSync } from 'node:fs';
 
 import {
   Client, Decimal,
@@ -97,6 +98,24 @@ describe('progenitor type wrappers are exported', () => {
     const Ctor = exportedClasses[name];
     expect(Ctor).toBeDefined();
     expect(typeof Ctor).toBe('function');
+  });
+});
+
+describe('generated TypeScript declarations', () => {
+  test('declare every generated JSON alias reference', () => {
+    const declarations = readFileSync(
+      new URL('../pkg/bullet_rust_sdk_wasm.d.ts', import.meta.url),
+      'utf8',
+    );
+    const declaredJsonAliases = new Set(
+      [...declarations.matchAll(/\bexport type ([A-Z][A-Za-z0-9_]*Json)\b/g)].map((match) => match[1]),
+    );
+    const referencedJsonAliases = new Set(
+      [...declarations.matchAll(/\b([A-Z][A-Za-z0-9_]*Json)\b/g)].map((match) => match[1]),
+    );
+    const missingAliases = [...referencedJsonAliases].filter((name) => !declaredJsonAliases.has(name));
+
+    expect(missingAliases).toEqual([]);
   });
 });
 

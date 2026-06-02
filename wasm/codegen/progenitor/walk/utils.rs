@@ -243,6 +243,25 @@ pub fn extract_serde_tag(attrs: &[syn::Attribute]) -> Option<String> {
     extract_serde_str_param(attrs, "tag")
 }
 
+pub fn extract_serde_flag(attrs: &[syn::Attribute], name: &str) -> bool {
+    for attr in attrs {
+        if !attr.path().is_ident("serde") {
+            continue;
+        }
+        let mut found = false;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident(name) {
+                found = true;
+            }
+            Ok(())
+        });
+        if found {
+            return true;
+        }
+    }
+    false
+}
+
 fn extract_serde_str_param(attrs: &[syn::Attribute], name: &str) -> Option<String> {
     for attr in attrs {
         if !attr.path().is_ident("serde") {
