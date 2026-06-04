@@ -51,6 +51,12 @@ pub struct Client {
     /// synchronised clocks converge and don't collide unless they submit in the
     /// very same millisecond) while staying unique within this client under
     /// sub-millisecond bursts.
+    ///
+    /// The counter is in-memory: a client restarted *mid-burst* re-seeds from
+    /// the wall clock, so a sub-millisecond burst larger than the restart
+    /// latency could briefly reuse values (rejected as replays within the
+    /// rollup's window). Throughput-sensitive or multi-instance setups that
+    /// can't tolerate this should set an explicit [`uniqueness`] on the builder.
     window_nonce: AtomicU64,
 
     keypair: Option<Keypair>,
