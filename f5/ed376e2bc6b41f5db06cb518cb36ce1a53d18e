@@ -1,0 +1,34 @@
+rust/src/multisig.rs
+  s_2754b412746d1c::t_41faf0f14d4370 128-132
+  s_2754b412746d1c::t_b4efc27f33451c 7-8
+  s_2754b412746d1c::t_95e5c2cb32f716 386-390
+  s_2754b412746d1c::t_fe9336f0582fab 288
+wasm/src/multisig.rs
+  s_2754b412746d1c::t_961bd09e277927 202-203
+  s_2754b412746d1c::t_e76ab400c7c2a7 31
+  s_2754b412746d1c::t_4d2a3469165e54 265
+  s_2754b412746d1c::t_51a67b6f2719de 63
+rust/src/transaction_builder.rs
+  s_2754b412746d1c::t_fc68f8525d0df7 104
+  s_2754b412746d1c::t_79238f3da300fb 806
+  s_2754b412746d1c::t_2f0522e0601c06 209,211-229
+wasm/src/utils/mod.rs
+  s_2754b412746d1c::t_e50684a90bf8d7 2-7,9
+  s_2754b412746d1c::t_abbebf2fc962dc 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f5ed376e2bc6b41f5db06cb518cb36ce1a53d18e",
+  "prompts": {},
+  "sessions": {
+    "s_2754b412746d1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2a65de7-ad11-48da-b5f8-94eec74a82f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
