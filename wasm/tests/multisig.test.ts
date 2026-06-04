@@ -19,13 +19,14 @@ import { connectForUserActions } from './helpers';
 
 jest.setTimeout(30_000);
 
+// Real Ed25519 pubkeys derived from fixed seeds (matches the Rust test and the
+// JS reference golden), returned deliberately out of canonical order.
 function fixedKeys(): Uint8Array[] {
-  const k1 = new Uint8Array(32).fill(1);
-  const k2 = new Uint8Array(32).fill(2);
-  const k3 = new Uint8Array(32);
-  k3[0] = 3;
-  // Deliberately out of canonical order
-  return [k2, k1, k3];
+  const seed2 = new Uint8Array(32).fill(2);
+  const seed1 = new Uint8Array(32).fill(1);
+  const seed3 = new Uint8Array(32);
+  seed3[0] = 3;
+  return [seed2, seed1, seed3].map((seed) => new Uint8Array(Keypair.fromBytes(seed).publicKey()));
 }
 
 // ── MultisigConfig ───────────────────────────────────────────────────────────
@@ -35,19 +36,18 @@ describe('MultisigConfig', () => {
     const config = new MultisigConfig(2, fixedKeys());
 
     expect(Buffer.from(config.credentialId()).toString('hex')).toBe(
-      '006c5d655c26965616afbf2702bad8096c54723f6571a4230d6bad3b9781645c',
+      'f316a57cd06be916c2c51677163de282c53b80d85b3208d680f6e9448b25c56b',
     );
-    expect(config.multisigId()).toBe('12eqdPWZ1QKcxSiFBVkcjDgKgHC7RVSqieZNnQUtKhMM');
+    expect(config.multisigId()).toBe('HMv6kdvx7sVBr59PJXfpeHYYoMktAhYP5iX41V4KakFC');
     expect(config.minSigners()).toBe(2);
   });
 
   test('canonicalizes pubkeys bytewise', () => {
-    const config = new MultisigConfig(2, fixedKeys());
-    const keys = config.pubkeys();
+    const keys = new MultisigConfig(2, fixedKeys()).pubkeys();
 
-    expect(keys[0][0]).toBe(1);
-    expect(keys[1][0]).toBe(2);
-    expect(keys[2][0]).toBe(3);
+    for (let i = 1; i < keys.length; i++) {
+      expect(Buffer.compare(Buffer.from(keys[i - 1]), Buffer.from(keys[i]))).toBeLessThan(0);
+    }
   });
 
   test('rejects invalid configurations', () => {
@@ -180,6 +180,19 @@ describe('Transaction.builder() uniqueness', () => {
         .maxFee(10_000_000n)
         .generation(1n)
         .nonce(7n)
+        .buildUnsigned(client),
+    ).toThrow();
+  });
+
+  test('nonce and window together are rejected', async () => {
+    const client = await connectForUserActions(['CancelAllOrders']);
+
+    expect(() =>
+      Transaction.builder()
+        .callMessage(User.cancelAllOrders())
+        .maxFee(10_000_000n)
+        .nonce(7n)
+        .window(99n)
         .buildUnsigned(client),
     ).toThrow();
   });

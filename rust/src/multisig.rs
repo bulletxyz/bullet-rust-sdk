@@ -46,6 +46,16 @@ impl MultisigConfig {
         if pubkeys.windows(2).any(|pair| pair[0] == pair[1]) {
             return Err(SDKError::InvalidMultisig("duplicate public key".to_string()));
         }
+        for pubkey in &pubkeys {
+            // Reject keys that aren't valid Ed25519 points — they could never
+            // produce a verifying signature, making the config uncompletable.
+            ed25519_dalek::VerifyingKey::from_bytes(pubkey).map_err(|_| {
+                SDKError::InvalidMultisig(format!(
+                    "invalid Ed25519 public key: {}",
+                    bs58::encode(pubkey).into_string()
+                ))
+            })?;
+        }
         if min_signers == 0 || min_signers as usize > pubkeys.len() {
             return Err(SDKError::InvalidMultisig(format!(
                 "min_signers must be 1-{}, got {min_signers}",
@@ -319,11 +329,16 @@ mod tests {
     use crate::types::CallMessage;
     use crate::{Keypair, SDKError, UnsignedTransaction};
 
-    /// Three fixed pubkeys, deliberately out of canonical (bytewise) order.
+    /// Three real Ed25519 pubkeys derived from fixed seeds, returned out of
+    /// canonical (bytewise) order. Derived from seeds so the golden vectors
+    /// below can be reproduced with the JS reference (`@noble/ed25519`).
     fn test_keys() -> Vec<[u8; 32]> {
-        let mut third = [0u8; 32];
-        third[0] = 3;
-        vec![[2u8; 32], [1u8; 32], third]
+        let mut seed3 = [0u8; 32];
+        seed3[0] = 3;
+        [[2u8; 32], [1u8; 32], seed3]
+            .into_iter()
+            .map(|seed| Keypair::from_bytes(seed).public_key().try_into().unwrap())
+            .collect()
     }
 
     fn test_config() -> MultisigConfig {
@@ -574,7 +589,7 @@ mod tests {
 
         assert_eq!(
             hex::encode(config.credential_id()),
-            "006c5d655c26965616afbf2702bad8096c54723f6571a4230d6bad3b9781645c"
+            "f316a57cd06be916c2c51677163de282c53b80d85b3208d680f6e9448b25c56b"
         );
     }
 
@@ -582,7 +597,7 @@ mod tests {
     fn multisig_id_is_base58_of_credential_id() {
         let config = MultisigConfig::new(2, test_keys()).unwrap();
 
-        assert_eq!(config.multisig_id(), "12eqdPWZ1QKcxSiFBVkcjDgKgHC7RVSqieZNnQUtKhMM");
+        assert_eq!(config.multisig_id(), "HMv6kdvx7sVBr59PJXfpeHYYoMktAhYP5iX41V4KakFC");
     }
 
     #[test]

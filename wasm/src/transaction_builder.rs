@@ -393,6 +393,10 @@ pub struct WasmTransactionBuilder {
     gas_limit: Option<[u64; 2]>,
     generation: Option<u64>,
     uniqueness: Option<UniquenessData>,
+    /// Set when more than one of `generation`/`nonce`/`window` was provided.
+    /// Surfaced as `ConflictingUniqueness` at build time (the setters return
+    /// the builder, not a `Result`, so they can't fail eagerly).
+    uniqueness_conflict: bool,
     signer: Option<WasmKeypair>,
 }
 
@@ -405,8 +409,18 @@ impl WasmTransactionBuilder {
             gas_limit: None,
             generation: None,
             uniqueness: None,
+            uniqueness_conflict: false,
             signer: None,
         }
+    }
+
+    /// Returns an error if multiple uniqueness sources were set, mirroring the
+    /// Rust builder's `ConflictingUniqueness` validation.
+    fn check_uniqueness(&self) -> WasmResult<()> {
+        if self.uniqueness_conflict {
+            return Err(bullet_rust_sdk::SDKError::ConflictingUniqueness.into());
+        }
+        Ok(())
     }
 }
 
@@ -451,6 +465,9 @@ impl WasmTransactionBuilder {
     /// @param {bigint} generation - The generation value to use.
     /// @returns {TransactionBuilder}
     pub fn generation(mut self, generation: u64) -> WasmTransactionBuilder {
+        if self.uniqueness.is_some() {
+            self.uniqueness_conflict = true;
+        }
         self.generation = Some(generation);
         self
     }
@@ -465,6 +482,9 @@ impl WasmTransactionBuilder {
     /// @param {bigint} nonce - The credential's current nonce.
     /// @returns {TransactionBuilder}
     pub fn nonce(mut self, nonce: u64) -> WasmTransactionBuilder {
+        if self.uniqueness.is_some() || self.generation.is_some() {
+            self.uniqueness_conflict = true;
+        }
         self.uniqueness = Some(UniquenessData::Nonce(nonce));
         self
     }
@@ -475,6 +495,9 @@ impl WasmTransactionBuilder {
     /// @param {bigint} window - The window value to use.
     /// @returns {TransactionBuilder}
     pub fn window(mut self, window: u64) -> WasmTransactionBuilder {
+        if self.uniqueness.is_some() || self.generation.is_some() {
+            self.uniqueness_conflict = true;
+        }
         self.uniqueness = Some(UniquenessData::Window(window));
         self
     }
@@ -501,6 +524,7 @@ impl WasmTransactionBuilder {
     /// ```
     #[wasm_bindgen(js_name = buildUnsigned)]
     pub fn build_unsigned(self, client: &WasmTradingApi) -> WasmResult<WasmUnsignedTransaction> {
+        self.check_uniqueness()?;
         let call_message = self.call_message.ok_or("call_message is required")?;
 
         let max_fee = self.max_fee.map(|f| f as u128).unwrap_or_else(|| client.inner.max_fee().0);
@@ -523,6 +547,7 @@ impl WasmTransactionBuilder {
 
     /// Build the signed transaction without sending it.
     pub fn build(self, client: &WasmTradingApi) -> WasmResult<WasmTransaction> {
+        self.check_uniqueness()?;
         let call_message = self.call_message.ok_or("call_message is required")?;
 
         let max_fee = self.max_fee.map(|f| f as u128);

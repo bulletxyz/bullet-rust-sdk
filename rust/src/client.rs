@@ -104,13 +104,23 @@ impl Network {
             Network::Testnet => Ok("https://rollup.testnet.bullet.xyz".to_string()),
             Network::Custom(url) => {
                 let parsed = Url::parse(url).map_err(|_| SDKError::InvalidNetworkUrl)?;
-                // Build from scheme + host + port so any embedded userinfo
-                // (`user:pass@`) in a custom URL is dropped.
                 let host = parsed.host_str().ok_or(SDKError::InvalidNetworkUrl)?;
-                Ok(match parsed.port() {
-                    Some(port) => format!("{}://{host}:{port}", parsed.scheme()),
-                    None => format!("{}://{host}", parsed.scheme()),
-                })
+                // A custom URL pointing at a canonical trading-API host still
+                // needs the matching rollup host (the trading API does not
+                // proxy `/rollup/*`). Matching on host — rather than the exact
+                // URL string in `From<&str>` — also covers explicit ports and
+                // directly-constructed `Network::Custom`.
+                match host {
+                    "tradingapi.bullet.xyz" => Network::Mainnet.rollup_url(),
+                    "tradingapi.testnet.bullet.xyz" => Network::Testnet.rollup_url(),
+                    // Other (self-hosted/local) deployments serve the rollup on
+                    // the same host. Build from scheme + host + port so any
+                    // embedded userinfo (`user:pass@`) is dropped.
+                    _ => Ok(match parsed.port() {
+                        Some(port) => format!("{}://{host}:{port}", parsed.scheme()),
+                        None => format!("{}://{host}", parsed.scheme()),
+                    }),
+                }
             }
         }
     }
@@ -551,6 +561,22 @@ mod tests {
         assert_eq!(
             Network::from("https://user:pass@staging.example.com").rollup_url().unwrap(),
             "https://staging.example.com"
+        );
+    }
+
+    #[test]
+    fn rollup_url_maps_custom_canonical_hosts_to_rollup() {
+        // A `Custom` built directly with a canonical trading-API host (bypassing
+        // `From<&str>`), or with an explicit port, still routes to the rollup.
+        assert_eq!(
+            Network::Custom("https://tradingapi.bullet.xyz".to_string()).rollup_url().unwrap(),
+            "https://rollup.mainnet.bullet.xyz"
+        );
+        assert_eq!(
+            Network::Custom("https://tradingapi.testnet.bullet.xyz:443".to_string())
+                .rollup_url()
+                .unwrap(),
+            "https://rollup.testnet.bullet.xyz"
         );
     }
 
