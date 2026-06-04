@@ -1,0 +1,47 @@
+rust/src/transaction_builder.rs
+  s_2754b412746d1c::t_e0a07b456319c0 44-46
+  s_2754b412746d1c::t_7da7c113f8e60c 1039,1044,1050-1053,1057,1062-1078
+  s_2754b412746d1c::t_1692c62fbab5bd 158,161-164
+  s_2754b412746d1c::t_44b04540fd48c7 434,436-438,443,446,448-451,456,459-468,470-472
+  s_2754b412746d1c::t_f5749b18375379 925
+  s_2754b412746d1c::t_edf5914840bcfc 174-175
+  s_2754b412746d1c::t_d5313df158911d 605,610
+wasm/README.md
+  s_2754b412746d1c::t_560b9221083a2d 114,116-119,121-122,127
+  s_2754b412746d1c::t_1fa8ae36cc0638 208-209
+wasm/tests/multisig.test.ts
+  s_2754b412746d1c::t_15f6b391ef15d9 174,177-182,185,188-195
+wasm/src/transaction_builder.rs
+  s_2754b412746d1c::t_4af462043363b0 443,445-449,451-452,456,458-459,461-462,466,468-469,471-472
+rust/src/multisig.rs
+  s_2754b412746d1c::t_62075d54658ad1 302,304-306,311
+  s_2754b412746d1c::t_b9c35eb2ed06fd 81
+  s_2754b412746d1c::t_a0aaaa69f15f5b 160-165
+rust/src/client.rs
+  s_2754b412746d1c::t_753bb29a72925d 47-52
+  s_2754b412746d1c::t_e652586c4482c7 102-104
+  s_2754b412746d1c::t_c8d6b05ccd7a00 182-185
+  s_2754b412746d1c::t_da6fa2199a3096 186,196,205-211
+  s_2754b412746d1c::t_9ff648f6c7be90 461-462
+  s_2754b412746d1c::t_d3095a722bb3e8 463
+  s_2754b412746d1c::t_a69f7a7664d0c0 9
+wasm/src/multisig.rs
+  s_2754b412746d1c::t_f62592deae5511 150,152
+  s_2754b412746d1c::t_e632a16f802768 82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0c0f2b0c54a88ee93f7863b0ecf7b8c9d24a3094",
+  "prompts": {},
+  "sessions": {
+    "s_2754b412746d1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2a65de7-ad11-48da-b5f8-94eec74a82f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
