@@ -391,12 +391,7 @@ pub struct WasmTransactionBuilder {
     max_fee: Option<u64>,
     priority_fee_bips: Option<u64>,
     gas_limit: Option<[u64; 2]>,
-    generation: Option<u64>,
     uniqueness: Option<UniquenessData>,
-    /// Set when more than one of `generation`/`nonce`/`window` was provided.
-    /// Surfaced as `ConflictingUniqueness` at build time (the setters return
-    /// the builder, not a `Result`, so they can't fail eagerly).
-    uniqueness_conflict: bool,
     signer: Option<WasmKeypair>,
 }
 
@@ -407,20 +402,9 @@ impl WasmTransactionBuilder {
             max_fee: None,
             priority_fee_bips: None,
             gas_limit: None,
-            generation: None,
             uniqueness: None,
-            uniqueness_conflict: false,
             signer: None,
         }
-    }
-
-    /// Returns an error if multiple uniqueness sources were set, mirroring the
-    /// Rust builder's `ConflictingUniqueness` validation.
-    fn check_uniqueness(&self) -> WasmResult<()> {
-        if self.uniqueness_conflict {
-            return Err(bullet_rust_sdk::SDKError::ConflictingUniqueness.into());
-        }
-        Ok(())
     }
 }
 
@@ -456,49 +440,36 @@ impl WasmTransactionBuilder {
         self
     }
 
-    /// Override the uniqueness generation value.
+    /// Use window-based uniqueness with an explicit value.
     ///
-    /// Defaults to the current unix timestamp in milliseconds, giving a
-    /// ~5-second deduplication window with the sequencer's 5000-generation window.
-    /// Pass a microsecond timestamp for a ~5ms window, or any other value as needed.
-    /// Mutually exclusive with `nonce` and `window`.
-    /// @param {bigint} generation - The generation value to use.
-    /// @returns {TransactionBuilder}
-    pub fn generation(mut self, generation: u64) -> WasmTransactionBuilder {
-        if self.uniqueness.is_some() {
-            self.uniqueness_conflict = true;
-        }
-        self.generation = Some(generation);
-        self
-    }
-
-    /// Use nonce-based uniqueness instead of a generation.
-    ///
-    /// The nonce must match the credential's current on-chain nonce — fetch it
-    /// via `client.credentialNonce(...)`. Use this for transactions whose
-    /// signatures are collected over a longer period (e.g. multisig), since
-    /// generations expire within seconds.
-    /// Mutually exclusive with `generation` and `window`.
-    /// @param {bigint} nonce - The credential's current nonce.
-    /// @returns {TransactionBuilder}
-    pub fn nonce(mut self, nonce: u64) -> WasmTransactionBuilder {
-        if self.uniqueness.is_some() || self.generation.is_some() {
-            self.uniqueness_conflict = true;
-        }
-        self.uniqueness = Some(UniquenessData::Nonce(nonce));
-        self
-    }
-
-    /// Use window-based uniqueness.
-    ///
-    /// Mutually exclusive with `generation` and `nonce`.
+    /// This is the default uniqueness mode (seeded with a microsecond unix
+    /// timestamp when unset); call this only to pin a specific value. Window
+    /// values must be unique per credential but need not be consecutive.
+    /// Setting `nonce`/`generation`/`window` more than once keeps the last.
     /// @param {bigint} window - The window value to use.
     /// @returns {TransactionBuilder}
     pub fn window(mut self, window: u64) -> WasmTransactionBuilder {
-        if self.uniqueness.is_some() || self.generation.is_some() {
-            self.uniqueness_conflict = true;
-        }
         self.uniqueness = Some(UniquenessData::Window(window));
+        self
+    }
+
+    /// Use generation-based uniqueness.
+    ///
+    /// Setting `nonce`/`generation`/`window` more than once keeps the last.
+    /// @param {bigint} generation - The generation value to use.
+    /// @returns {TransactionBuilder}
+    pub fn generation(mut self, generation: u64) -> WasmTransactionBuilder {
+        self.uniqueness = Some(UniquenessData::Generation(generation));
+        self
+    }
+
+    /// Use nonce-based uniqueness (unique and consecutive per credential).
+    ///
+    /// Setting `nonce`/`generation`/`window` more than once keeps the last.
+    /// @param {bigint} nonce - The credential nonce.
+    /// @returns {TransactionBuilder}
+    pub fn nonce(mut self, nonce: u64) -> WasmTransactionBuilder {
+        self.uniqueness = Some(UniquenessData::Nonce(nonce));
         self
     }
 
@@ -524,7 +495,6 @@ impl WasmTransactionBuilder {
     /// ```
     #[wasm_bindgen(js_name = buildUnsigned)]
     pub fn build_unsigned(self, client: &WasmTradingApi) -> WasmResult<WasmUnsignedTransaction> {
-        self.check_uniqueness()?;
         let call_message = self.call_message.ok_or("call_message is required")?;
 
         let max_fee = self.max_fee.map(|f| f as u128).unwrap_or_else(|| client.inner.max_fee().0);
@@ -537,7 +507,6 @@ impl WasmTransactionBuilder {
             .max_fee(max_fee)
             .priority_fee_bips(priority_fee_bips)
             .maybe_gas_limit(gas_limit)
-            .maybe_generation(self.generation)
             .maybe_uniqueness(self.uniqueness)
             .client(&client.inner)
             .build()?;
@@ -547,7 +516,6 @@ impl WasmTransactionBuilder {
 
     /// Build the signed transaction without sending it.
     pub fn build(self, client: &WasmTradingApi) -> WasmResult<WasmTransaction> {
-        self.check_uniqueness()?;
         let call_message = self.call_message.ok_or("call_message is required")?;
 
         let max_fee = self.max_fee.map(|f| f as u128);
@@ -559,7 +527,6 @@ impl WasmTransactionBuilder {
             .maybe_max_fee(max_fee)
             .maybe_priority_fee_bips(self.priority_fee_bips)
             .maybe_gas_limit(gas_limit)
-            .maybe_generation(self.generation)
             .maybe_uniqueness(self.uniqueness)
             .maybe_signer(signer_ref)
             .client(&client.inner)

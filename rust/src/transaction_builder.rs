@@ -39,10 +39,11 @@ use bullet_exchange_interface::transaction::{
     UniquenessData, UnsignedTransaction as RawUnsignedTransaction, Version0,
 };
 use serde_json::Value;
-use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::codegen::Error::ErrorResponse;
-use crate::generated::types::{ApiErrorResponse, SubmitTxRequest, SubmitTxResponse};
+use crate::generated::types::{
+    ApiErrorResponse, SubmitSolanaOffchainTxRequest, SubmitTxRequest, SubmitTxResponse,
+};
 use crate::types::CallMessage;
 use crate::{Client, Keypair, SDKError, SDKResult};
 
@@ -154,18 +155,13 @@ impl UnsignedTransaction {
         max_fee: u128,
         priority_fee_bips: u64,
         gas_limit: Option<Gas>,
-        /// Uniqueness generation value. Defaults to the current unix timestamp
-        /// in milliseconds, giving a ~5-second deduplication window with the
-        /// sequencer's default 5000-generation window.
-        ///
-        /// Mutually exclusive with `uniqueness`.
-        generation: Option<u64>,
-        /// Explicit uniqueness data ([`UniquenessData::Nonce`],
+        /// Transaction uniqueness ([`UniquenessData::Nonce`],
         /// [`UniquenessData::Generation`], or [`UniquenessData::Window`]).
         ///
-        /// Use `Nonce` for transactions whose signatures are collected over a
-        /// longer period (e.g. multisig) — generations expire within seconds.
-        /// Mutually exclusive with `generation`.
+        /// Defaults to [`UniquenessData::Window`] seeded with the current unix
+        /// timestamp in microseconds — a stateless, monotonic value that needs
+        /// no chain round-trip and tolerates many in-flight transactions. Set
+        /// explicitly to use a nonce or generation instead.
         uniqueness: Option<UniquenessData>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
@@ -175,17 +171,8 @@ impl UnsignedTransaction {
         }
 
         let runtime_call = RuntimeCall::Exchange(call_message);
-        let uniqueness = match (uniqueness, generation) {
-            (Some(_), Some(_)) => return Err(SDKError::ConflictingUniqueness),
-            (Some(uniqueness), None) => uniqueness,
-            (None, Some(generation)) => UniquenessData::Generation(generation),
-            (None, None) => UniquenessData::Generation(
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map_err(|_| SDKError::SystemTimeError)?
-                    .as_millis() as u64,
-            ),
-        };
+        let uniqueness =
+            uniqueness.unwrap_or_else(|| UniquenessData::Window(client.next_window_nonce()));
         let details = TxDetails {
             chain_id: client.chain_id(),
             max_fee: Amount(max_fee),
@@ -363,7 +350,6 @@ impl Transaction {
         max_fee: Option<u128>,
         priority_fee_bips: Option<u64>,
         gas_limit: Option<Gas>,
-        generation: Option<u64>,
         uniqueness: Option<UniquenessData>,
         signer: Option<&Keypair>,
         client: &Client,
@@ -380,7 +366,6 @@ impl Transaction {
             .max_fee(max_fee)
             .priority_fee_bips(priority_fee_bips)
             .maybe_gas_limit(gas_limit)
-            .maybe_generation(generation)
             .maybe_uniqueness(uniqueness)
             .client(client)
             .build()?;
@@ -446,55 +431,45 @@ impl Client {
         }
     }
 
-    /// Send a Solana offchain transaction to the sequencer.
+    /// Send a Solana offchain transaction to the network.
     ///
-    /// This posts to `/sequencer/solana_offchain_txs`, which accepts the
-    /// JSON-based Solana authenticator payload used by external Solana wallets.
+    /// Submits to the trading API's `/api/v1/solanaOffchainTx`, which accepts
+    /// the JSON-based Solana authenticator payload used by external Solana
+    /// wallets and proxies it to the rollup.
     pub async fn send_offchain_transaction(
         &self,
         signed: &SolanaOffchainTransaction,
     ) -> SDKResult<SubmitTxResponse> {
-        self.post_to_solana_offchain_url(signed.to_base64()?).await
+        self.submit_offchain(signed.to_base64()?).await
     }
 
-    /// Send a Solana Ledger transaction to the sequencer.
+    /// Send a Solana Ledger transaction to the network.
     ///
-    /// Posts the spec-compliant wire format to `/sequencer/solana_offchain_txs`.
-    /// Use after signing with [`UnsignedTransaction::to_ledger_signable_bytes`]
-    /// and assembling via [`SolanaLedgerTransaction::from_parts`].
+    /// Submits the spec-compliant wire format to the trading API's
+    /// `/api/v1/solanaOffchainTx`. Use after signing with
+    /// [`UnsignedTransaction::to_ledger_signable_bytes`] and assembling via
+    /// [`SolanaLedgerTransaction::from_parts`].
     pub async fn send_ledger_transaction(
         &self,
         signed: &SolanaLedgerTransaction,
     ) -> SDKResult<SubmitTxResponse> {
-        self.post_to_solana_offchain_url(signed.to_base64()).await
+        self.submit_offchain(signed.to_base64()).await
     }
 
-    pub(crate) async fn post_to_solana_offchain_url(
-        &self,
-        body: String,
-    ) -> SDKResult<SubmitTxResponse> {
-        let response = self
-            .http_client
-            .post(self.solana_offchain_url())
-            .json(&SubmitTxRequest { body })
-            .send()
-            .await?;
-        let status = response.status();
-        let bytes = response.bytes().await?;
-
-        if status.is_success() {
-            return serde_json::from_slice::<SubmitTxResponse>(&bytes).map_err(Into::into);
-        }
-
-        let error = serde_json::from_slice::<ApiErrorResponse>(&bytes).unwrap_or_else(|_| {
-            ApiErrorResponse {
-                status: status.as_u16(),
-                message: String::from_utf8_lossy(&bytes).into_owned(),
-                details: None,
-                error_id: None,
+    /// Submit a base64-encoded Solana offchain envelope via the trading API.
+    ///
+    /// Mirrors [`send_transaction`](Client::send_transaction)'s 401 handling:
+    /// an invalid-signature 401 triggers a schema refresh and surfaces as
+    /// [`SDKError::TransactionOutdated`] so the caller can re-sign.
+    pub(crate) async fn submit_offchain(&self, body: String) -> SDKResult<SubmitTxResponse> {
+        let request = SubmitSolanaOffchainTxRequest { body };
+        match self.client().submit_solana_offchain_tx(&request).await {
+            Err(ErrorResponse(response)) if response.status() == 401 => {
+                Err(self.submit_tx_api_error(response.into_inner()).await?)
             }
-        });
-        Err(self.submit_tx_api_error(error).await?)
+            Ok(r) => Ok(r.into_inner()),
+            Err(e) => Err(e.into()),
+        }
     }
 
     /// Build, sign, and submit a call message, retrying once if the chain hash
@@ -627,17 +602,12 @@ mod tests {
             .mount(&server)
             .await;
         Mock::given(method("POST"))
-            .and(path("/sequencer/solana_offchain_txs"))
+            .and(path("/api/v1/solanaOffchainTx"))
             .respond_with(offchain_response)
             .mount(&server)
             .await;
 
-        let client = Client::builder()
-            .network(server.uri())
-            .solana_offchain_url(format!("{}/sequencer/solana_offchain_txs", server.uri()))
-            .build()
-            .await
-            .unwrap();
+        let client = Client::builder().network(server.uri()).build().await.unwrap();
 
         (server, client)
     }
@@ -952,44 +922,10 @@ mod tests {
         let requests = server.received_requests().await.unwrap();
         let submit = requests
             .iter()
-            .find(|request| request.url.path() == "/sequencer/solana_offchain_txs")
+            .find(|request| request.url.path() == "/api/v1/solanaOffchainTx")
             .expect("expected a submission request");
         let body: serde_json::Value = serde_json::from_slice(&submit.body).unwrap();
         assert_eq!(body["body"], tx.to_base64().unwrap());
-    }
-
-    #[tokio::test]
-    async fn credential_nonce_queries_rollup_dedup_endpoint() {
-        let (server, client) =
-            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
-        let credential_id = [0xABu8; 32];
-        Mock::given(method("GET"))
-            .and(path(format!("/rollup/addresses/{}/dedup", hex::encode(credential_id))))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({ "nonce": 42 })),
-            )
-            .mount(&server)
-            .await;
-
-        let nonce = client.credential_nonce(&credential_id).await.unwrap();
-
-        assert_eq!(nonce, 42);
-    }
-
-    #[tokio::test]
-    async fn credential_nonce_errors_on_missing_nonce_field() {
-        let (server, client) =
-            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
-        let credential_id = [0xCDu8; 32];
-        Mock::given(method("GET"))
-            .and(path(format!("/rollup/addresses/{}/dedup", hex::encode(credential_id))))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
-            .mount(&server)
-            .await;
-
-        let err = client.credential_nonce(&credential_id).await.unwrap_err();
-
-        assert!(matches!(err, SDKError::RequestError(_)), "{err:?}");
     }
 
     #[test]
@@ -1100,26 +1036,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn builder_rejects_generation_and_uniqueness_together() {
-        let (_server, client) =
-            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
-        let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
-
-        let err = UnsignedTransaction::builder()
-            .call_message(call_msg)
-            .max_fee(10_000_000)
-            .priority_fee_bips(0)
-            .generation(1)
-            .uniqueness(UniquenessData::Nonce(7))
-            .client(&client)
-            .build()
-            .unwrap_err();
-
-        assert!(matches!(err, SDKError::ConflictingUniqueness), "{err:?}");
-    }
-
-    #[tokio::test]
-    async fn builder_defaults_to_generation_uniqueness() {
+    async fn builder_defaults_to_window_uniqueness() {
         let (_server, client) =
             mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
         let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
@@ -1133,7 +1050,32 @@ mod tests {
             .unwrap();
         let message: serde_json::Value =
             serde_json::from_slice(&unsigned.to_message_bytes().unwrap()).unwrap();
-        assert!(message["uniqueness"]["generation"].is_u64(), "{message}");
+        assert!(message["uniqueness"]["window"].is_u64(), "{message}");
+    }
+
+    #[tokio::test]
+    async fn builder_default_window_nonce_increments_per_tx() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+        let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
+
+        let window_of = |client: &Client| -> u64 {
+            let unsigned = UnsignedTransaction::builder()
+                .call_message(call_msg.clone())
+                .max_fee(10_000_000)
+                .priority_fee_bips(0)
+                .client(client)
+                .build()
+                .unwrap();
+            match unsigned.inner.uniqueness {
+                UniquenessData::Window(w) => w,
+                other => panic!("expected Window, got {other:?}"),
+            }
+        };
+
+        let first = window_of(&client);
+        let second = window_of(&client);
+        assert_eq!(second, first + 1, "window nonce must monotonically increment");
     }
 
     #[test]

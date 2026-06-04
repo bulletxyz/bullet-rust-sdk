@@ -171,29 +171,27 @@ describe('Transaction.builder() uniqueness', () => {
     expect(windowJson.uniqueness).toEqual({ window: 99 });
   });
 
-  test('generation and nonce together are rejected', async () => {
+  test('defaults to window uniqueness when none is set', async () => {
     const client = await connectForUserActions(['CancelAllOrders']);
 
-    expect(() =>
-      Transaction.builder()
-        .callMessage(User.cancelAllOrders())
-        .maxFee(10_000_000n)
-        .generation(1n)
-        .nonce(7n)
-        .buildUnsigned(client),
-    ).toThrow();
+    const unsigned = Transaction.builder()
+      .callMessage(User.cancelAllOrders())
+      .maxFee(10_000_000n)
+      .buildUnsigned(client);
+    const json = JSON.parse(Buffer.from(unsigned.toMessageBytes()).toString('utf8'));
+    expect(typeof json.uniqueness.window).toBe('number');
   });
 
-  test('nonce and window together are rejected', async () => {
+  test('the last uniqueness setter wins (one choice, no conflict)', async () => {
     const client = await connectForUserActions(['CancelAllOrders']);
 
-    expect(() =>
-      Transaction.builder()
-        .callMessage(User.cancelAllOrders())
-        .maxFee(10_000_000n)
-        .nonce(7n)
-        .window(99n)
-        .buildUnsigned(client),
-    ).toThrow();
+    const unsigned = Transaction.builder()
+      .callMessage(User.cancelAllOrders())
+      .maxFee(10_000_000n)
+      .nonce(7n)
+      .window(99n)
+      .buildUnsigned(client);
+    const json = JSON.parse(Buffer.from(unsigned.toMessageBytes()).toString('utf8'));
+    expect(json.uniqueness).toEqual({ window: 99 });
   });
 });

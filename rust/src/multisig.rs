@@ -78,8 +78,7 @@ impl MultisigConfig {
     /// The 32-byte credential id of this multisig:
     /// `sha256(min_signers_u8 || borsh(sorted pubkeys))`.
     ///
-    /// This is the account identity the rollup derives for the multisig; its
-    /// nonce can be fetched via [`Client::credential_nonce`](crate::Client).
+    /// This is the account identity the rollup derives for the multisig.
     pub fn credential_id(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(self.min_signers.to_le_bytes());
@@ -158,19 +157,17 @@ impl UnsignedTransaction {
 /// [`is_complete`](Self::is_complete), submit via
 /// [`Client::send_ledger_multisig_transaction`].
 ///
-/// Use [`UniquenessData::Nonce`](crate::UniquenessData) (not a generation):
-/// the signable bytes bake in the chain hash at construction time. If the
-/// chain hash rotates (a schema update) before enough signatures are
-/// collected, submission fails with [`SDKError::TransactionOutdated`] and the
-/// transaction must be rebuilt and re-signed by every signer — so prefer the
-/// stable nonce window over the few-second generation window.
+/// The signable bytes bake in the chain hash at construction time, so if the
+/// chain hash rotates (a schema update) before enough signatures are collected,
+/// submission fails with [`SDKError::TransactionOutdated`] and the transaction
+/// must be rebuilt and re-signed by every signer. The default `Window`
+/// uniqueness needs no chain round-trip; override via `.uniqueness(...)` only
+/// if you need a specific value.
 ///
 /// ```ignore
-/// let nonce = client.credential_nonce(&config.credential_id()).await?;
 /// let unsigned = UnsignedTransaction::builder()
 ///     .call_message(call_msg)
 ///     .max_fee(10_000_000)
-///     .uniqueness(UniquenessData::Nonce(nonce))
 ///     .client(&client)
 ///     .build()?;
 ///
@@ -302,16 +299,16 @@ impl SolanaLedgerMultisigTransaction {
 // ── Client methods ───────────────────────────────────────────────────────────
 
 impl crate::Client {
-    /// Send a completed multisig transaction to the sequencer.
+    /// Send a completed multisig transaction to the network.
     ///
-    /// Posts the spec-compliant multisig wire format to
-    /// `/sequencer/solana_offchain_txs`. The transaction must have collected
-    /// at least [`MultisigConfig::min_signers`] signatures.
+    /// Submits the spec-compliant multisig wire format to the trading API's
+    /// `/api/v1/solanaOffchainTx`. The transaction must have collected at least
+    /// [`MultisigConfig::min_signers`] signatures.
     pub async fn send_ledger_multisig_transaction(
         &self,
         signed: &SolanaLedgerMultisigTransaction,
     ) -> SDKResult<crate::SubmitTxResponse> {
-        self.post_to_solana_offchain_url(signed.to_base64()?).await
+        self.submit_offchain(signed.to_base64()?).await
     }
 }
 

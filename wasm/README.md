@@ -56,8 +56,6 @@ client.chainHash()           // Uint8Array (32 bytes)
 client.chainName()           // chain name used in Solana offchain messages
 client.url()                 // REST URL
 client.wsUrl()               // WebSocket URL
-client.solanaOffchainUrl()   // Solana offchain sequencer URL
-client.rollupUrl()           // rollup host base URL (offchain sequencer + dedup)
 client.maxFee()              // default max fee
 client.hasKeypair()          // whether a default keypair is set
 
@@ -113,27 +111,20 @@ const tx = Transaction.builder()
 await client.sendTransaction(tx);
 ```
 
-By default the uniqueness generation is a millisecond unix timestamp, giving
-a ~5-second deduplication window. Override with `.generation()` to pass any
-value — for example a microsecond timestamp for a ~5ms window:
+### Uniqueness (replay protection)
+
+Every transaction carries a uniqueness value. By default the SDK uses
+**window-based** uniqueness seeded with a microsecond unix timestamp and
+incremented per transaction — a stateless, monotonic value that needs no chain
+round-trip and tolerates many in-flight transactions.
+
+Override it with any one of `.window()`, `.generation()`, or `.nonce()` (these
+set the same single uniqueness value, so the last call wins):
 
 ```typescript
 const tx = Transaction.builder()
     .callMessage(msg)
-    .generation(BigInt(Date.now()) * 1000n)  // microseconds
-    .signer(keypair)
-    .send(client);
-```
-
-Nonce- and window-based uniqueness are also supported (mutually exclusive
-with `.generation()`). Use `.nonce()` when signatures are collected over a
-longer period (e.g. multisig) — generations expire within seconds:
-
-```typescript
-const nonce = await client.credentialNonce(credentialId); // current on-chain nonce
-const tx = Transaction.builder()
-    .callMessage(msg)
-    .nonce(nonce)
+    .nonce(42n)        // or .generation(n) / .window(n)
     .signer(keypair)
     .send(client);
 ```
@@ -214,8 +205,8 @@ tx.toBase64()  // base64 string (for WebSocket submission)
 ### SolanaOffchainTransaction
 
 Assembled after signing `unsigned.toMessageBytes()` with a Solana
-wallet. Submit it with `client.sendOffChainTransaction(tx)`, which posts
-to `/sequencer/solana_offchain_txs`.
+wallet. Submit it with `client.sendOffChainTransaction(tx)`, which posts to
+the trading API's `/api/v1/solanaOffchainTx`.
 
 ```typescript
 const pubKey = wallet.publicKey.toBytes(); // 32-byte Solana public key
@@ -241,14 +232,8 @@ config.multisigId()    // string — base58 credential id (committed into the si
 config.minSigners()    // number
 config.pubkeys()       // Uint8Array[] — canonical order
 
-// Multisig transactions must use nonce uniqueness (generations expire in
-// seconds, signature collection takes longer). Fetch the multisig
-// credential's current nonce:
-const nonce = await client.credentialNonce(config.credentialId());
-
 const unsigned = Transaction.builder()
     .callMessage(User.deposit(0, '1000.0'))
-    .nonce(nonce)
     .buildUnsigned(client);
 
 // Collect signatures — each signer signs the same signable bytes

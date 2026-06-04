@@ -6,11 +6,9 @@
 //!
 //! ```js
 //! const config = new MultisigConfig(2, [pubkeyA, pubkeyB, pubkeyC]);
-//! const nonce = await client.credentialNonce(config.credentialId());
 //!
 //! const unsigned = Transaction.builder()
 //!     .callMessage(callMsg)
-//!     .nonce(nonce)
 //!     .buildUnsigned(client);
 //!
 //! const tx = new SolanaLedgerMultisigTransaction(unsigned, config);
@@ -81,8 +79,7 @@ impl WasmMultisigConfig {
     /// The 32-byte credential id of this multisig:
     /// `sha256(min_signers_u8 || borsh(sorted pubkeys))`.
     ///
-    /// This is the account identity the rollup derives for the multisig; its
-    /// nonce can be fetched via `client.credentialNonce(...)`.
+    /// This is the account identity the rollup derives for the multisig.
     ///
     /// @returns {Uint8Array}
     #[wasm_bindgen(js_name = credentialId)]
@@ -150,11 +147,9 @@ impl WasmSolanaLedgerMultisigTransaction {
     /// Create a multisig transaction from an unsigned transaction and the
     /// signer set.
     ///
-    /// Use `nonce` uniqueness on the unsigned transaction (not `generation`):
-    /// the signable bytes bake in the chain hash at construction time, so if
+    /// The signable bytes bake in the chain hash at construction time, so if
     /// the chain hash rotates (a schema update) before enough signatures are
-    /// collected the submission fails and every signer must re-sign. The nonce
-    /// window is far more forgiving than the few-second generation window.
+    /// collected the submission fails and every signer must re-sign.
     ///
     /// Distribute `signableBytes()` to each signer rather than rebuilding the
     /// transaction independently — every signer must sign byte-identical input.
@@ -163,10 +158,8 @@ impl WasmSolanaLedgerMultisigTransaction {
     /// @param {MultisigConfig} config - The multisig signer set.
     /// @example
     /// ```js
-    /// const nonce = await client.credentialNonce(config.credentialId());
     /// const unsigned = Transaction.builder()
     ///     .callMessage(callMsg)
-    ///     .nonce(nonce)
     ///     .buildUnsigned(client);
     /// const tx = new SolanaLedgerMultisigTransaction(unsigned, config);
     /// ```
@@ -251,18 +244,5 @@ impl WasmTradingApi {
     ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
         let resp = self.inner.send_ledger_multisig_transaction(&tx.inner).await?;
         Ok(crate::generated::WasmSubmitTxResponse(resp))
-    }
-
-    /// Fetch the current transaction nonce for a credential from the rollup.
-    ///
-    /// Use with `Transaction.builder().nonce(...)` — e.g. for multisig
-    /// transactions, pass `config.credentialId()`.
-    ///
-    /// @param {Uint8Array} credentialId - The 32-byte credential id.
-    /// @returns {Promise<bigint>}
-    #[wasm_bindgen(js_name = credentialNonce)]
-    pub async fn credential_nonce(&self, credential_id: &[u8]) -> WasmResult<u64> {
-        let credential_id = to_fixed_bytes::<32>(credential_id, "credential id")?;
-        Ok(self.inner.credential_nonce(&credential_id).await?)
     }
 }
