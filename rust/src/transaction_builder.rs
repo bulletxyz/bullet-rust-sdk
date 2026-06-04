@@ -52,10 +52,11 @@ use crate::{Client, Keypair, SDKError, SDKResult};
 ///
 /// Created by [`UnsignedTransaction::build`]. Contains everything
 /// needed to produce signable bytes without a client reference.
+#[derive(Debug)]
 pub struct UnsignedTransaction {
-    inner: RawUnsignedTransaction,
-    chain_hash: [u8; 32],
-    chain_name: String,
+    pub(crate) inner: RawUnsignedTransaction,
+    pub(crate) chain_hash: [u8; 32],
+    pub(crate) chain_name: String,
 }
 
 #[bon]
@@ -158,7 +159,16 @@ impl UnsignedTransaction {
         /// Uniqueness generation value. Defaults to the current unix timestamp
         /// in milliseconds, giving a ~5-second deduplication window with the
         /// sequencer's default 5000-generation window.
+        ///
+        /// Mutually exclusive with `uniqueness`.
         generation: Option<u64>,
+        /// Explicit uniqueness data ([`UniquenessData::Nonce`],
+        /// [`UniquenessData::Generation`], or [`UniquenessData::Window`]).
+        ///
+        /// Use `Nonce` for transactions whose signatures are collected over a
+        /// longer period (e.g. multisig) — generations expire within seconds.
+        /// Mutually exclusive with `generation`.
+        uniqueness: Option<UniquenessData>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
         // Check whether the call message was part of the schema validation.
@@ -167,14 +177,17 @@ impl UnsignedTransaction {
         }
 
         let runtime_call = RuntimeCall::Exchange(call_message);
-        let generation = match generation {
-            Some(g) => g,
-            None => SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(|_| SDKError::SystemTimeError)?
-                .as_millis() as u64,
+        let uniqueness = match (uniqueness, generation) {
+            (Some(_), Some(_)) => return Err(SDKError::ConflictingUniqueness),
+            (Some(uniqueness), None) => uniqueness,
+            (None, Some(generation)) => UniquenessData::Generation(generation),
+            (None, None) => UniquenessData::Generation(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(|_| SDKError::SystemTimeError)?
+                    .as_millis() as u64,
+            ),
         };
-        let uniqueness = UniquenessData::Generation(generation);
         let details = TxDetails {
             chain_id: client.chain_id(),
             max_fee: Amount(max_fee),
@@ -351,6 +364,7 @@ impl Transaction {
         priority_fee_bips: Option<u64>,
         gas_limit: Option<Gas>,
         generation: Option<u64>,
+        uniqueness: Option<UniquenessData>,
         signer: Option<&Keypair>,
         client: &Client,
     ) -> SDKResult<SignedTransaction> {
@@ -367,6 +381,7 @@ impl Transaction {
             .priority_fee_bips(priority_fee_bips)
             .maybe_gas_limit(gas_limit)
             .maybe_generation(generation)
+            .maybe_uniqueness(uniqueness)
             .client(client)
             .build()?;
 
@@ -454,7 +469,10 @@ impl Client {
         self.post_to_solana_offchain_url(signed.to_base64()).await
     }
 
-    async fn post_to_solana_offchain_url(&self, body: String) -> SDKResult<SubmitTxResponse> {
+    pub(crate) async fn post_to_solana_offchain_url(
+        &self,
+        body: String,
+    ) -> SDKResult<SubmitTxResponse> {
         let response = self
             .http_client
             .post(self.solana_offchain_url())
@@ -903,6 +921,77 @@ mod tests {
         assert_eq!(schema_requests, 2);
     }
 
+    #[tokio::test]
+    async fn send_ledger_multisig_transaction_posts_base64_envelope() {
+        let (server, client) = mock_client_for_offchain_submission(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "0xabc",
+                "status": "submitted",
+            })),
+        )
+        .await;
+
+        let mut keypairs: Vec<Keypair> = (0..3).map(|_| Keypair::generate()).collect();
+        keypairs.sort_by_key(|kp| kp.public_key());
+        let pubkeys: Vec<[u8; 32]> =
+            keypairs.iter().map(|kp| kp.public_key().try_into().unwrap()).collect();
+        let config = crate::multisig::MultisigConfig::new(2, pubkeys).unwrap();
+
+        let mut tx =
+            crate::multisig::SolanaLedgerMultisigTransaction::new(test_unsigned_tx(), config)
+                .unwrap();
+        for keypair in &keypairs[..2] {
+            let pubkey: [u8; 32] = keypair.public_key().try_into().unwrap();
+            let signature: [u8; 64] = keypair.sign(tx.signable_bytes()).try_into().unwrap();
+            tx.add_signature(pubkey, signature).unwrap();
+        }
+
+        let response = client.send_ledger_multisig_transaction(&tx).await.unwrap();
+
+        assert_eq!(response.id, "0xabc");
+        let requests = server.received_requests().await.unwrap();
+        let submit = requests
+            .iter()
+            .find(|request| request.url.path() == "/sequencer/solana_offchain_txs")
+            .expect("expected a submission request");
+        let body: serde_json::Value = serde_json::from_slice(&submit.body).unwrap();
+        assert_eq!(body["body"], tx.to_base64().unwrap());
+    }
+
+    #[tokio::test]
+    async fn credential_nonce_queries_rollup_dedup_endpoint() {
+        let (server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+        let credential_id = [0xABu8; 32];
+        Mock::given(method("GET"))
+            .and(path(format!("/rollup/addresses/{}/dedup", hex::encode(credential_id))))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({ "nonce": 42 })),
+            )
+            .mount(&server)
+            .await;
+
+        let nonce = client.credential_nonce(&credential_id).await.unwrap();
+
+        assert_eq!(nonce, 42);
+    }
+
+    #[tokio::test]
+    async fn credential_nonce_errors_on_missing_nonce_field() {
+        let (server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+        let credential_id = [0xCDu8; 32];
+        Mock::given(method("GET"))
+            .and(path(format!("/rollup/addresses/{}/dedup", hex::encode(credential_id))))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .mount(&server)
+            .await;
+
+        let err = client.credential_nonce(&credential_id).await.unwrap_err();
+
+        assert!(matches!(err, SDKError::RequestError(_)), "{err:?}");
+    }
+
     #[test]
     fn solana_offchain_transaction_wraps_signed_json_message() {
         let keypair = Keypair::generate();
@@ -977,6 +1066,74 @@ mod tests {
         let schema_requests =
             requests.iter().filter(|request| request.url.path() == "/rollup/schema").count();
         assert_eq!(schema_requests, 2);
+    }
+
+    #[tokio::test]
+    async fn builder_uniqueness_nonce_and_window_serialize_to_json() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+        let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
+
+        let unsigned = UnsignedTransaction::builder()
+            .call_message(call_msg.clone())
+            .max_fee(10_000_000)
+            .priority_fee_bips(0)
+            .uniqueness(UniquenessData::Nonce(7))
+            .client(&client)
+            .build()
+            .unwrap();
+        let message: serde_json::Value =
+            serde_json::from_slice(&unsigned.to_message_bytes().unwrap()).unwrap();
+        assert_eq!(message["uniqueness"]["nonce"], 7);
+
+        let unsigned = UnsignedTransaction::builder()
+            .call_message(call_msg)
+            .max_fee(10_000_000)
+            .priority_fee_bips(0)
+            .uniqueness(UniquenessData::Window(99))
+            .client(&client)
+            .build()
+            .unwrap();
+        let message: serde_json::Value =
+            serde_json::from_slice(&unsigned.to_message_bytes().unwrap()).unwrap();
+        assert_eq!(message["uniqueness"]["window"], 99);
+    }
+
+    #[tokio::test]
+    async fn builder_rejects_generation_and_uniqueness_together() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+        let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
+
+        let err = UnsignedTransaction::builder()
+            .call_message(call_msg)
+            .max_fee(10_000_000)
+            .priority_fee_bips(0)
+            .generation(1)
+            .uniqueness(UniquenessData::Nonce(7))
+            .client(&client)
+            .build()
+            .unwrap_err();
+
+        assert!(matches!(err, SDKError::ConflictingUniqueness), "{err:?}");
+    }
+
+    #[tokio::test]
+    async fn builder_defaults_to_generation_uniqueness() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+        let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
+
+        let unsigned = UnsignedTransaction::builder()
+            .call_message(call_msg)
+            .max_fee(10_000_000)
+            .priority_fee_bips(0)
+            .client(&client)
+            .build()
+            .unwrap();
+        let message: serde_json::Value =
+            serde_json::from_slice(&unsigned.to_message_bytes().unwrap()).unwrap();
+        assert!(message["uniqueness"]["generation"].is_u64(), "{message}");
     }
 
     #[test]

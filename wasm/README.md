@@ -57,6 +57,7 @@ client.chainName()           // chain name used in Solana offchain messages
 client.url()                 // REST URL
 client.wsUrl()               // WebSocket URL
 client.solanaOffchainUrl()   // Solana offchain sequencer URL
+client.rollupUrl()           // rollup host base URL (offchain sequencer + dedup)
 client.maxFee()              // default max fee
 client.hasKeypair()          // whether a default keypair is set
 
@@ -120,6 +121,19 @@ value — for example a microsecond timestamp for a ~5ms window:
 const tx = Transaction.builder()
     .callMessage(msg)
     .generation(BigInt(Date.now()) * 1000n)  // microseconds
+    .signer(keypair)
+    .send(client);
+```
+
+Nonce- and window-based uniqueness are also supported (mutually exclusive
+with `.generation()`). Use `.nonce()` when signatures are collected over a
+longer period (e.g. multisig) — generations expire within seconds:
+
+```typescript
+const nonce = await client.credentialNonce(credentialId); // current on-chain nonce
+const tx = Transaction.builder()
+    .callMessage(msg)
+    .nonce(nonce)
     .signer(keypair)
     .send(client);
 ```
@@ -210,6 +224,50 @@ const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
 tx.toBytes()   // Uint8Array (borsh offchain envelope)
 tx.toBase64()  // base64 string
 ```
+
+### Multisig
+
+M-of-N multisig over the spec-compliant Solana offchain format (the format
+Ledger hardware wallets sign). Every signer signs the same bytes; once the
+threshold is met the transaction can be submitted.
+
+```typescript
+// 2-of-3 multisig. Keys are canonicalized (sorted) internally, so input
+// order never matters.
+const config = new MultisigConfig(2, [pubkeyA, pubkeyB, pubkeyC]);
+
+config.credentialId()  // Uint8Array — sha256(minSigners || borsh(sorted pubkeys))
+config.multisigId()    // string — base58 credential id (committed into the signed message)
+config.minSigners()    // number
+config.pubkeys()       // Uint8Array[] — canonical order
+
+// Multisig transactions must use nonce uniqueness (generations expire in
+// seconds, signature collection takes longer). Fetch the multisig
+// credential's current nonce:
+const nonce = await client.credentialNonce(config.credentialId());
+
+const unsigned = Transaction.builder()
+    .callMessage(User.deposit(0, '1000.0'))
+    .nonce(nonce)
+    .buildUnsigned(client);
+
+// Collect signatures — each signer signs the same signable bytes
+const tx = new SolanaLedgerMultisigTransaction(unsigned, config);
+const signature = await ledgerWallet.signMessage(tx.signableBytes());
+tx.addSignature(pubkeyA, signature);   // validates membership + signature
+// ... pass tx.signableBytes() to the other signers ...
+tx.addSignature(pubkeyB, signatureB);
+
+tx.signatureCount() // number
+tx.isComplete()     // true once minSigners signatures are collected
+
+// Submit (throws if below threshold)
+await client.sendLedgerMultisigTransaction(tx);
+```
+
+The signable bytes can also be produced without assembling a transaction:
+`unsigned.toLedgerMultisigSignableBytes(config)` (preamble + JSON) and
+`unsigned.toMultisigMessageBytes(config)` (JSON payload only).
 
 ### Keypair
 

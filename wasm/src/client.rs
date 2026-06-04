@@ -130,6 +130,16 @@ impl WasmTradingApi {
         self.inner.solana_offchain_url().to_string()
     }
 
+    /// Rollup host base URL.
+    ///
+    /// Serves endpoints the trading API does not proxy — the Solana offchain
+    /// sequencer and credential dedup (used by `credentialNonce`).
+    /// @returns {string}
+    #[wasm_bindgen(js_name = rollupUrl)]
+    pub fn rollup_url(&self) -> String {
+        self.inner.rollup_url().to_string()
+    }
+
     /// Get the default max fee for transactions.
     #[wasm_bindgen(js_name = maxFee)]
     pub fn max_fee(&self) -> u64 {

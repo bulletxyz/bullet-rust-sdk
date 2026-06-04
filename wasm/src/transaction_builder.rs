@@ -40,7 +40,7 @@ use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{
     SolanaLedgerTransaction as RustSolanaLedgerTransaction,
     SolanaOffchainTransaction as RustSolanaOffchainTransaction, Transaction as RustTransaction,
-    UnsignedTransaction,
+    UniquenessData, UnsignedTransaction,
 };
 use wasm_bindgen::prelude::*;
 
@@ -383,6 +383,7 @@ impl WasmTransactionEntry {
 /// - `priorityFeeBips` - Priority fee in basis points
 /// - `gasLimit` - Optional gas limit [ref_time, proof_size]
 /// - `generation` - Uniqueness generation value (default: current unix timestamp in milliseconds)
+/// - `nonce` / `window` - Alternative uniqueness types (mutually exclusive with `generation`)
 /// - `signer` - Keypair to sign the transaction (not required for `buildUnsigned`)
 #[wasm_bindgen(js_name = TransactionBuilder)]
 pub struct WasmTransactionBuilder {
@@ -391,6 +392,7 @@ pub struct WasmTransactionBuilder {
     priority_fee_bips: Option<u64>,
     gas_limit: Option<[u64; 2]>,
     generation: Option<u64>,
+    uniqueness: Option<UniquenessData>,
     signer: Option<WasmKeypair>,
 }
 
@@ -402,6 +404,7 @@ impl WasmTransactionBuilder {
             priority_fee_bips: None,
             gas_limit: None,
             generation: None,
+            uniqueness: None,
             signer: None,
         }
     }
@@ -444,10 +447,35 @@ impl WasmTransactionBuilder {
     /// Defaults to the current unix timestamp in milliseconds, giving a
     /// ~5-second deduplication window with the sequencer's 5000-generation window.
     /// Pass a microsecond timestamp for a ~5ms window, or any other value as needed.
+    /// Mutually exclusive with `nonce` and `window`.
     /// @param {bigint} generation - The generation value to use.
     /// @returns {TransactionBuilder}
     pub fn generation(mut self, generation: u64) -> WasmTransactionBuilder {
         self.generation = Some(generation);
+        self
+    }
+
+    /// Use nonce-based uniqueness instead of a generation.
+    ///
+    /// The nonce must match the credential's current on-chain nonce — fetch it
+    /// via `client.credentialNonce(...)`. Use this for transactions whose
+    /// signatures are collected over a longer period (e.g. multisig), since
+    /// generations expire within seconds.
+    /// Mutually exclusive with `generation` and `window`.
+    /// @param {bigint} nonce - The credential's current nonce.
+    /// @returns {TransactionBuilder}
+    pub fn nonce(mut self, nonce: u64) -> WasmTransactionBuilder {
+        self.uniqueness = Some(UniquenessData::Nonce(nonce));
+        self
+    }
+
+    /// Use window-based uniqueness.
+    ///
+    /// Mutually exclusive with `generation` and `nonce`.
+    /// @param {bigint} window - The window value to use.
+    /// @returns {TransactionBuilder}
+    pub fn window(mut self, window: u64) -> WasmTransactionBuilder {
+        self.uniqueness = Some(UniquenessData::Window(window));
         self
     }
 
@@ -486,6 +514,7 @@ impl WasmTransactionBuilder {
             .priority_fee_bips(priority_fee_bips)
             .maybe_gas_limit(gas_limit)
             .maybe_generation(self.generation)
+            .maybe_uniqueness(self.uniqueness)
             .client(&client.inner)
             .build()?;
 
@@ -506,6 +535,7 @@ impl WasmTransactionBuilder {
             .maybe_priority_fee_bips(self.priority_fee_bips)
             .maybe_gas_limit(gas_limit)
             .maybe_generation(self.generation)
+            .maybe_uniqueness(self.uniqueness)
             .maybe_signer(signer_ref)
             .client(&client.inner)
             .build()?;

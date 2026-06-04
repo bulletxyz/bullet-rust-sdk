@@ -37,6 +37,7 @@ pub struct Client {
     rest_url: String,
     ws_url: String,
     solana_offchain_url: String,
+    rollup_url: String,
     generated_client: GeneratedClient,
     pub(crate) http_client: reqwest::Client,
     pub(crate) ws_client: reqwest::Client,
@@ -90,13 +91,39 @@ impl Network {
             Network::Custom(url) => url,
         }
     }
+
+    /// The rollup host base URL.
+    ///
+    /// The public networks front a separate rollup host that serves endpoints
+    /// the trading API does not proxy — the Solana offchain sequencer and
+    /// credential dedup (`/rollup/addresses/.../dedup`). Custom deployments are
+    /// assumed to serve the rollup on the same host as the REST API.
+    pub fn rollup_url(&self) -> SDKResult<String> {
+        match self {
+            Network::Mainnet => Ok("https://rollup.mainnet.bullet.xyz".to_string()),
+            Network::Testnet => Ok("https://rollup.testnet.bullet.xyz".to_string()),
+            Network::Custom(url) => {
+                let parsed = Url::parse(url).map_err(|_| SDKError::InvalidNetworkUrl)?;
+                // Build from scheme + host + port so any embedded userinfo
+                // (`user:pass@`) in a custom URL is dropped.
+                let host = parsed.host_str().ok_or(SDKError::InvalidNetworkUrl)?;
+                Ok(match parsed.port() {
+                    Some(port) => format!("{}://{host}:{port}", parsed.scheme()),
+                    None => format!("{}://{host}", parsed.scheme()),
+                })
+            }
+        }
+    }
 }
 
 impl From<&str> for Network {
     fn from(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "mainnet" => Network::Mainnet,
-            "testnet" => Network::Testnet,
+        // Recognize the canonical trading-API URLs as their named networks so
+        // the typed `Network` carries the identity downstream (e.g. for
+        // `rollup_url`), rather than degrading to an opaque `Custom`.
+        match s.to_lowercase().trim_end_matches('/') {
+            "mainnet" | "https://tradingapi.bullet.xyz" => Network::Mainnet,
+            "testnet" | "https://tradingapi.testnet.bullet.xyz" => Network::Testnet,
             _ => Network::Custom(s.to_string()),
         }
     }
@@ -136,7 +163,9 @@ impl Client {
         /// Override the Solana offchain sequencer endpoint.
         ///
         /// By default this is derived from the selected Bullet network and used
-        /// by `Client::send_offchain_transaction`.
+        /// by `Client::send_offchain_transaction`. Overriding it does not change
+        /// the rollup host used by `Client::credential_nonce` (that always comes
+        /// from the network); set them in tandem if your rollup lives elsewhere.
         #[builder(into)]
         solana_offchain_url: Option<String>,
         /// Restrict schema validation to specific `UserAction` variants.
@@ -162,8 +191,9 @@ impl Client {
         };
         let http_client = reqwest_client.unwrap_or_default();
         let generated_client = GeneratedClient::new_with_client(&rest_url, http_client.clone());
-        let solana_offchain_url =
-            solana_offchain_url.unwrap_or_else(|| Self::default_solana_offchain_url(&rest_url));
+        let rollup_url = network.rollup_url()?;
+        let solana_offchain_url = solana_offchain_url
+            .unwrap_or_else(|| format!("{rollup_url}/sequencer/solana_offchain_txs"));
 
         // WebSocket requires HTTP/1.1 (HTTP/2 does not support the Upgrade mechanism).
         // We always build a dedicated HTTP/1.1 client for WS, regardless of whether
@@ -186,6 +216,7 @@ impl Client {
             rest_url,
             ws_url,
             solana_offchain_url,
+            rollup_url,
             generated_client,
             http_client,
             ws_client,
@@ -247,24 +278,6 @@ impl Client {
         *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.") =
             chain_data.chain_hash;
         Ok(())
-    }
-
-    fn default_solana_offchain_url(rest_url: &str) -> String {
-        let Ok(parsed) = Url::parse(rest_url) else {
-            return rest_url.to_string();
-        };
-
-        let path = "/sequencer/solana_offchain_txs";
-        match parsed.host_str() {
-            Some("tradingapi.bullet.xyz") => {
-                "https://rollup.mainnet.bullet.xyz/sequencer/solana_offchain_txs".to_string()
-            }
-            Some("tradingapi.testnet.bullet.xyz") => {
-                "https://rollup.testnet.bullet.xyz/sequencer/solana_offchain_txs".to_string()
-            }
-            Some(_) => format!("{}://{}{}", parsed.scheme(), parsed.authority(), path),
-            None => rest_url.to_string(),
-        }
     }
 
     /// Decides whether a given enum variant should be included in the schema
@@ -372,6 +385,35 @@ impl Client {
         &self.user_actions
     }
 
+    /// Fetch the current transaction nonce for a credential from the rollup.
+    ///
+    /// Use with [`UniquenessData::Nonce`](crate::UniquenessData) — e.g. for
+    /// multisig transactions, pass
+    /// [`MultisigConfig::credential_id`](crate::MultisigConfig::credential_id).
+    ///
+    /// Queries `GET /rollup/addresses/{credential_id_hex}/dedup` on the
+    /// network's rollup host (the trading API does not proxy this endpoint).
+    pub async fn credential_nonce(&self, credential_id: &[u8; 32]) -> SDKResult<u64> {
+        let url =
+            format!("{}/rollup/addresses/{}/dedup", self.rollup_url, hex::encode(credential_id));
+        let response = self.http_client.get(url).send().await?;
+        let status = response.status();
+        let bytes = response.bytes().await?;
+        if !status.is_success() {
+            return Err(SDKError::RequestError(format!(
+                "dedup request failed with status {status}: {}",
+                String::from_utf8_lossy(&bytes)
+            )));
+        }
+        let value: serde_json::Value = serde_json::from_slice(&bytes)?;
+        value.get("nonce").and_then(serde_json::Value::as_u64).ok_or_else(|| {
+            SDKError::RequestError(format!(
+                "dedup response missing numeric `nonce` field: {}",
+                String::from_utf8_lossy(&bytes)
+            ))
+        })
+    }
+
     /// The REST API URL.
     pub fn url(&self) -> &str {
         &self.rest_url
@@ -384,6 +426,14 @@ impl Client {
     /// The Solana offchain sequencer URL.
     pub fn solana_offchain_url(&self) -> &str {
         &self.solana_offchain_url
+    }
+
+    /// The rollup host base URL.
+    ///
+    /// Serves endpoints the trading API does not proxy — the Solana offchain
+    /// sequencer and credential dedup (used by [`Client::credential_nonce`]).
+    pub fn rollup_url(&self) -> &str {
+        &self.rollup_url
     }
 
     /// Get the default keypair for signing transactions.
@@ -471,25 +521,36 @@ mod tests {
     use crate::types::UserAction;
 
     #[test]
-    fn default_solana_offchain_url_derives_non_public_bullet_hosts_from_rest_url() {
-        let environment = ["stag", "ing"].concat();
-        let rest_url = format!("https://tradingapi.{environment}.bullet.xyz");
-
-        assert_eq!(
-            Client::default_solana_offchain_url(&rest_url),
-            format!("{rest_url}/sequencer/solana_offchain_txs")
-        );
+    fn network_recognizes_canonical_trading_api_urls() {
+        assert!(matches!(Network::from("https://tradingapi.bullet.xyz"), Network::Mainnet));
+        assert!(matches!(Network::from("https://tradingapi.bullet.xyz/"), Network::Mainnet));
+        assert!(matches!(Network::from("https://tradingapi.testnet.bullet.xyz"), Network::Testnet));
+        assert!(matches!(Network::from("https://custom.example.com"), Network::Custom(_)));
     }
 
     #[test]
-    fn default_solana_offchain_url_maps_known_public_networks_to_rollup() {
+    fn rollup_url_maps_public_networks_to_rollup_host() {
+        // The trading API does not proxy /rollup/* — the dedup endpoint must
+        // target the rollup host, not tradingapi.
+        assert_eq!(Network::Mainnet.rollup_url().unwrap(), "https://rollup.mainnet.bullet.xyz");
+        assert_eq!(Network::Testnet.rollup_url().unwrap(), "https://rollup.testnet.bullet.xyz");
+    }
+
+    #[test]
+    fn rollup_url_derives_custom_hosts_from_their_authority() {
         assert_eq!(
-            Client::default_solana_offchain_url("https://tradingapi.bullet.xyz"),
-            "https://rollup.mainnet.bullet.xyz/sequencer/solana_offchain_txs"
+            Network::from("http://localhost:8080").rollup_url().unwrap(),
+            "http://localhost:8080"
         );
+        // A custom host with a path keeps only scheme + authority.
         assert_eq!(
-            Client::default_solana_offchain_url("https://tradingapi.testnet.bullet.xyz"),
-            "https://rollup.testnet.bullet.xyz/sequencer/solana_offchain_txs"
+            Network::from("https://staging.example.com/api").rollup_url().unwrap(),
+            "https://staging.example.com"
+        );
+        // Any embedded userinfo is dropped.
+        assert_eq!(
+            Network::from("https://user:pass@staging.example.com").rollup_url().unwrap(),
+            "https://staging.example.com"
         );
     }
 

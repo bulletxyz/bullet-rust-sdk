@@ -134,6 +134,12 @@ pub enum SDKError {
     #[error("Transaction is outdated - need to re-sign again.")]
     TransactionOutdated,
 
+    #[error("Cannot set both `generation` and `uniqueness` on the transaction builder")]
+    ConflictingUniqueness,
+
+    #[error("Invalid multisig: {0}")]
+    InvalidMultisig(String),
+
     #[error(transparent)]
     WebsocketError(#[from] Box<WSErrors>),
 }
