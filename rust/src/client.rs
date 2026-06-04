@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use bon::bon;
 use bullet_exchange_interface::message::UserActionDiscriminants;
@@ -45,10 +46,10 @@ pub struct Client {
     user_actions: Option<Vec<UserActionDiscriminants>>,
 
     /// Monotonic counter for the default `Window` uniqueness. Seeded with the
-    /// microsecond unix timestamp at construction and incremented per
-    /// transaction, giving unique, ever-increasing values (burst-safe, and the
-    /// micros seed stays above the on-chain window floor across restarts).
-    window_nonce: Mutex<u64>,
+    /// millisecond unix timestamp at construction and incremented per
+    /// transaction, giving unique, ever-increasing values that need no chain
+    /// round-trip (the timestamp seed stays above the on-chain window floor).
+    window_nonce: AtomicU64,
 
     keypair: Option<Keypair>,
 
@@ -182,7 +183,7 @@ impl Client {
         let window_seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| SDKError::SystemTimeError)?
-            .as_micros() as u64;
+            .as_millis() as u64;
 
         Ok(Self {
             rest_url,
@@ -193,7 +194,7 @@ impl Client {
             chain_hash: Mutex::new(chain_data.chain_hash),
             chain_name: chain_data.chain_name,
             user_actions,
-            window_nonce: Mutex::new(window_seed),
+            window_nonce: AtomicU64::new(window_seed),
             gas_limit,
             max_priority_fee_bips,
             max_fee,
@@ -205,10 +206,7 @@ impl Client {
     /// Return the next value for the default `Window` uniqueness and advance the
     /// counter. Monotonic and unique per client instance.
     pub(crate) fn next_window_nonce(&self) -> u64 {
-        let mut counter = self.window_nonce.lock().expect("window nonce lock poisoned");
-        let value = *counter;
-        *counter = counter.saturating_add(1);
-        value
+        self.window_nonce.fetch_add(1, Ordering::Relaxed)
     }
 
     async fn fetch_schema(

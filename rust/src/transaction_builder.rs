@@ -158,10 +158,11 @@ impl UnsignedTransaction {
         /// Transaction uniqueness ([`UniquenessData::Nonce`],
         /// [`UniquenessData::Generation`], or [`UniquenessData::Window`]).
         ///
-        /// Defaults to [`UniquenessData::Window`] seeded with the current unix
-        /// timestamp in microseconds — a stateless, monotonic value that needs
-        /// no chain round-trip and tolerates many in-flight transactions. Set
-        /// explicitly to use a nonce or generation instead.
+        /// Defaults to [`UniquenessData::Window`] from a per-client counter
+        /// seeded with the millisecond unix timestamp and incremented per
+        /// transaction — a stateless, monotonic, duplicate-free value that
+        /// needs no chain round-trip and tolerates many in-flight transactions.
+        /// Set explicitly to use a nonce or generation instead.
         uniqueness: Option<UniquenessData>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
@@ -458,16 +459,17 @@ impl Client {
 
     /// Submit a base64-encoded Solana offchain envelope via the trading API.
     ///
-    /// Mirrors [`send_transaction`](Client::send_transaction)'s 401 handling:
-    /// an invalid-signature 401 triggers a schema refresh and surfaces as
-    /// [`SDKError::TransactionOutdated`] so the caller can re-sign.
+    /// Stale-chain-hash errors are mapped to [`SDKError::TransactionOutdated`]
+    /// so the caller knows to rebuild and re-sign — for the offchain envelope
+    /// that's the spec's `400` chain-hash mismatch (the chain hash is a
+    /// validated field), as well as a `401` invalid-signature.
     pub(crate) async fn submit_offchain(&self, body: String) -> SDKResult<SubmitTxResponse> {
         let request = SubmitSolanaOffchainTxRequest { body };
         match self.client().submit_solana_offchain_tx(&request).await {
-            Err(ErrorResponse(response)) if response.status() == 401 => {
+            Ok(r) => Ok(r.into_inner()),
+            Err(ErrorResponse(response)) => {
                 Err(self.submit_tx_api_error(response.into_inner()).await?)
             }
-            Ok(r) => Ok(r.into_inner()),
             Err(e) => Err(e.into()),
         }
     }
@@ -502,9 +504,17 @@ impl Client {
     }
 
     async fn submit_tx_api_error(&self, error: ApiErrorResponse) -> SDKResult<SDKError> {
-        if error.status == 401 && error.message.contains("Invalid signature") {
+        // A stale chain hash surfaces differently per submission path: the borsh
+        // path bakes it into the signed bytes (→ 401 invalid signature), while
+        // the Solana offchain envelope carries it as a validated field (→ 400
+        // chain-hash mismatch). Both mean "rebuild and re-sign".
+        let stale_chain_hash = (error.status == 401 && error.message.contains("Invalid signature"))
+            || (error.status == 400 && {
+                let message = error.message.to_lowercase();
+                message.contains("chain") && message.contains("hash")
+            });
+        if stale_chain_hash {
             self.update_schema().await?;
-            // The transaction was signed against an old chain hash and must be re-signed.
             return Ok(SDKError::TransactionOutdated);
         }
         Ok(SDKError::ApiError(Box::new(error)))
@@ -889,6 +899,58 @@ mod tests {
         let schema_requests =
             requests.iter().filter(|request| request.url.path() == "/rollup/schema").count();
         assert_eq!(schema_requests, 2);
+    }
+
+    #[tokio::test]
+    async fn send_ledger_transaction_maps_chain_hash_mismatch_to_outdated() {
+        // The offchain envelope carries the chain hash as a validated field, so
+        // a stale hash comes back as a 400 (not a 401) — still "rebuild & re-sign".
+        let (server, client) = mock_client_for_offchain_submission(
+            ResponseTemplate::new(400).set_body_json(serde_json::json!({
+                "status": 400,
+                "message": "chain_hash mismatch",
+            })),
+        )
+        .await;
+
+        let keypair = Keypair::generate();
+        let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
+        let signable = test_unsigned_tx().to_ledger_signable_bytes(&pub_key).unwrap();
+        let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
+        let tx =
+            SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature).unwrap();
+
+        let err = client.send_ledger_transaction(&tx).await.unwrap_err();
+
+        assert!(matches!(err, SDKError::TransactionOutdated), "{err:?}");
+        let requests = server.received_requests().await.unwrap();
+        let schema_requests =
+            requests.iter().filter(|request| request.url.path() == "/rollup/schema").count();
+        assert_eq!(schema_requests, 2);
+    }
+
+    #[tokio::test]
+    async fn signed_builder_defaults_to_window_uniqueness() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+        let keypair = Keypair::generate();
+
+        let signed = Transaction::builder()
+            .call_message(CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] }))
+            .max_fee(10_000_000)
+            .signer(&keypair)
+            .client(&client)
+            .build()
+            .unwrap();
+
+        let SignedTransaction::V0(version_0) = signed else {
+            panic!("expected V0 signed transaction");
+        };
+        assert!(
+            matches!(version_0.uniqueness, UniquenessData::Window(_)),
+            "{:?}",
+            version_0.uniqueness
+        );
     }
 
     #[tokio::test]
