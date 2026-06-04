@@ -6,6 +6,8 @@
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use borsh::BorshSerialize;
+use bullet_exchange_interface::address::Address;
 use sha2::{Digest, Sha256};
 
 use crate::{SDKError, SDKResult, UnsignedTransaction};
@@ -47,14 +49,21 @@ impl MultisigConfig {
             return Err(SDKError::InvalidMultisig("duplicate public key".to_string()));
         }
         for pubkey in &pubkeys {
-            // Reject keys that aren't valid Ed25519 points — they could never
-            // produce a verifying signature, making the config uncompletable.
-            ed25519_dalek::VerifyingKey::from_bytes(pubkey).map_err(|_| {
+            // Reject keys that aren't valid Ed25519 points, or that are weak
+            // (small-order) — signature verification uses `verify_strict`,
+            // which rejects weak keys, so such a signer could never contribute.
+            let key = ed25519_dalek::VerifyingKey::from_bytes(pubkey).map_err(|_| {
                 SDKError::InvalidMultisig(format!(
                     "invalid Ed25519 public key: {}",
-                    bs58::encode(pubkey).into_string()
+                    Address(*pubkey)
                 ))
             })?;
+            if key.is_weak() {
+                return Err(SDKError::InvalidMultisig(format!(
+                    "weak Ed25519 public key: {}",
+                    Address(*pubkey)
+                )));
+            }
         }
         if min_signers == 0 || min_signers as usize > pubkeys.len() {
             return Err(SDKError::InvalidMultisig(format!(
@@ -88,10 +97,13 @@ impl MultisigConfig {
         hasher.finalize().into()
     }
 
-    /// The base58-encoded credential id, as committed to in the signed
-    /// multisig message (`multisig_id` field).
+    /// The credential id as a bullet base58 address string, as committed to in
+    /// the signed multisig message (`multisig_id` field).
+    ///
+    /// Uses the exchange interface's [`Address`] encoding (`bullet-bs58`) so it
+    /// matches the address format the rollup derives for the credential.
     pub fn multisig_id(&self) -> String {
-        bs58::encode(self.credential_id()).into_string()
+        Address(self.credential_id()).to_string()
     }
 
     /// Index of `pubkey` in canonical order, if it is part of the set.
@@ -145,6 +157,22 @@ impl UnsignedTransaction {
 }
 
 // ── Multisig transaction assembly ────────────────────────────────────────────
+
+/// Borsh-serializable mirror of the Sovereign SDK's
+/// `SolanaOffchainSpecCompliantMultisigMessage`. Deriving `BorshSerialize`
+/// produces the exact wire layout (`Vec<u8>`/`Vec<_>` are length-prefixed,
+/// `[u8; 64]` and `u32`/`u8` are written verbatim), so we don't hand-encode it.
+#[derive(BorshSerialize)]
+struct SpecCompliantMultisigMessage {
+    /// Preamble (all N pubkeys) + the multisig JSON message.
+    signed_message_with_preamble: Vec<u8>,
+    /// One signature per signer, ordered by the signer's canonical index
+    /// (matching the set bits in `signer_bitfield`, LSB→MSB).
+    signatures: Vec<[u8; 64]>,
+    /// Bit `i` set means the `i`-th canonical pubkey signed.
+    signer_bitfield: u32,
+    min_signers: u8,
+}
 
 /// A multisig transaction collecting signatures over the spec-compliant Solana
 /// offchain wire format (the format Ledger hardware wallets sign).
@@ -216,27 +244,28 @@ impl SolanaLedgerMultisigTransaction {
         let index = self.config.signer_index(&pubkey).ok_or_else(|| {
             SDKError::InvalidMultisig(format!(
                 "signer {} is not part of the multisig",
-                bs58::encode(pubkey).into_string()
+                Address(pubkey)
             ))
         })?;
         if self.signatures.contains_key(&index) {
             return Err(SDKError::InvalidMultisig(format!(
                 "signer {} has already signed",
-                bs58::encode(pubkey).into_string()
+                Address(pubkey)
             )));
         }
 
         let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&pubkey)
             .map_err(|e| SDKError::InvalidMultisig(format!("invalid public key: {e}")))?;
         let signature = ed25519_dalek::Signature::from_bytes(&signature);
-        ed25519_dalek::Verifier::verify(&verifying_key, &self.signed_message, &signature).map_err(
-            |_| {
-                SDKError::InvalidMultisig(format!(
-                    "signature from {} does not verify against the signable bytes",
-                    bs58::encode(pubkey).into_string()
-                ))
-            },
-        )?;
+        // `verify_strict` matches the rollup's verification (rejects weak keys
+        // and non-canonical signatures), so a signature accepted here is
+        // accepted on-chain.
+        verifying_key.verify_strict(&self.signed_message, &signature).map_err(|_| {
+            SDKError::InvalidMultisig(format!(
+                "signature from {} does not verify against the signable bytes",
+                Address(pubkey)
+            ))
+        })?;
 
         self.signatures.insert(index, signature.to_bytes());
         Ok(())
@@ -252,13 +281,8 @@ impl SolanaLedgerMultisigTransaction {
         self.signatures.len() >= self.config.min_signers() as usize
     }
 
-    /// Serialize to the raw binary wire format.
-    ///
-    /// Borsh layout, matching the Sovereign SDK's
-    /// `SolanaOffchainSpecCompliantMultisigMessage`:
-    /// `[u32 LE: message len][signed_message][u32 LE: signature count]
-    ///  [64-byte signatures in canonical index order][u32 LE: signer bitfield]
-    ///  [u8: min_signers]`
+    /// Serialize to the Borsh wire format of the Sovereign SDK's
+    /// `SolanaOffchainSpecCompliantMultisigMessage`.
     ///
     /// Errors if the threshold has not been met.
     pub fn to_bytes(&self) -> SDKResult<Vec<u8>> {
@@ -270,24 +294,20 @@ impl SolanaLedgerMultisigTransaction {
             )));
         }
 
-        let mut bitfield: u32 = 0;
+        let mut signer_bitfield: u32 = 0;
         for index in self.signatures.keys() {
-            bitfield |= 1 << index;
+            signer_bitfield |= 1 << index;
         }
 
-        let mut buf =
-            Vec::with_capacity(4 + self.signed_message.len() + 4 + self.signatures.len() * 64 + 5);
-        buf.extend_from_slice(&(self.signed_message.len() as u32).to_le_bytes());
-        buf.extend_from_slice(&self.signed_message);
-        buf.extend_from_slice(&(self.signatures.len() as u32).to_le_bytes());
-        // BTreeMap iterates in ascending index order, matching the bitfield
-        // bits from LSB to MSB.
-        for signature in self.signatures.values() {
-            buf.extend_from_slice(signature);
-        }
-        buf.extend_from_slice(&bitfield.to_le_bytes());
-        buf.push(self.config.min_signers());
-        Ok(buf)
+        let message = SpecCompliantMultisigMessage {
+            signed_message_with_preamble: self.signed_message.clone(),
+            // BTreeMap iterates in ascending index order, matching the bitfield
+            // bits from LSB to MSB.
+            signatures: self.signatures.values().copied().collect(),
+            signer_bitfield,
+            min_signers: self.config.min_signers(),
+        };
+        borsh::to_vec(&message).map_err(|e| SDKError::SerializationError(e.to_string()))
     }
 
     /// Serialize to wire format and base64-encode for submission.

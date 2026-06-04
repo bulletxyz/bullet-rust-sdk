@@ -114,9 +114,10 @@ await client.sendTransaction(tx);
 ### Uniqueness (replay protection)
 
 Every transaction carries a uniqueness value. By default the SDK uses
-**window-based** uniqueness seeded with a microsecond unix timestamp and
-incremented per transaction — a stateless, monotonic value that needs no chain
-round-trip and tolerates many in-flight transactions.
+**window-based** uniqueness from a per-client counter that tracks the
+millisecond unix timestamp and increments per transaction — a monotonic,
+duplicate-free value that needs no chain round-trip and tolerates many
+in-flight transactions.
 
 Override it with any one of `.window()`, `.generation()`, or `.nonce()` (these
 set the same single uniqueness value, so the last call wins):

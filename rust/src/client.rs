@@ -45,10 +45,12 @@ pub struct Client {
     chain_name: String,
     user_actions: Option<Vec<UserActionDiscriminants>>,
 
-    /// Monotonic counter for the default `Window` uniqueness. Seeded with the
-    /// millisecond unix timestamp at construction and incremented per
-    /// transaction, giving unique, ever-increasing values that need no chain
-    /// round-trip (the timestamp seed stays above the on-chain window floor).
+    /// Monotonic counter for the default `Window` uniqueness. Each call raises
+    /// it to at least the current millisecond unix timestamp and then
+    /// increments, so values track the wall clock (independent clients with
+    /// synchronised clocks converge and don't collide unless they submit in the
+    /// very same millisecond) while staying unique within this client under
+    /// sub-millisecond bursts.
     window_nonce: AtomicU64,
 
     keypair: Option<Keypair>,
@@ -180,11 +182,6 @@ impl Client {
         let exchange_info = generated_client.exchange_info().await?;
         let metadata = ExchangeMetadata::from_symbols(&exchange_info.into_inner().symbols);
 
-        let window_seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| SDKError::SystemTimeError)?
-            .as_millis() as u64;
-
         Ok(Self {
             rest_url,
             ws_url,
@@ -194,7 +191,7 @@ impl Client {
             chain_hash: Mutex::new(chain_data.chain_hash),
             chain_name: chain_data.chain_name,
             user_actions,
-            window_nonce: AtomicU64::new(window_seed),
+            window_nonce: AtomicU64::new(0),
             gas_limit,
             max_priority_fee_bips,
             max_fee,
@@ -204,8 +201,16 @@ impl Client {
     }
 
     /// Return the next value for the default `Window` uniqueness and advance the
-    /// counter. Monotonic and unique per client instance.
+    /// counter.
+    ///
+    /// Raises the counter to at least the current millisecond unix timestamp
+    /// (so independent clients with synchronised clocks pick converging values)
+    /// and then increments, keeping each value unique and monotonic within this
+    /// client even under sub-millisecond bursts.
     pub(crate) fn next_window_nonce(&self) -> u64 {
+        let now =
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        self.window_nonce.fetch_max(now, Ordering::Relaxed);
         self.window_nonce.fetch_add(1, Ordering::Relaxed)
     }
 

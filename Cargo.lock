@@ -310,7 +310,6 @@ dependencies = [
  "base64",
  "bon",
  "borsh",
- "bs58",
  "bullet-exchange-interface",
  "bullet-ws-interface",
  "clap",

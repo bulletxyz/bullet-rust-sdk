@@ -159,10 +159,10 @@ impl UnsignedTransaction {
         /// [`UniquenessData::Generation`], or [`UniquenessData::Window`]).
         ///
         /// Defaults to [`UniquenessData::Window`] from a per-client counter
-        /// seeded with the millisecond unix timestamp and incremented per
-        /// transaction — a stateless, monotonic, duplicate-free value that
-        /// needs no chain round-trip and tolerates many in-flight transactions.
-        /// Set explicitly to use a nonce or generation instead.
+        /// that tracks the millisecond unix timestamp and increments per
+        /// transaction — a monotonic, duplicate-free value that needs no chain
+        /// round-trip and tolerates many in-flight transactions. Set explicitly
+        /// to use a nonce or generation instead.
         uniqueness: Option<UniquenessData>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
