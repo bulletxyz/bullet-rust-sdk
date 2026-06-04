@@ -1,0 +1,30 @@
+rust/src/client.rs
+  s_2754b412746d1c::t_947e74172fac22 186
+  s_2754b412746d1c::t_34c4d385fb6968 3
+  s_2754b412746d1c::t_86dd7aa5c27b8b 197
+  s_2754b412746d1c::t_77993e49881c89 209
+  s_2754b412746d1c::t_0b26a3e6ca55ab 49-51
+  s_2754b412746d1c::t_ead1101f782a69 52
+rust/src/transaction_builder.rs
+  s_2754b412746d1c::t_d38c6301d09652 507-510,512-516
+  s_2754b412746d1c::t_680a9a34530e61 470,511,949-953
+  s_2754b412746d1c::t_9eed968e8f938a 161-165
+  s_2754b412746d1c::t_0a6097d401aa93 462-465
+  s_2754b412746d1c::t_f1ceddccbe1da8 905-948,954-955
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2d4b33ceddbee9e15b74f14f5f423cd347c8ec88",
+  "prompts": {},
+  "sessions": {
+    "s_2754b412746d1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2a65de7-ad11-48da-b5f8-94eec74a82f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
