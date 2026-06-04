@@ -511,7 +511,7 @@ impl Client {
         let stale_chain_hash = (error.status == 401 && error.message.contains("Invalid signature"))
             || (error.status == 400 && {
                 let message = error.message.to_lowercase();
-                message.contains("chain") && message.contains("hash")
+                message.contains("chain_hash mismatch") || message.contains("chain hash mismatch")
             });
         if stale_chain_hash {
             self.update_schema().await?;
