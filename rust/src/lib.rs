@@ -62,6 +62,7 @@ pub use bullet_exchange_interface::message::{
 ///
 /// Set on a transaction via `UnsignedTransaction::builder().uniqueness(...)` or
 /// `Transaction::builder().uniqueness(...)`.
+pub use bullet_exchange_interface::transaction::RuntimeCall;
 pub use bullet_exchange_interface::transaction::UniquenessData;
 /// Client-assigned order identifier. Wraps a `u64`.
 pub use bullet_exchange_interface::types::ClientOrderId;

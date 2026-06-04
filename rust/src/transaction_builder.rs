@@ -166,12 +166,40 @@ impl UnsignedTransaction {
         uniqueness: Option<UniquenessData>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
-        // Check whether the call message was part of the schema validation.
-        if !Client::call_message_was_validated(&call_message, client.user_actions().as_deref()) {
-            return Err(SDKError::UnsupportedCallMessage(call_message.msg_type()));
+        Self::from_runtime_call(
+            RuntimeCall::Exchange(call_message),
+            max_fee,
+            priority_fee_bips,
+            gas_limit,
+            uniqueness,
+            client,
+        )
+    }
+
+    /// Build an unsigned transaction from a whole [`RuntimeCall`].
+    ///
+    /// This is the primary constructor: [`builder`](UnsignedTransaction::builder)
+    /// is sugar that wraps a typed [`CallMessage`] as `RuntimeCall::Exchange` and
+    /// calls this. Use this directly to build a call assembled dynamically — e.g.
+    /// `RuntimeCall` deserialized from JSON via its `serde` support — without
+    /// going through the typed factories.
+    ///
+    /// Exchange call messages are validated against the connected client's
+    /// schema; other runtime-call variants pass through.
+    pub fn from_runtime_call(
+        runtime_call: RuntimeCall,
+        max_fee: u128,
+        priority_fee_bips: u64,
+        gas_limit: Option<Gas>,
+        uniqueness: Option<UniquenessData>,
+        client: &Client,
+    ) -> SDKResult<UnsignedTransaction> {
+        if let RuntimeCall::Exchange(ref call_message) = runtime_call {
+            if !Client::call_message_was_validated(call_message, client.user_actions().as_deref()) {
+                return Err(SDKError::UnsupportedCallMessage(call_message.msg_type()));
+            }
         }
 
-        let runtime_call = RuntimeCall::Exchange(call_message);
         let uniqueness =
             uniqueness.unwrap_or_else(|| UniquenessData::Window(client.next_window_nonce()));
         let details = TxDetails {
@@ -355,6 +383,34 @@ impl Transaction {
         signer: Option<&Keypair>,
         client: &Client,
     ) -> SDKResult<SignedTransaction> {
+        Self::from_runtime_call(
+            RuntimeCall::Exchange(call_message),
+            max_fee,
+            priority_fee_bips,
+            gas_limit,
+            uniqueness,
+            signer,
+            client,
+        )
+    }
+
+    /// Build and sign a transaction from a whole [`RuntimeCall`].
+    ///
+    /// The signed-transaction counterpart of
+    /// [`UnsignedTransaction::from_runtime_call`]: builds the unsigned
+    /// transaction, signs `to_bytes()` with `signer` (falling back to the
+    /// client's keypair), and assembles the result. Use this to sign a call
+    /// assembled dynamically rather than via the typed factories.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_runtime_call(
+        runtime_call: RuntimeCall,
+        max_fee: Option<u128>,
+        priority_fee_bips: Option<u64>,
+        gas_limit: Option<Gas>,
+        uniqueness: Option<UniquenessData>,
+        signer: Option<&Keypair>,
+        client: &Client,
+    ) -> SDKResult<SignedTransaction> {
         let signer = signer.or_else(|| client.keypair()).ok_or(SDKError::MissingKeypair)?;
 
         let max_fee = max_fee.unwrap_or_else(|| client.max_fee().0);
@@ -362,14 +418,14 @@ impl Transaction {
             priority_fee_bips.unwrap_or_else(|| client.max_priority_fee_bips().0);
         let gas_limit = gas_limit.or_else(|| client.gas_limit());
 
-        let unsigned = UnsignedTransaction::builder()
-            .call_message(call_message)
-            .max_fee(max_fee)
-            .priority_fee_bips(priority_fee_bips)
-            .maybe_gas_limit(gas_limit)
-            .maybe_uniqueness(uniqueness)
-            .client(client)
-            .build()?;
+        let unsigned = UnsignedTransaction::from_runtime_call(
+            runtime_call,
+            max_fee,
+            priority_fee_bips,
+            gas_limit,
+            uniqueness,
+            client,
+        )?;
 
         let data = unsigned.to_bytes()?;
         let sig_bytes: [u8; 64] = signer
