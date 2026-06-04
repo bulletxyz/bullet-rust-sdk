@@ -4,6 +4,8 @@
 //! offchain wire format used for Ledger signing, extended to N signers. The
 //! formats mirror the Sovereign SDK's `sov-solana-offchain-auth` crate.
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use sha2::{Digest, Sha256};
 
 use crate::{SDKError, SDKResult, UnsignedTransaction};
@@ -91,30 +93,6 @@ impl MultisigConfig {
 
 // ── Multisig signable bytes ──────────────────────────────────────────────────
 
-/// Build the Solana off-chain message preamble for N signers.
-///
-/// Same layout as the single-signer preamble in `transaction_builder.rs`, but
-/// with `signer_count = N` and all N pubkeys (in canonical order):
-///   `[16: signing domain][1: header_version][32: chain_hash][1: message_format]
-///    [1: signer_count][32 * N: pubkeys][2: message_length LE]`
-pub(crate) fn make_solana_multisig_preamble(
-    pubkeys: &[[u8; 32]],
-    chain_hash: &[u8; 32],
-    message_length: u16,
-) -> Vec<u8> {
-    let mut preamble = Vec::with_capacity(53 + 32 * pubkeys.len());
-    preamble.extend_from_slice(b"\xffsolana offchain");
-    preamble.push(0); // header_version
-    preamble.extend_from_slice(chain_hash);
-    preamble.push(0); // message_format
-    preamble.push(pubkeys.len() as u8); // signer_count
-    for pubkey in pubkeys {
-        preamble.extend_from_slice(pubkey);
-    }
-    preamble.extend_from_slice(&message_length.to_le_bytes());
-    preamble
-}
-
 impl UnsignedTransaction {
     /// Serialize into the JSON message every multisig signer must commit to.
     ///
@@ -147,8 +125,11 @@ impl UnsignedTransaction {
                 u16::MAX
             ))
         })?;
-        let mut result =
-            make_solana_multisig_preamble(config.pubkeys(), &self.chain_hash, message_len);
+        let mut result = crate::transaction_builder::make_solana_preamble(
+            config.pubkeys(),
+            &self.chain_hash,
+            message_len,
+        );
         result.extend_from_slice(&json_bytes);
         Ok(result)
     }
@@ -304,8 +285,7 @@ impl SolanaLedgerMultisigTransaction {
 
     /// Serialize to wire format and base64-encode for submission.
     pub fn to_base64(&self) -> SDKResult<String> {
-        use base64::Engine;
-        Ok(base64::engine::general_purpose::STANDARD.encode(self.to_bytes()?))
+        Ok(BASE64.encode(self.to_bytes()?))
     }
 }
 
@@ -403,7 +383,11 @@ mod tests {
         let chain_hash = [7u8; 32];
         let message_length: u16 = 0x1234;
 
-        let preamble = make_solana_multisig_preamble(config.pubkeys(), &chain_hash, message_length);
+        let preamble = crate::transaction_builder::make_solana_preamble(
+            config.pubkeys(),
+            &chain_hash,
+            message_length,
+        );
 
         assert_eq!(preamble.len(), 53 + 3 * 32);
         // signing domain

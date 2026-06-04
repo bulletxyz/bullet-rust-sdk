@@ -28,6 +28,7 @@ use wasm_bindgen::prelude::*;
 use crate::client::WasmTradingApi;
 use crate::errors::WasmResult;
 use crate::transaction_builder::WasmUnsignedTransaction;
+use crate::utils::to_fixed_bytes;
 
 // ── WasmMultisigConfig ───────────────────────────────────────────────────────
 
@@ -59,11 +60,7 @@ impl WasmMultisigConfig {
     ) -> WasmResult<WasmMultisigConfig> {
         let pubkeys: Vec<[u8; 32]> = pubkeys
             .iter()
-            .map(|key| {
-                key.to_vec()
-                    .try_into()
-                    .map_err(|v: Vec<u8>| format!("expected 32-byte public key, got {}", v.len()))
-            })
+            .map(|key| to_fixed_bytes::<32>(&key.to_vec(), "public key"))
             .collect::<Result<_, _>>()?;
         Ok(WasmMultisigConfig { inner: MultisigConfig::new(min_signers, pubkeys)? })
     }
@@ -202,12 +199,8 @@ impl WasmSolanaLedgerMultisigTransaction {
     /// @param {Uint8Array} signature - 64-byte Ed25519 signature.
     #[wasm_bindgen(js_name = addSignature)]
     pub fn add_signature(&mut self, pub_key: &[u8], signature: &[u8]) -> WasmResult<()> {
-        let pub_key: [u8; 32] = pub_key
-            .try_into()
-            .map_err(|_| format!("expected 32-byte public key, got {}", pub_key.len()))?;
-        let signature: [u8; 64] = signature
-            .try_into()
-            .map_err(|_| format!("expected 64-byte signature, got {}", signature.len()))?;
+        let pub_key = to_fixed_bytes::<32>(pub_key, "public key")?;
+        let signature = to_fixed_bytes::<64>(signature, "signature")?;
         Ok(self.inner.add_signature(pub_key, signature)?)
     }
 
@@ -269,9 +262,7 @@ impl WasmTradingApi {
     /// @returns {Promise<bigint>}
     #[wasm_bindgen(js_name = credentialNonce)]
     pub async fn credential_nonce(&self, credential_id: &[u8]) -> WasmResult<u64> {
-        let credential_id: [u8; 32] = credential_id
-            .try_into()
-            .map_err(|_| format!("expected 32-byte credential id, got {}", credential_id.len()))?;
+        let credential_id = to_fixed_bytes::<32>(credential_id, "credential id")?;
         Ok(self.inner.credential_nonce(&credential_id).await?)
     }
 }

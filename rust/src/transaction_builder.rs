@@ -101,9 +101,7 @@ impl UnsignedTransaction {
                 u16::MAX
             ))
         })?;
-        let preamble = make_solana_preamble(pubkey, &self.chain_hash, message_len);
-        let mut result = Vec::with_capacity(preamble.len() + json_bytes.len());
-        result.extend_from_slice(&preamble);
+        let mut result = make_solana_preamble(&[*pubkey], &self.chain_hash, message_len);
         result.extend_from_slice(&json_bytes);
         Ok(result)
     }
@@ -208,25 +206,27 @@ impl UnsignedTransaction {
 // Solana off-chain signing domain: 0xff followed by "solana offchain" (15 bytes).
 const SOLANA_SIGNING_DOMAIN: [u8; 16] = *b"\xffsolana offchain";
 
-/// Build the 85-byte Solana off-chain message preamble.
+/// Build the Solana off-chain message preamble for one or more signers.
 ///
-/// Layout (85 bytes):
-///   [0..16]  signing domain (0xff + "solana offchain")
-///   [16]     header_version = 0
-///   [17..49] application_domain = chain_hash (32 bytes)
-///   [49]     message_format = 0
-///   [50]     signer_count = 1
-///   [51..83] pubkey (32 bytes)
-///   [83..85] message_length as LE u16
-fn make_solana_preamble(pubkey: &[u8; 32], chain_hash: &[u8; 32], message_length: u16) -> [u8; 85] {
-    let mut preamble = [0u8; 85];
-    preamble[0..16].copy_from_slice(&SOLANA_SIGNING_DOMAIN);
-    // header_version = 0 (already 0)
-    preamble[17..49].copy_from_slice(chain_hash);
-    // message_format = 0 (already 0)
-    preamble[50] = 1; // signer_count
-    preamble[51..83].copy_from_slice(pubkey);
-    preamble[83..85].copy_from_slice(&message_length.to_le_bytes());
+/// A single-signer preamble is just `N = 1`. Layout
+/// (`53 + 32 * pubkeys.len()` bytes):
+///   `[16: signing domain][1: header_version][32: chain_hash][1: message_format]
+///    [1: signer_count = N][32 * N: pubkeys][2: message_length LE]`
+pub(crate) fn make_solana_preamble(
+    pubkeys: &[[u8; 32]],
+    chain_hash: &[u8; 32],
+    message_length: u16,
+) -> Vec<u8> {
+    let mut preamble = Vec::with_capacity(53 + 32 * pubkeys.len());
+    preamble.extend_from_slice(&SOLANA_SIGNING_DOMAIN);
+    preamble.push(0); // header_version
+    preamble.extend_from_slice(chain_hash);
+    preamble.push(0); // message_format
+    preamble.push(pubkeys.len() as u8); // signer_count
+    for pubkey in pubkeys {
+        preamble.extend_from_slice(pubkey);
+    }
+    preamble.extend_from_slice(&message_length.to_le_bytes());
     preamble
 }
 
@@ -803,7 +803,7 @@ mod tests {
         let chain_hash = [2u8; 32];
         let message_length: u16 = 0x1234;
 
-        let preamble = make_solana_preamble(&pubkey, &chain_hash, message_length);
+        let preamble = make_solana_preamble(&[pubkey], &chain_hash, message_length);
 
         assert_eq!(preamble.len(), 85);
         // signing domain: 0xff + "solana offchain"
