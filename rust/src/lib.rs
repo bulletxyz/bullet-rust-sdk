@@ -4,8 +4,10 @@ mod metadata;
 mod multisig;
 mod trading;
 mod transaction_builder;
+mod vault;
 
 pub use trading::NewOrderExt;
+pub use vault::derive_vault_address;
 
 /// Error types for the SDK.
 pub mod errors;
