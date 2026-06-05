@@ -13,6 +13,13 @@ use sha2::{Digest, Sha256};
 ///
 /// The name must match the one passed to `CreateVault` exactly (it is not
 /// trimmed or normalized).
+///
+/// This mirrors the runtime's `generate_address_with_seed`, which lives in the
+/// exchange crate (not `bullet-exchange-interface`), so there is no shared
+/// source of truth to import — it's duplicated here by necessity. If the
+/// runtime ever changes its seed scheme (a different hasher, a salt/prefix, or
+/// name normalization), this function and its golden-vector test must be
+/// updated to match.
 pub fn derive_vault_address(name: &str) -> String {
     let hash: [u8; 32] = Sha256::digest(name.as_bytes()).into();
     Address(hash).to_string()
