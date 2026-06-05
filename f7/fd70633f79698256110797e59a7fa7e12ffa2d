@@ -1,0 +1,20 @@
+examples/node/create_vault.ts
+  s_2754b412746d1c::t_69deb4695f3a56 69-72
+  s_2754b412746d1c::t_6b9be2e6246d97 2-3,5-6,9,11-12,14,19,28-32,35-37,42,45-48,50,52-54,56-59,61-66,68,73,75-98,101-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "f7fd70633f79698256110797e59a7fa7e12ffa2d",
+  "prompts": {},
+  "sessions": {
+    "s_2754b412746d1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2a65de7-ad11-48da-b5f8-94eec74a82f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
