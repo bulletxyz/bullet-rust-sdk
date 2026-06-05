@@ -298,40 +298,9 @@ const amend = new AmendOrderArgs(cancel, newOrder);
 
 ### Vaults
 
-Create a vault, then derive its address locally to reference it (the trading API
-exposes no vault-address lookup, and `CreateVault` emits no address event). The
-address is `deriveVaultAddress(name)` — deterministic from the vault name.
-
-```typescript
-import { CreateVaultArgs, UpdateVaultConfigArgs, User, Vault, deriveVaultAddress } from '@bulletxyz/sdk-wasm';
-
-const args = new CreateVaultArgs(
-  'My Vault',            // name (also determines the vault address)
-  'Description',
-  leaderAddress,         // base58 leader address
-  Uint16Array.from([usdcId]), // deposit asset ids
-  usdcId,                // withdraw asset id
-  0,                     // withdraw lockup period (hours)
-  false,                 // whitelist deposits
-  100,                   // profit share % (0–100)
-  0,                     // withdrawal fee bps
-  '1000000',             // deposit limit
-);
-await client.sendCallMessage(User.createVault(args));
-
-const vault = deriveVaultAddress('My Vault');
-
-// Leader management ops
-await client.sendCallMessage(Vault.whitelistDepositor(vault, depositor)); // when whitelistDeposits: true
-await client.sendCallMessage(Vault.delegateVaultUserV1(vault, delegate, 'bot', 0));
-// updateVaultConfig can change only these three; pass null to leave unchanged.
-// withdrawalFeeBps and the whitelistDeposits toggle are fixed at creation.
-await client.sendCallMessage(
-  Vault.updateVaultConfig(vault, new UpdateVaultConfigArgs('2000000', null, 80)),
-);
-```
-
-See [`examples/node/create_vault.ts`](../examples/node/create_vault.ts) for a
+Vaults use the `User`/`Vault` call-message factories, plus `deriveVaultAddress(name)`
+to compute a vault's address from its name. See
+[`examples/node/create_vault.ts`](../examples/node/create_vault.ts) for a
 runnable end-to-end script.
 
 ### WebSocket
