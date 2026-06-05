@@ -87,9 +87,15 @@ const args = new CreateVaultArgs(
 const created = await client.sendCallMessage(User.createVault(args));
 console.log(`create: ${created.receipt?.result ?? created.status} (${created.id})`);
 
-for (const depositor of WHITELIST_DEPOSITORS) {
-  const res = await client.sendCallMessage(Vault.whitelistDepositor(vault, depositor));
-  console.log(`whitelist ${depositor}: ${res.receipt?.result ?? res.status} (${res.id})`);
+// Whitelisting only applies when the vault was created with `whitelist: true`
+// — the toggle is fixed at creation and can't be turned on later.
+if (WHITELIST_DEPOSITORS.length > 0 && !VAULT.whitelist) {
+  console.warn("skipping WHITELIST_DEPOSITORS: vault was created with whitelist disabled");
+} else if (VAULT.whitelist) {
+  for (const depositor of WHITELIST_DEPOSITORS) {
+    const res = await client.sendCallMessage(Vault.whitelistDepositor(vault, depositor));
+    console.log(`whitelist ${depositor}: ${res.receipt?.result ?? res.status} (${res.id})`);
+  }
 }
 
 if (delegate) {
