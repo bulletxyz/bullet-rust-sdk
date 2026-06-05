@@ -194,10 +194,10 @@ impl UnsignedTransaction {
         uniqueness: Option<UniquenessData>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
-        if let RuntimeCall::Exchange(ref call_message) = runtime_call {
-            if !Client::call_message_was_validated(call_message, client.user_actions().as_deref()) {
-                return Err(SDKError::UnsupportedCallMessage(call_message.msg_type()));
-            }
+        if let RuntimeCall::Exchange(ref call_message) = runtime_call
+            && !Client::call_message_was_validated(call_message, client.user_actions().as_deref())
+        {
+            return Err(SDKError::UnsupportedCallMessage(call_message.msg_type()));
         }
 
         let uniqueness =
