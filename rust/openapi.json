@@ -1025,7 +1025,7 @@
                     {
                         "name": "triggerOrderId",
                         "in": "query",
-                        "description": "look up a user trigger order (STOP / TAKE_PROFIT) by its\nTriggerOrderId. mutually exclusive with `orderId` /\n`clientOrderId` \u2014 trigger orders use an independent id counter\nfrom regular orders in the rollup",
+                        "description": "look up a user trigger order (STOP / TAKE_PROFIT) by its\nTriggerOrderId. mutually exclusive with `orderId` /\n`clientOrderId` — trigger orders use an independent id counter\nfrom regular orders in the rollup",
                         "required": false,
                         "schema": {
                             "type": [
@@ -1110,7 +1110,7 @@
                     {
                         "name": "symbol",
                         "in": "query",
-                        "description": "Trading pair symbol \u2014 optional, omit to return open orders across all markets",
+                        "description": "Trading pair symbol — optional, omit to return open orders across all markets",
                         "required": false,
                         "schema": {
                             "type": [
@@ -1336,7 +1336,7 @@
                 "tags": [
                     "Market-Data"
                 ],
-                "summary": "24 hour rolling window price change statistics.\nreturns all markets \u2014 no per-symbol filtering (intentional, dataset is small)",
+                "summary": "24 hour rolling window price change statistics.\nreturns all markets — no per-symbol filtering (intentional, dataset is small)",
                 "operationId": "ticker_24hr",
                 "responses": {
                     "200": {
@@ -2305,7 +2305,7 @@
                 "tags": [
                     "Health"
                 ],
-                "summary": "readiness probe \u2014 200 when all components healthy, 503 otherwise",
+                "summary": "readiness probe — 200 when all components healthy, 503 otherwise",
                 "operationId": "ready",
                 "responses": {
                     "200": {
@@ -2444,6 +2444,75 @@
                     },
                     "503": {
                         "description": "Validation service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/rollup/simulate": {
+            "post": {
+                "summary": "Simulate a transaction against the current rollup state without committing.",
+                "description": "Pass-through proxy to the sequencer's `/rollup/simulate`. The body is a JSON\n`SimulateParameters` document (runtime `call` + `sender`), NOT a signed borsh\ntx, so this route intentionally skips the tx validators and forwards the\nrequest unchanged — mirroring the rest of the `/rollup/*` passthrough.",
+                "operationId": "simulate",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SimulateParameters"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Simulation completed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SimulateOutcome"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid simulation request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Simulation request failed validation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Simulation failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -2983,7 +3052,7 @@
                     },
                     "isTrigger": {
                         "type": "boolean",
-                        "description": "bullet extension: true when this row is a user trigger order\n(STOP / TAKE_PROFIT). `orderId` for triggers is drawn from the\n`TriggerOrderId` namespace, which is independent of the regular\n`OrderId` counter \u2014 use `(orderId, isTrigger)` as the composite key"
+                        "description": "bullet extension: true when this row is a user trigger order\n(STOP / TAKE_PROFIT). `orderId` for triggers is drawn from the\n`TriggerOrderId` namespace, which is independent of the regular\n`OrderId` counter — use `(orderId, isTrigger)` as the composite key"
                     },
                     "marketId": {
                         "type": "integer",
@@ -3014,7 +3083,7 @@
                             },
                             {
                                 "$ref": "#/components/schemas/PendingTpsl",
-                                "description": "reserved TP/SL pair attached to this parent limit order. only present\nwhile the parent is unfilled \u2014 once filled, the trigger orders are\nactivated and listed independently"
+                                "description": "reserved TP/SL pair attached to this parent limit order. only present\nwhile the parent is unfilled — once filled, the trigger orders are\nactivated and listed independently"
                             }
                         ]
                     },
@@ -4207,7 +4276,7 @@
                     "estimatedFundingRate": {
                         "type": "string",
                         "format": "decimal",
-                        "description": "pre-computed estimated 1h funding rate (8h rate \u00f7 8) from current premium index accumulator"
+                        "description": "pre-computed estimated 1h funding rate (8h rate ÷ 8) from current premium index accumulator"
                     },
                     "indexPrice": {
                         "type": "string",
@@ -4674,7 +4743,7 @@
                     },
                     "orderType": {
                         "type": "string",
-                        "description": "LIMIT (bullet's TPSL legs are always limit orders \u2014 see `time_in_force`\nfor the actual TIF behaviour)"
+                        "description": "LIMIT (bullet's TPSL legs are always limit orders — see `time_in_force`\nfor the actual TIF behaviour)"
                     },
                     "priceCondition": {
                         "type": "string",
@@ -4682,7 +4751,7 @@
                     },
                     "timeInForce": {
                         "type": "string",
-                        "description": "GTC | GTX (post-only) | FOK | IOC \u2014 matches the parent BinanceOrder's\n`timeInForce` shape"
+                        "description": "GTC | GTX (post-only) | FOK | IOC — matches the parent BinanceOrder's\n`timeInForce` shape"
                     },
                     "triggerOrderId": {
                         "type": "integer",
@@ -5043,6 +5112,224 @@
                     },
                     "txHash": {
                         "type": "string"
+                    }
+                }
+            },
+            "SimulateParameters": {
+                "type": "object",
+                "description": "Parameters for a transaction simulation request.\n\nMirrors the sequencer's `SimulateParameters`. Documentation-only: like\n`/tx/submit`, the handler forwards the raw body, so this type is not\ndeserialized in-process.",
+                "required": [
+                    "sender",
+                    "call"
+                ],
+                "properties": {
+                    "call": {
+                        "type": "object",
+                        "description": "The runtime call to simulate, provided as JSON"
+                    },
+                    "sender": {
+                        "type": "string",
+                        "description": "The credential ID of the transaction sender"
+                    },
+                    "sequencer": {
+                        "$ref": "#/components/schemas/SequencerParameter",
+                        "description": "Optional sequencer configuration"
+                    },
+                    "tx_details": {
+                        "$ref": "#/components/schemas/TxDetailsParameter",
+                        "description": "Optional transaction details (gas limit, fees)"
+                    },
+                    "uniqueness": {
+                        "type": "object",
+                        "description": "Optional uniqueness data for the transaction"
+                    }
+                }
+            },
+            "SimulateOutcome": {
+                "oneOf": [
+                    {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/SuccessOutcome",
+                                "description": "The transaction executed successfully."
+                            },
+                            {
+                                "type": "object",
+                                "required": [
+                                    "outcome"
+                                ],
+                                "properties": {
+                                    "outcome": {
+                                        "type": "string",
+                                        "enum": [
+                                            "success"
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        "description": "The transaction executed successfully."
+                    },
+                    {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RevertOutcome",
+                                "description": "The transaction reverted during execution."
+                            },
+                            {
+                                "type": "object",
+                                "required": [
+                                    "outcome"
+                                ],
+                                "properties": {
+                                    "outcome": {
+                                        "type": "string",
+                                        "enum": [
+                                            "reverted"
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        "description": "The transaction reverted during execution."
+                    },
+                    {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/FailOutcome",
+                                "description": "The transaction was skipped due to pre-execution errors."
+                            },
+                            {
+                                "type": "object",
+                                "required": [
+                                    "outcome"
+                                ],
+                                "properties": {
+                                    "outcome": {
+                                        "type": "string",
+                                        "enum": [
+                                            "skipped"
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        "description": "The transaction was skipped due to pre-execution errors."
+                    }
+                ],
+                "description": "Outcome of a transaction simulation.\n\nDiscriminated on `outcome`, mirroring the sequencer's `SimulateOutcome`\n(`sov-rollup-apis`): `success` / `reverted` / `skipped`."
+            },
+            "SuccessOutcome": {
+                "type": "object",
+                "description": "Successful simulation outcome.",
+                "required": [
+                    "gas_used",
+                    "priority_fee",
+                    "events"
+                ],
+                "properties": {
+                    "events": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SimulatedEvent"
+                        },
+                        "description": "Events emitted during execution"
+                    },
+                    "gas_used": {
+                        "type": "string",
+                        "description": "Gas consumed by the transaction (gas-token amount, as a decimal string)"
+                    },
+                    "priority_fee": {
+                        "type": "string",
+                        "description": "Priority fee paid (gas-token amount, as a decimal string)"
+                    }
+                }
+            },
+            "RevertOutcome": {
+                "type": "object",
+                "description": "Reverted simulation outcome.",
+                "required": [
+                    "detail"
+                ],
+                "properties": {
+                    "detail": {
+                        "type": "object",
+                        "description": "Structured detail about the revert (`ErrorContext`, an arbitrary JSON object)"
+                    }
+                }
+            },
+            "FailOutcome": {
+                "type": "object",
+                "description": "Skipped simulation outcome.",
+                "required": [
+                    "reason"
+                ],
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "The reason the transaction was skipped"
+                    }
+                }
+            },
+            "SimulatedEvent": {
+                "type": "object",
+                "description": "An event emitted during transaction simulation.",
+                "required": [
+                    "value",
+                    "key",
+                    "module"
+                ],
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "The event key"
+                    },
+                    "module": {
+                        "type": "string",
+                        "description": "The module that emitted the event"
+                    },
+                    "value": {
+                        "type": "object",
+                        "description": "The event data (arbitrary JSON)"
+                    }
+                }
+            },
+            "SequencerParameter": {
+                "type": "object",
+                "description": "Optional sequencer configuration for a simulation request.",
+                "properties": {
+                    "da_address": {
+                        "type": "string",
+                        "description": "Custom data availability address for the sequencer"
+                    },
+                    "rollup_address": {
+                        "type": "string",
+                        "description": "Custom rollup address for the sequencer"
+                    }
+                }
+            },
+            "TxDetailsParameter": {
+                "type": "object",
+                "description": "Optional transaction details for a simulation request.",
+                "properties": {
+                    "gas_limit": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 0
+                        },
+                        "description": "Gas limit for the transaction, as an array of u64 values"
+                    },
+                    "max_fee": {
+                        "type": "string",
+                        "description": "Maximum fee the sender is willing to pay"
+                    },
+                    "max_priority_fee_bips": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "description": "Maximum priority fee in basis points",
+                        "minimum": 0
                     }
                 }
             }

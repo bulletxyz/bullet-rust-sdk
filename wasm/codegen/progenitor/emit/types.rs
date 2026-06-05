@@ -27,6 +27,11 @@ fn sdk_qualified_path(module_path: &[String], name: &str) -> TokenStream {
     quote! { #tokens::#name_ident }
 }
 
+/// Check if derives contain Deserialize.
+fn has_deserialize(derives: &[String]) -> bool {
+    derives.iter().any(|d| d == "Deserialize" || d.ends_with("::Deserialize"))
+}
+
 /// Check if derives contain Serialize.
 fn has_serialize(derives: &[String]) -> bool {
     derives.iter().any(|d| d == "Serialize" || d.ends_with("::Serialize"))
@@ -40,6 +45,20 @@ pub fn emit_struct(s: &StructDetails, enum_names: &HashSet<&str>) -> TokenStream
     let wrapper = format_ident!("Wasm{}", s.name);
     let js_name = type_map::js_name(&s.name);
     let serializable = has_serialize(&s.derives);
+
+    // Deserialize-able types get a `fromJson` static so JS can construct them
+    // (e.g. request-body types like `SimulateParameters`, whose wasm-bindgen
+    // wrapper otherwise has a private constructor).
+    let from_json_method = if has_deserialize(&s.derives) {
+        quote! {
+            #[wasm_bindgen(js_name = fromJson)]
+            pub fn from_json(json: &str) -> Result<#wrapper, String> {
+                ::serde_json::from_str::<#sdk_type>(json).map(#wrapper).map_err(|e| e.to_string())
+            }
+        }
+    } else {
+        quote! {}
+    };
 
     // Newtype or empty struct → only expose toJSON (if serializable).
     if s.is_newtype || s.fields.is_empty() {
@@ -61,6 +80,7 @@ pub fn emit_struct(s: &StructDetails, enum_names: &HashSet<&str>) -> TokenStream
             #[wasm_bindgen(js_class = #js_name)]
             impl #wrapper {
                 #to_json_method
+                #from_json_method
             }
         };
     }
@@ -85,6 +105,7 @@ pub fn emit_struct(s: &StructDetails, enum_names: &HashSet<&str>) -> TokenStream
         #[wasm_bindgen(js_class = #js_name)]
         impl #wrapper {
             #to_json_method
+            #from_json_method
 
             #(#getters)*
         }
@@ -160,6 +181,40 @@ pub fn emit_enum(e: &EnumDetails) -> TokenStream {
                     #(#arms,)*
                 }
             }
+        }
+    }
+}
+
+/// Emit a newtype + `toJSON` wrapper for a data-carrying enum (e.g. a `oneOf`
+/// response like `SimulateOutcome`).
+///
+/// wasm-bindgen C-style enums can't carry data, so these can't go through
+/// [`emit_enum`]. Instead we wrap the SDK enum as an opaque newtype exposing
+/// `toJSON()` — exactly like a newtype struct — so the value crosses the
+/// boundary as JSON the caller parses.
+pub fn emit_enum_json(e: &EnumDetails) -> TokenStream {
+    let sdk_type = sdk_qualified_path(&e.module_path, &e.name);
+    let wrapper = format_ident!("Wasm{}", e.name);
+    let js_name = type_map::js_name(&e.name);
+
+    let to_json_method = if has_serialize(&e.derives) {
+        quote! {
+            #[wasm_bindgen(js_name = toJSON)]
+            pub fn to_json(&self) -> String {
+                to_json(&self.0)
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    quote! {
+        #[wasm_bindgen(js_name = #js_name)]
+        pub struct #wrapper(pub(crate) #sdk_type);
+
+        #[wasm_bindgen(js_class = #js_name)]
+        impl #wrapper {
+            #to_json_method
         }
     }
 }
