@@ -56,7 +56,7 @@ pub struct Client {
     /// the wall clock, so a sub-millisecond burst larger than the restart
     /// latency could briefly reuse values (rejected as replays within the
     /// rollup's window). Throughput-sensitive or multi-instance setups that
-    /// can't tolerate this should set an explicit [`uniqueness`] on the builder.
+    /// can't tolerate this should set an explicit `uniqueness` on the builder.
     window_nonce: AtomicU64,
 
     keypair: Option<Keypair>,
@@ -305,6 +305,14 @@ impl Client {
                     .unwrap_or(false),
                 None => true,
             },
+            // Validate only the `Generation` arm: it's the uniqueness variant
+            // present in every deployed network's schema today. `Window` (the
+            // SDK default) and `Nonce` exist in the local interface but aren't
+            // on mainnet's schema yet, so checking them here would falsely
+            // reject connecting to a mainnet that trails the local interface.
+            // Their layout is a plain `u64` pinned by the shared
+            // `bullet-exchange-interface` version; broaden this to `Window`
+            // once mainnet exposes it.
             "UniquenessData" => variant == "Generation",
             _ => {
                 // include the variant - to be sure we fail afterwards
