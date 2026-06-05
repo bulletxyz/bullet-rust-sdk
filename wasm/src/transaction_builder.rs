@@ -117,6 +117,8 @@ pub struct WasmRuntimeCall {
 impl WasmRuntimeCall {
     /// Wrap a typed exchange [`CallMessage`](WasmCallMessage) (e.g. the result of
     /// `Admin.updateGlobalConfig(...)`) as a `RuntimeCall`.
+    /// @param {CallMessage} call - The typed exchange call message to wrap.
+    /// @returns {RuntimeCall}
     pub fn exchange(call: WasmCallMessage) -> WasmRuntimeCall {
         WasmRuntimeCall { inner: RuntimeCall::Exchange(call.inner) }
     }
@@ -459,8 +461,10 @@ impl WasmTransactionBuilder {
 impl WasmTransactionBuilder {
     /// Set the action for this transaction (required).
     ///
-    /// Takes a [`RuntimeCall`](WasmRuntimeCall) — build one with
-    /// `RuntimeCall.exchange(typedCallMessage)` or `RuntimeCall.fromJson(json)`.
+    /// Build a `RuntimeCall` with `RuntimeCall.exchange(typedCallMessage)` or
+    /// `RuntimeCall.fromJson(json)`.
+    /// @param {RuntimeCall} call - The runtime call (exchange action) to send.
+    /// @returns {TransactionBuilder}
     pub fn call(mut self, call: WasmRuntimeCall) -> WasmTransactionBuilder {
         self.call = Some(call);
         self

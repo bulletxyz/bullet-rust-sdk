@@ -189,7 +189,12 @@ ci:
 # `--indent 4` matches the trading-api's (utoipa) native 4-space formatting, so
 # a refresh produces a content-only diff instead of reformatting the whole file.
 refresh-spec endpoint="https://tradingapi.bullet.xyz":
-    curl -sSf {{ endpoint }}/docs/rest/openapi.json | jq --indent 4 -- . > rust/openapi.json
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+    curl -sSf {{ endpoint }}/docs/rest/openapi.json -o "$tmp"
+    jq --indent 4 -- . "$tmp" > rust/openapi.json
 
 # Verify rust/openapi.json is canonically formatted (jq --indent 4 idempotent).
 # Guards against hand-edits or a different formatter producing whole-file diffs.
