@@ -193,7 +193,7 @@ refresh-spec endpoint="https://tradingapi.bullet.xyz":
     set -euo pipefail
     tmp="$(mktemp)"
     trap 'rm -f "$tmp"' EXIT
-    curl -sSf {{ endpoint }}/docs/rest/openapi.json -o "$tmp"
+    curl -sSf "{{ endpoint }}/docs/rest/openapi.json" -o "$tmp"
     jq --indent 4 -- . "$tmp" > rust/openapi.json
 
 # Verify rust/openapi.json is canonically formatted (jq --indent 4 idempotent).
