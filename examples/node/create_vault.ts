@@ -16,7 +16,6 @@
 
 import { readFileSync } from "node:fs";
 import {
-  type CallMessage,
   Client,
   CreateVaultArgs,
   Keypair,
@@ -65,13 +64,6 @@ const assetId = (name: string): number => {
   return asset.assetId;
 };
 
-const send = async (label: string, msg: CallMessage) => {
-  const { status, id, receipt } = await client.sendCallMessage(msg);
-  // `status` is the queue state ("submitted"); the execution result lives in
-  // the receipt once the tx is processed.
-  console.log(`${label}: ${receipt?.result ?? status} (${id})`);
-};
-
 const vault = deriveVaultAddress(VAULT.name);
 console.log(`leader: ${leaderAddress}`);
 console.log(`vault:  ${vault}\n`);
@@ -89,12 +81,18 @@ const args = new CreateVaultArgs(
   VAULT.withdrawalFeeBps,
   VAULT.depositLimit,
 );
-await send("create", User.createVault(args));
+
+// sendCallMessage builds, signs, and submits the tx. `status` is the queue
+// state ("submitted"); the actual execution result is in `receipt.result`.
+const created = await client.sendCallMessage(User.createVault(args));
+console.log(`create: ${created.receipt?.result ?? created.status} (${created.id})`);
 
 for (const depositor of WHITELIST_DEPOSITORS) {
-  await send(`whitelist ${depositor}`, Vault.whitelistDepositor(vault, depositor));
+  const res = await client.sendCallMessage(Vault.whitelistDepositor(vault, depositor));
+  console.log(`whitelist ${depositor}: ${res.receipt?.result ?? res.status} (${res.id})`);
 }
 
 if (delegate) {
-  await send(`delegate ${delegate}`, Vault.delegateVaultUserV1(vault, delegate, "delegate", 0));
+  const res = await client.sendCallMessage(Vault.delegateVaultUserV1(vault, delegate, "delegate", 0));
+  console.log(`delegate ${delegate}: ${res.receipt?.result ?? res.status} (${res.id})`);
 }
