@@ -38,7 +38,7 @@ use bullet_exchange_interface::types::{
 };
 use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{
-    SolanaLedgerTransaction as RustSolanaLedgerTransaction,
+    RuntimeCall, SolanaLedgerTransaction as RustSolanaLedgerTransaction,
     SolanaOffchainTransaction as RustSolanaOffchainTransaction, Transaction as RustTransaction,
     UniquenessData, UnsignedTransaction,
 };
@@ -89,6 +89,55 @@ pub struct WasmCallMessage {
 // Each struct is a JS namespace with static factory methods that return
 // `WasmCallMessage` instances. Generated from the Transaction schema by build.rs.
 include!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
+
+// ── WasmRuntimeCall ─────────────────────────────────────────────────────────
+
+/// A whole runtime call — the single action a transaction carries.
+///
+/// This is the one input to [`Transaction.builder().call(...)`](WasmTransactionBuilder::call).
+/// Construct it either from a typed call message or from JSON:
+///
+/// ```js
+/// // Typed (the common case) — factories return a CallMessage:
+/// const call = RuntimeCall.exchange(Admin.updateGlobalConfig(args));
+///
+/// // Dynamic / schema-driven — parse a serde JSON RuntimeCall
+/// // (the `{ "exchange": { ... } }` / `{ "bank": { ... } }` tagged form,
+/// // decimals as strings):
+/// const call = RuntimeCall.fromJson(json);
+///
+/// Transaction.builder().call(call).buildUnsigned(client);
+/// ```
+#[wasm_bindgen(js_name = RuntimeCall)]
+pub struct WasmRuntimeCall {
+    pub(crate) inner: RuntimeCall,
+}
+
+#[wasm_bindgen(js_class = RuntimeCall)]
+impl WasmRuntimeCall {
+    /// Wrap a typed exchange [`CallMessage`](WasmCallMessage) (e.g. the result of
+    /// `Admin.updateGlobalConfig(...)`) as a `RuntimeCall`.
+    /// @param {CallMessage} call - The typed exchange call message to wrap.
+    /// @returns {RuntimeCall}
+    pub fn exchange(call: WasmCallMessage) -> WasmRuntimeCall {
+        WasmRuntimeCall { inner: RuntimeCall::Exchange(call.inner) }
+    }
+
+    /// Parse a `RuntimeCall` from its serde JSON representation.
+    ///
+    /// Accepts the tagged form (`{ "exchange": { ... } }` / `{ "bank": { ... } }`,
+    /// decimals as strings). The JSON is validated against the runtime-call type
+    /// here; it is validated against the connected chain's schema at build time.
+    ///
+    /// @param {string} json - JSON-serialized `RuntimeCall`.
+    /// @returns {RuntimeCall}
+    #[wasm_bindgen(js_name = fromJson)]
+    pub fn from_json(json: &str) -> WasmResult<WasmRuntimeCall> {
+        let inner: RuntimeCall =
+            serde_json::from_str(json).map_err(|e| format!("invalid RuntimeCall JSON: {e}"))?;
+        Ok(WasmRuntimeCall { inner })
+    }
+}
 
 // ── WasmUnsignedTransaction ───────────────────────────────────────────────────
 
@@ -387,7 +436,7 @@ impl WasmTransactionEntry {
 /// - `signer` - Keypair to sign the transaction (not required for `buildUnsigned`)
 #[wasm_bindgen(js_name = TransactionBuilder)]
 pub struct WasmTransactionBuilder {
-    call_message: Option<WasmCallMessage>,
+    call: Option<WasmRuntimeCall>,
     max_fee: Option<u64>,
     priority_fee_bips: Option<u64>,
     gas_limit: Option<[u64; 2]>,
@@ -398,7 +447,7 @@ pub struct WasmTransactionBuilder {
 impl WasmTransactionBuilder {
     fn new() -> Self {
         WasmTransactionBuilder {
-            call_message: None,
+            call: None,
             max_fee: None,
             priority_fee_bips: None,
             gas_limit: None,
@@ -410,10 +459,25 @@ impl WasmTransactionBuilder {
 
 #[wasm_bindgen(js_class = TransactionBuilder)]
 impl WasmTransactionBuilder {
-    /// Set the call message for this transaction (required).
+    /// Set the action for this transaction (required).
+    ///
+    /// Build a `RuntimeCall` with `RuntimeCall.exchange(typedCallMessage)` or
+    /// `RuntimeCall.fromJson(json)`.
+    /// @param {RuntimeCall} call - The runtime call (exchange action) to send.
+    /// @returns {TransactionBuilder}
+    pub fn call(mut self, call: WasmRuntimeCall) -> WasmTransactionBuilder {
+        self.call = Some(call);
+        self
+    }
+
+    /// Set the action from a typed call message.
+    ///
+    /// @deprecated Use `.call(RuntimeCall.exchange(msg))` instead. Kept as a
+    /// convenience for the typed factories; equivalent to wrapping `msg` as an
+    /// exchange `RuntimeCall`.
     #[wasm_bindgen(js_name = callMessage)]
     pub fn call_message(mut self, msg: WasmCallMessage) -> WasmTransactionBuilder {
-        self.call_message = Some(msg);
+        self.call = Some(WasmRuntimeCall::exchange(msg));
         self
     }
 
@@ -495,42 +559,42 @@ impl WasmTransactionBuilder {
     /// ```
     #[wasm_bindgen(js_name = buildUnsigned)]
     pub fn build_unsigned(self, client: &WasmTradingApi) -> WasmResult<WasmUnsignedTransaction> {
-        let call_message = self.call_message.ok_or("call_message is required")?;
+        let call = self.call.ok_or("call is required (set via .call(...))")?;
 
         let max_fee = self.max_fee.map(|f| f as u128).unwrap_or_else(|| client.inner.max_fee().0);
         let priority_fee_bips =
             self.priority_fee_bips.unwrap_or_else(|| client.inner.max_priority_fee_bips().0);
         let gas_limit = self.gas_limit.map(Gas).or_else(|| client.inner.gas_limit());
 
-        let unsigned = UnsignedTransaction::builder()
-            .call_message(call_message.inner)
-            .max_fee(max_fee)
-            .priority_fee_bips(priority_fee_bips)
-            .maybe_gas_limit(gas_limit)
-            .maybe_uniqueness(self.uniqueness)
-            .client(&client.inner)
-            .build()?;
+        let unsigned = UnsignedTransaction::from_runtime_call(
+            call.inner,
+            max_fee,
+            priority_fee_bips,
+            gas_limit,
+            self.uniqueness,
+            &client.inner,
+        )?;
 
         Ok(WasmUnsignedTransaction { inner: unsigned })
     }
 
     /// Build the signed transaction without sending it.
     pub fn build(self, client: &WasmTradingApi) -> WasmResult<WasmTransaction> {
-        let call_message = self.call_message.ok_or("call_message is required")?;
+        let call = self.call.ok_or("call is required (set via .call(...))")?;
 
         let max_fee = self.max_fee.map(|f| f as u128);
         let gas_limit = self.gas_limit.map(Gas);
         let signer_ref = self.signer.as_ref().map(|s| &s.inner);
 
-        let signed = RustTransaction::builder()
-            .call_message(call_message.inner)
-            .maybe_max_fee(max_fee)
-            .maybe_priority_fee_bips(self.priority_fee_bips)
-            .maybe_gas_limit(gas_limit)
-            .maybe_uniqueness(self.uniqueness)
-            .maybe_signer(signer_ref)
-            .client(&client.inner)
-            .build()?;
+        let signed = RustTransaction::from_runtime_call(
+            call.inner,
+            max_fee,
+            self.priority_fee_bips,
+            gas_limit,
+            self.uniqueness,
+            signer_ref,
+            &client.inner,
+        )?;
 
         Ok(WasmTransaction { inner: signed })
     }

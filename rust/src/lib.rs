@@ -58,6 +58,8 @@ pub use bullet_exchange_interface::message::{
     AmendOrderArgs, CancelOrderArgs, NewOrderArgs, NewTriggerOrderArgs, NewTwapOrderArgs,
     PendingTpslPair, Tpsl, TpslPair,
 };
+/// A decoded runtime call (the exchange instruction carried by a transaction).
+pub use bullet_exchange_interface::transaction::RuntimeCall;
 /// Transaction uniqueness/replay-protection data: `Nonce`, `Generation`, or `Window`.
 ///
 /// Set on a transaction via `UnsignedTransaction::builder().uniqueness(...)` or

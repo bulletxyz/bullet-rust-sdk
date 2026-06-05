@@ -27,6 +27,7 @@ jobs:
           tool: cargo-nextest,just
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - run: just fmt-check
+      - run: just check-spec
       - run: just lint
       - run: just test
       - run: just test-doc
