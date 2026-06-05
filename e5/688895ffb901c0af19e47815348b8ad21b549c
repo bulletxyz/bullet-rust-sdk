@@ -1,0 +1,29 @@
+wasm/codegen/progenitor/emit/types.rs
+  s_86c63eb9dfbfa1::t_134eefe6bc9daf 30-34
+  s_86c63eb9dfbfa1::t_1d501cddecf530 49-62,83
+  s_86c63eb9dfbfa1::t_1f6a1537b61989 108
+  s_86c63eb9dfbfa1::t_a9f81c9cb11fec 187-220
+.github/workflows/ci.yml
+  s_86c63eb9dfbfa1::t_db09d132eafddb 30
+justfile
+  s_86c63eb9dfbfa1::t_9a7976b3c61881 188-190,192
+  s_86c63eb9dfbfa1::t_986b01bd0311b7 193-198
+wasm/codegen/progenitor/emit/mod.rs
+  s_86c63eb9dfbfa1::t_dd0d0e063c9718 46,51-52,54-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "e5688895ffb901c0af19e47815348b8ad21b549c",
+  "prompts": {},
+  "sessions": {
+    "s_86c63eb9dfbfa1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e66b22fb-76ce-476e-9411-276ba8439e5b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
