@@ -1,0 +1,21 @@
+wasm/codegen/progenitor/emit/mod.rs
+  s_2754b412746d1c::t_475641a62869fe 44-45,51-54
+rust/openapi.json
+  s_2754b412746d1c::t_2572ff07f23c99 4553-4555,5337-5466
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "4caa04339e7244685c196989f57391548ddbe8d7",
+  "prompts": {},
+  "sessions": {
+    "s_2754b412746d1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2a65de7-ad11-48da-b5f8-94eec74a82f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
