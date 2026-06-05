@@ -39,6 +39,7 @@ rand = "0.8"
 borsh = "1"
 hex = "0.4"
 base64 = "0.22"
+sha2 = "0.10"
 
 # WebSocket (works on both native and WASM)
 reqwest-websocket = { version = "0.6", features = ["json"] }

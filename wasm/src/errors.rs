@@ -111,6 +111,7 @@ impl From<SDKError> for WasmError {
             | SDKError::InvalidPublicKeyLength(_)
             | SDKError::UnsupportedCallMessage(_)
             | SDKError::TransactionOutdated
+            | SDKError::InvalidMultisig(_)
             | SDKError::RequestError(_) => WasmErrorKind::Validation,
             SDKError::JsonSerializeError(_)
             | SDKError::StringParseError(_)

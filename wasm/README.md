@@ -56,7 +56,6 @@ client.chainHash()           // Uint8Array (32 bytes)
 client.chainName()           // chain name used in Solana offchain messages
 client.url()                 // REST URL
 client.wsUrl()               // WebSocket URL
-client.solanaOffchainUrl()   // Solana offchain sequencer URL
 client.maxFee()              // default max fee
 client.hasKeypair()          // whether a default keypair is set
 
@@ -112,14 +111,21 @@ const tx = Transaction.builder()
 await client.sendTransaction(tx);
 ```
 
-By default the uniqueness generation is a millisecond unix timestamp, giving
-a ~5-second deduplication window. Override with `.generation()` to pass any
-value — for example a microsecond timestamp for a ~5ms window:
+### Uniqueness (replay protection)
+
+Every transaction carries a uniqueness value. By default the SDK uses
+**window-based** uniqueness from a per-client counter that tracks the
+millisecond unix timestamp and increments per transaction — a monotonic,
+duplicate-free value that needs no chain round-trip and tolerates many
+in-flight transactions.
+
+Override it with any one of `.window()`, `.generation()`, or `.nonce()` (these
+set the same single uniqueness value, so the last call wins):
 
 ```typescript
 const tx = Transaction.builder()
     .callMessage(msg)
-    .generation(BigInt(Date.now()) * 1000n)  // microseconds
+    .nonce(42n)        // or .generation(n) / .window(n)
     .signer(keypair)
     .send(client);
 ```
@@ -200,8 +206,8 @@ tx.toBase64()  // base64 string (for WebSocket submission)
 ### SolanaOffchainTransaction
 
 Assembled after signing `unsigned.toMessageBytes()` with a Solana
-wallet. Submit it with `client.sendOffChainTransaction(tx)`, which posts
-to `/sequencer/solana_offchain_txs`.
+wallet. Submit it with `client.sendOffChainTransaction(tx)`, which posts to
+the trading API's `/api/v1/solanaOffchainTx`.
 
 ```typescript
 const pubKey = wallet.publicKey.toBytes(); // 32-byte Solana public key
@@ -210,6 +216,44 @@ const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
 tx.toBytes()   // Uint8Array (borsh offchain envelope)
 tx.toBase64()  // base64 string
 ```
+
+### Multisig
+
+M-of-N multisig over the spec-compliant Solana offchain format (the format
+Ledger hardware wallets sign). Every signer signs the same bytes; once the
+threshold is met the transaction can be submitted.
+
+```typescript
+// 2-of-3 multisig. Keys are canonicalized (sorted) internally, so input
+// order never matters.
+const config = new MultisigConfig(2, [pubkeyA, pubkeyB, pubkeyC]);
+
+config.credentialId()  // Uint8Array — sha256(minSigners || borsh(sorted pubkeys))
+config.multisigId()    // string — base58 credential id (committed into the signed message)
+config.minSigners()    // number
+config.pubkeys()       // Uint8Array[] — canonical order
+
+const unsigned = Transaction.builder()
+    .callMessage(User.deposit(0, '1000.0'))
+    .buildUnsigned(client);
+
+// Collect signatures — each signer signs the same signable bytes
+const tx = new SolanaLedgerMultisigTransaction(unsigned, config);
+const signature = await ledgerWallet.signMessage(tx.signableBytes());
+tx.addSignature(pubkeyA, signature);   // validates membership + signature
+// ... pass tx.signableBytes() to the other signers ...
+tx.addSignature(pubkeyB, signatureB);
+
+tx.signatureCount() // number
+tx.isComplete()     // true once minSigners signatures are collected
+
+// Submit (throws if below threshold)
+await client.sendLedgerMultisigTransaction(tx);
+```
+
+The signable bytes can also be produced without assembling a transaction:
+`unsigned.toLedgerMultisigSignableBytes(config)` (preamble + JSON) and
+`unsigned.toMultisigMessageBytes(config)` (JSON payload only).
 
 ### Keypair
 
