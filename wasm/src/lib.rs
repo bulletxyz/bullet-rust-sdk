@@ -13,6 +13,7 @@ pub mod metadata;
 pub mod multisig;
 pub mod transaction_builder;
 pub mod utils;
+pub mod vault;
 pub mod ws;
 
 // Re-export the public surface so consumers can do:
@@ -25,5 +26,6 @@ pub use metadata::*;
 pub use multisig::*;
 pub use transaction_builder::*;
 pub use utils::decimal::WasmDecimal;
+pub use vault::*;
 pub use ws::client::*;
 pub use ws::topics::*;
