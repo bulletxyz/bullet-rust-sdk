@@ -1,0 +1,24 @@
+rust/src/lib.rs
+  s_2754b412746d1c::t_15e0a5b53b2d41 61-62
+justfile
+  s_2754b412746d1c::t_3f74461c464b25 192-197
+wasm/src/transaction_builder.rs
+  s_2754b412746d1c::t_bc151df0233fef 464-467
+  s_2754b412746d1c::t_282c35297b471c 120-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "38a7b80c730a345a58638bad7bbdf722b7066d2e",
+  "prompts": {},
+  "sessions": {
+    "s_2754b412746d1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2a65de7-ad11-48da-b5f8-94eec74a82f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
