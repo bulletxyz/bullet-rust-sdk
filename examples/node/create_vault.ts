@@ -76,23 +76,20 @@ const vault = deriveVaultAddress(VAULT.name);
 console.log(`leader: ${leaderAddress}`);
 console.log(`vault:  ${vault}\n`);
 
-await send(
-  "create",
-  User.createVault(
-    new CreateVaultArgs(
-      VAULT.name,
-      VAULT.description,
-      leaderAddress,
-      Uint16Array.from(VAULT.depositAssets.map(assetId)),
-      assetId(VAULT.withdrawAsset),
-      VAULT.lockupHours,
-      VAULT.whitelist,
-      VAULT.profitSharePct,
-      VAULT.withdrawalFeeBps,
-      VAULT.depositLimit,
-    ),
-  ),
+// CreateVaultArgs takes positional args, in this order:
+const args = new CreateVaultArgs(
+  VAULT.name,
+  VAULT.description,
+  leaderAddress,
+  Uint16Array.from(VAULT.depositAssets.map(assetId)),
+  assetId(VAULT.withdrawAsset),
+  VAULT.lockupHours,
+  VAULT.whitelist,
+  VAULT.profitSharePct,
+  VAULT.withdrawalFeeBps,
+  VAULT.depositLimit,
 );
+await send("create", User.createVault(args));
 
 for (const depositor of WHITELIST_DEPOSITORS) {
   await send(`whitelist ${depositor}`, Vault.whitelistDepositor(vault, depositor));
