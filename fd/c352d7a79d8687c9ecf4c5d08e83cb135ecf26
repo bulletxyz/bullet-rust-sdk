@@ -1,0 +1,25 @@
+wasm/codegen/progenitor/emit/types.rs
+  s_2754b412746d1c::t_a450f9f7c3986d 204
+  s_2754b412746d1c::t_931f1461d68978 42-72
+  s_2754b412746d1c::t_22b0597fe54323 83,87
+  s_2754b412746d1c::t_a240480a94937c 103
+  s_2754b412746d1c::t_2422cca4dd3b03 6
+wasm/codegen/progenitor/emit/mod.rs
+  s_2754b412746d1c::t_31f478ad21544a 46-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "fdc352d7a79d8687c9ecf4c5d08e83cb135ecf26",
+  "prompts": {},
+  "sessions": {
+    "s_2754b412746d1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2a65de7-ad11-48da-b5f8-94eec74a82f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
