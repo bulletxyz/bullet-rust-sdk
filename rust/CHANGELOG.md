@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.24](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.23...v0.0.24) - 2026-06-05
+
+### Features
+
+- vault creation script + deriveVaultAddress helper ([#90](https://github.com/bulletxyz/bullet-rust-sdk/pull/90))
+
 ## [0.0.23](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.22...v0.0.23) - 2026-06-05
 
 ### Features
