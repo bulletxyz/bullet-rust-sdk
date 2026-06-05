@@ -290,18 +290,19 @@ User.cancelAllOrders()
 // Public actions (no signing required, but still need a tx)
 Public.applyFunding(addresses)
 
+// Vault actions (User.createVault, plus Vault leader ops)
+User.createVault(args)
+Vault.delegateVaultUserV1(vault, delegate, 'bot', 0)
+
 // Order types
 const order = new NewOrderArgs(price, size, Side.Bid, OrderType.Limit, reduceOnly);
 const cancel = new CancelOrderArgs(orderId, clientOrderId);
 const amend = new AmendOrderArgs(cancel, newOrder);
 ```
 
-### Vaults
-
-Vaults use the `User`/`Vault` call-message factories, plus `deriveVaultAddress(name)`
-to compute a vault's address from its name. See
-[`examples/node/create_vault.ts`](../examples/node/create_vault.ts) for a
-runnable end-to-end script.
+`deriveVaultAddress(name)` computes a vault's address from its name. See
+[`examples/node/create_vault.ts`](../examples/node/create_vault.ts) for a runnable
+vault example.
 
 ### WebSocket
 
