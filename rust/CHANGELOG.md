@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.23](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.22...v0.0.23) - 2026-06-05
+
+### Features
+
+- RuntimeCall builder seam + simulate support + typed Symbol filters ([#88](https://github.com/bulletxyz/bullet-rust-sdk/pull/88))
+- ledger multisig signing + Nonce/Window uniqueness ([#87](https://github.com/bulletxyz/bullet-rust-sdk/pull/87))
+
 ## [0.0.22](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.21...v0.0.22) - 2026-06-01
 
 ### Bug Fixes
