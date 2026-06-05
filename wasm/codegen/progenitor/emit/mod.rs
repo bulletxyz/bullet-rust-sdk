@@ -43,10 +43,8 @@ pub fn emit_all(model: &CodeModel) -> String {
     // Unit-variant enums become wasm-bindgen C-style enums; data-carrying enums
     // (e.g. `oneOf` types like `SimulateOutcome` or `Filter`) can't — they're
     // wrapped as opaque `Wasm{name}` newtypes exposing `toJSON()` instead.
-    let unit_enums: Vec<&&EnumDetails> =
-        enums.iter().filter(|e| e.variants.iter().all(|v| v.fields.is_empty())).collect();
-    let data_enums: Vec<&&EnumDetails> =
-        enums.iter().filter(|e| e.variants.iter().any(|v| !v.fields.is_empty())).collect();
+    let (unit_enums, data_enums): (Vec<&&EnumDetails>, Vec<&&EnumDetails>) =
+        enums.iter().partition(|e| e.variants.iter().all(|v| v.fields.is_empty()));
 
     // Set of names that map to JS strings. Only *unit* enums qualify — a
     // data-carrying enum field/return must route through its `Wasm{name}`
