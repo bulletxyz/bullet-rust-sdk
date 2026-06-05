@@ -4550,7 +4550,9 @@
                     },
                     "filters": {
                         "type": "array",
-                        "items": {}
+                        "items": {
+                            "$ref": "#/components/schemas/Filter"
+                        }
                     },
                     "liquidationFee": {
                         "type": "string",
@@ -5332,6 +5334,136 @@
                         "minimum": 0
                     }
                 }
+            },
+            "Filter": {
+                "oneOf": [
+                    {
+                        "type": "object",
+                        "required": [
+                            "tickSize",
+                            "minPrice",
+                            "maxPrice",
+                            "filterType"
+                        ],
+                        "properties": {
+                            "filterType": {
+                                "type": "string",
+                                "enum": [
+                                    "PRICE_FILTER"
+                                ]
+                            },
+                            "maxPrice": {
+                                "type": "string",
+                                "format": "decimal"
+                            },
+                            "minPrice": {
+                                "type": "string",
+                                "format": "decimal"
+                            },
+                            "tickSize": {
+                                "type": "string",
+                                "format": "decimal"
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "stepSize",
+                            "minQty",
+                            "maxQty",
+                            "filterType"
+                        ],
+                        "properties": {
+                            "filterType": {
+                                "type": "string",
+                                "enum": [
+                                    "LOT_SIZE"
+                                ]
+                            },
+                            "maxQty": {
+                                "type": "string",
+                                "format": "decimal"
+                            },
+                            "minQty": {
+                                "type": "string",
+                                "format": "decimal"
+                            },
+                            "stepSize": {
+                                "type": "string",
+                                "format": "decimal"
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "limit",
+                            "filterType"
+                        ],
+                        "properties": {
+                            "filterType": {
+                                "type": "string",
+                                "enum": [
+                                    "MAX_NUM_ORDERS"
+                                ]
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "format": "uint16",
+                                "minimum": 0
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "limit",
+                            "filterType"
+                        ],
+                        "properties": {
+                            "filterType": {
+                                "type": "string",
+                                "enum": [
+                                    "MAX_NUM_ALGO_ORDERS"
+                                ]
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "format": "uint16",
+                                "minimum": 0
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "multiplierUp",
+                            "multiplierDown",
+                            "multiplierDecimal",
+                            "filterType"
+                        ],
+                        "properties": {
+                            "filterType": {
+                                "type": "string",
+                                "enum": [
+                                    "PERCENT_PRICE"
+                                ]
+                            },
+                            "multiplierDecimal": {
+                                "type": "string"
+                            },
+                            "multiplierDown": {
+                                "type": "string",
+                                "format": "decimal"
+                            },
+                            "multiplierUp": {
+                                "type": "string",
+                                "format": "decimal"
+                            }
+                        }
+                    }
+                ]
             }
         }
     }

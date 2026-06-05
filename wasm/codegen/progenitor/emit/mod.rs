@@ -40,16 +40,18 @@ pub fn emit_all(model: &CodeModel) -> String {
         }
     }
 
-    // Build enum name set for distinguishing enum refs from struct refs.
-    let enum_names: HashSet<&str> = enums.iter().map(|e| e.name.as_str()).collect();
-
     // Unit-variant enums become wasm-bindgen C-style enums; data-carrying enums
-    // (e.g. `oneOf` responses like `SimulateOutcome`) can't — they're wrapped as
-    // opaque newtypes exposing `toJSON()` instead.
+    // (e.g. `oneOf` types like `SimulateOutcome` or `Filter`) can't — they're
+    // wrapped as opaque `Wasm{name}` newtypes exposing `toJSON()` instead.
     let unit_enums: Vec<&&EnumDetails> =
         enums.iter().filter(|e| e.variants.iter().all(|v| v.fields.is_empty())).collect();
     let data_enums: Vec<&&EnumDetails> =
         enums.iter().filter(|e| e.variants.iter().any(|v| !v.fields.is_empty())).collect();
+
+    // Set of names that map to JS strings. Only *unit* enums qualify — a
+    // data-carrying enum field/return must route through its `Wasm{name}`
+    // wrapper (like a struct), not be stringified, so it stays out of this set.
+    let enum_names: HashSet<&str> = unit_enums.iter().map(|e| e.name.as_str()).collect();
 
     let enum_tokens: Vec<TokenStream> = unit_enums
         .iter()
