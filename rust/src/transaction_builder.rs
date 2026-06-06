@@ -73,6 +73,45 @@ impl UnsignedTransaction {
         Ok(data)
     }
 
+    /// Reconstruct an [`UnsignedTransaction`] from the canonical bytes produced
+    /// by [`to_bytes`](UnsignedTransaction::to_bytes) — the inverse of that
+    /// method.
+    ///
+    /// `to_bytes` is `borsh(payload) ++ chain_hash` (a 32-byte domain
+    /// separator). This reads back the payload and trailing chain hash, taking
+    /// `chain_name` from `client`. The embedded chain hash is checked against
+    /// the client's to reject bytes that were built for a different network.
+    ///
+    /// This lets a coordinator persist a transaction as its exact signable
+    /// bytes and rebuild it later — across SDK upgrades or process restarts —
+    /// without re-deriving from structured inputs. Because the payload is read
+    /// back verbatim rather than re-serialized, the rebuilt signable bytes are
+    /// byte-identical to what was signed; the stored bytes, not a separate JSON
+    /// representation, are the source of truth.
+    pub fn from_bytes(bytes: &[u8], client: &Client) -> SDKResult<UnsignedTransaction> {
+        const CHAIN_HASH_LEN: usize = 32;
+        if bytes.len() < CHAIN_HASH_LEN {
+            return Err(SDKError::SerializationError(format!(
+                "unsigned transaction bytes too short: {} (need at least {CHAIN_HASH_LEN} for the chain hash)",
+                bytes.len()
+            )));
+        }
+        let (payload, chain_hash_bytes) = bytes.split_at(bytes.len() - CHAIN_HASH_LEN);
+        let mut chain_hash = [0u8; CHAIN_HASH_LEN];
+        chain_hash.copy_from_slice(chain_hash_bytes);
+
+        if chain_hash != client.chain_hash() {
+            return Err(SDKError::SerializationError(
+                "unsigned transaction chain hash does not match the connected client (built for a different network?)".to_string(),
+            ));
+        }
+
+        let inner = RawUnsignedTransaction::try_from_slice(payload)
+            .map_err(|e| SDKError::SerializationError(e.to_string()))?;
+
+        Ok(UnsignedTransaction { inner, chain_hash, chain_name: client.chain_name() })
+    }
+
     /// Render the unsigned transaction payload as a human-readable message.
     ///
     /// This is useful when an external wallet can only show raw message bytes
@@ -706,6 +745,62 @@ mod tests {
         let mut expected = borsh::to_vec(&unsigned.inner).unwrap();
         expected.extend_from_slice(&unsigned.chain_hash);
         assert_eq!(bytes, expected);
+    }
+
+    #[tokio::test]
+    async fn from_bytes_roundtrips_to_bytes() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+
+        // schema_response(7) sets the client chain hash to [7u8; 32].
+        let inner = RawUnsignedTransaction {
+            runtime_call: RuntimeCall::Exchange(CallMessage::Public(PublicAction::ApplyFunding {
+                addresses: vec![],
+            })),
+            uniqueness: UniquenessData::Window(99),
+            details: TxDetails {
+                chain_id: client.chain_id(),
+                max_fee: Amount(10_000_000),
+                gas_limit: None,
+                max_priority_fee_bips: PriorityFeeBips(0),
+            },
+        };
+        let original = UnsignedTransaction {
+            inner,
+            chain_hash: client.chain_hash(),
+            chain_name: client.chain_name(),
+        };
+        let bytes = original.to_bytes().unwrap();
+
+        let restored = UnsignedTransaction::from_bytes(&bytes, &client).unwrap();
+
+        // Re-serializing the reconstructed tx yields byte-identical signable bytes.
+        assert_eq!(restored.to_bytes().unwrap(), bytes);
+        assert_eq!(restored.chain_hash, client.chain_hash());
+        assert_eq!(restored.chain_name, client.chain_name());
+    }
+
+    #[tokio::test]
+    async fn from_bytes_rejects_chain_hash_for_another_network() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+
+        // Bytes whose trailing chain hash isn't the client's ([7u8; 32]).
+        let mut foreign = test_unsigned_tx();
+        foreign.chain_hash = [9u8; 32];
+        let bytes = foreign.to_bytes().unwrap();
+
+        let err = UnsignedTransaction::from_bytes(&bytes, &client).unwrap_err();
+        assert!(matches!(err, SDKError::SerializationError(_)), "{err:?}");
+    }
+
+    #[tokio::test]
+    async fn from_bytes_rejects_truncated_input() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+
+        let err = UnsignedTransaction::from_bytes(&[0u8; 8], &client).unwrap_err();
+        assert!(matches!(err, SDKError::SerializationError(_)), "{err:?}");
     }
 
     #[test]

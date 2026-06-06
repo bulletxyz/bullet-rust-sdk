@@ -168,6 +168,35 @@ impl WasmUnsignedTransaction {
         Ok(self.inner.to_bytes()?)
     }
 
+    /// Reconstruct an `UnsignedTransaction` from the canonical bytes produced
+    /// by `toBytes()` — the inverse of that method.
+    ///
+    /// Lets a coordinator (e.g. a multisig UI) persist a proposal as its exact
+    /// signable bytes and rebuild the transaction later for display
+    /// (`toDisplayMessage()`) and submission, without re-deriving it from a
+    /// stored JSON representation. The rebuilt bytes are byte-identical to what
+    /// was signed. `client` supplies the chain name and validates that the
+    /// embedded chain hash matches the connected network.
+    ///
+    /// @param {Uint8Array} bytes - Bytes from a previous `toBytes()` call.
+    /// @param {Client} client - The trading API client.
+    /// @returns {UnsignedTransaction}
+    /// @example
+    /// ```js
+    /// const unsigned = UnsignedTransaction.fromBytes(storedBytes, client);
+    /// const display = unsigned.toDisplayMessage();
+    /// const signableBytes = unsigned.toLedgerMultisigSignableBytes(config);
+    /// ```
+    #[wasm_bindgen(js_name = fromBytes)]
+    pub fn from_bytes(
+        bytes: &[u8],
+        client: &WasmTradingApi,
+    ) -> WasmResult<WasmUnsignedTransaction> {
+        Ok(WasmUnsignedTransaction {
+            inner: UnsignedTransaction::from_bytes(bytes, &client.inner)?,
+        })
+    }
+
     /// Render the unsigned transaction payload as a human-readable message.
     ///
     /// Use this string in your own confirmation UI when an external wallet shows
