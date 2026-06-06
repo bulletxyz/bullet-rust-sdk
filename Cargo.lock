@@ -305,7 +305,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-rust-sdk"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "base64",
  "bon",
@@ -345,7 +345,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-rust-sdk-wasm"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "bon",
  "bullet-exchange-interface",
