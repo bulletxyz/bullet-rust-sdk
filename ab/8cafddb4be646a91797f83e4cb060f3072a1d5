@@ -1,0 +1,22 @@
+wasm/src/transaction_builder.rs
+  s_86c63eb9dfbfa1::t_3f4275baf997c8 171-192,194-195,197-199
+rust/src/transaction_builder.rs
+  s_86c63eb9dfbfa1::t_f2dcf4a373621e 750-805
+  s_86c63eb9dfbfa1::t_e2cdc42c7bf9c7 76-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "ab8cafddb4be646a91797f83e4cb060f3072a1d5",
+  "prompts": {},
+  "sessions": {
+    "s_86c63eb9dfbfa1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e66b22fb-76ce-476e-9411-276ba8439e5b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
