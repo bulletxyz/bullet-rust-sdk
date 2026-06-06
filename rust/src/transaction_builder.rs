@@ -101,8 +101,8 @@ impl UnsignedTransaction {
         chain_hash.copy_from_slice(chain_hash_bytes);
 
         if chain_hash != client.chain_hash() {
-            return Err(SDKError::SerializationError(
-                "unsigned transaction chain hash does not match the connected client (built for a different network?)".to_string(),
+            return Err(SDKError::InvalidChainHash(
+                "does not match the connected client (built for a different network?)".to_string(),
             ));
         }
 
@@ -791,7 +791,7 @@ mod tests {
         let bytes = foreign.to_bytes().unwrap();
 
         let err = UnsignedTransaction::from_bytes(&bytes, &client).unwrap_err();
-        assert!(matches!(err, SDKError::SerializationError(_)), "{err:?}");
+        assert!(matches!(err, SDKError::InvalidChainHash(_)), "{err:?}");
     }
 
     #[tokio::test]

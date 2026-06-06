@@ -160,7 +160,16 @@ chain hash so signable bytes can be produced without a client reference.
 unsigned.toBytes()  // Uint8Array — borsh-serialized tx + chain hash (signable bytes)
 unsigned.toDisplayMessage() // string — human-readable unsigned payload for display only
 unsigned.toMessageBytes() // Uint8Array — readable JSON bytes for Solana wallets
+
+// Inverse of toBytes(): rebuild an UnsignedTransaction from stored signable
+// bytes (chain name comes from the client; mismatched chain hash is rejected).
+UnsignedTransaction.fromBytes(bytes, client) // UnsignedTransaction
 ```
+
+Use `fromBytes` when a coordinator (e.g. a multisig UI) persists a transaction
+as its exact signable bytes and rebuilds it later for display and submission —
+the rebuilt bytes are byte-identical to what was signed, so the stored bytes are
+the source of truth rather than a separate JSON representation.
 
 Some external wallets display `signMessage` bytes as raw UTF-8, so `toBytes()`
 can look garbled in the wallet confirmation. That is expected: those bytes are
