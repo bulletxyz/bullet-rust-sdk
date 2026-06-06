@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.25](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.24...v0.0.25) - 2026-06-06
+
+### Features
+
+- add UnsignedTransaction::from_bytes to rebuild from canonical bytes ([#92](https://github.com/bulletxyz/bullet-rust-sdk/pull/92))
+
 ## [0.0.24](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.23...v0.0.24) - 2026-06-05
 
 ### Features
