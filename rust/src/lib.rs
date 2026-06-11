@@ -4,9 +4,11 @@ mod metadata;
 mod multisig;
 mod trading;
 mod transaction_builder;
+mod sub_account;
 mod vault;
 
 pub use trading::NewOrderExt;
+pub use sub_account::derive_sub_account_address;
 pub use vault::derive_vault_address;
 
 /// Error types for the SDK.
