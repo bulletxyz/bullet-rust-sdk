@@ -313,6 +313,13 @@ const amend = new AmendOrderArgs(cancel, newOrder);
 [`examples/node/create_vault.ts`](../examples/node/create_vault.ts) for a runnable
 vault example.
 
+`deriveSubAccountAddress(master, index)` computes a sub-account's address from
+its master address and index (`0-31`). Sub-accounts are created with
+`User.createSubAccount(index)` and traded by passing `index` as the trailing
+`sub_account_index` arg on order/cancel call messages; the derived address is
+only needed to read a sub-account (`client.accountInfo(sub)`). Throws on an
+out-of-range index.
+
 ### WebSocket
 
 ```typescript

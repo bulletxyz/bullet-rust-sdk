@@ -3,6 +3,11 @@
 use bullet_exchange_interface::address::Address;
 use sha2::{Digest, Sha256};
 
+/// Highest valid sub-account index. The runtime tracks sub-account existence in
+/// a `u32` bitmask (`MasterV1 { sub_account_mask }`), so only `0..=31` slots
+/// exist.
+pub const MAX_SUB_ACCOUNT_INDEX: u8 = 31;
+
 /// Derive a sub-account's on-chain address from its master address and index.
 ///
 /// Sub-account addresses are deterministic: the runtime seeds them with the
@@ -14,18 +19,27 @@ use sha2::{Digest, Sha256};
 /// sub-account.
 ///
 /// `master` must be the master account's canonical base58 address string (its
-/// `Display`); `index` is the sub-account index (0-31, bounded by the runtime's
-/// `u32` sub-account mask). This mirrors the runtime's
+/// `Display`); `index` is the sub-account index. This mirrors the runtime's
 /// `generate_sub_account_address`, which lives in the exchange crate (not
 /// `bullet-exchange-interface`), so there is no shared source of truth to
 /// import — it's duplicated here by necessity and locked by a golden-vector
 /// test. If the runtime ever changes its seed scheme, this function and its
 /// test must be updated to match.
-pub fn derive_sub_account_address(master: &str, index: u8) -> String {
+///
+/// Returns `Err` for an out-of-range `index` (`> `[`MAX_SUB_ACCOUNT_INDEX`]):
+/// such an index can never correspond to a real sub-account, so deriving an
+/// address for it would yield a valid-looking but meaningless address. Rejected
+/// rather than silently returned.
+pub fn derive_sub_account_address(master: &str, index: u8) -> Result<String, String> {
+    if index > MAX_SUB_ACCOUNT_INDEX {
+        return Err(format!(
+            "sub-account index {index} out of range (0..={MAX_SUB_ACCOUNT_INDEX})"
+        ));
+    }
     let mut seed = master.as_bytes().to_vec();
     seed.push(index);
     let hash: [u8; 32] = Sha256::digest(&seed).into();
-    Address(hash).to_string()
+    Ok(Address(hash).to_string())
 }
 
 #[cfg(test)]
@@ -40,17 +54,19 @@ mod tests {
         // treats `master` as bytes — and matches the runtime's
         // `generate_sub_account_address(master, index)`.
         assert_eq!(
-            derive_sub_account_address("default", 0),
+            derive_sub_account_address("default", 0).unwrap(),
             "DdKTBsowJD2b8UsevrwF73zNb3C2VjHuAG32VJzFcYc5"
         );
         assert_eq!(
-            derive_sub_account_address("default", 1),
+            derive_sub_account_address("default", 1).unwrap(),
             "7Kfuk3KR19naCaswqS2w1Z7spwrzHDwyD5Ymirm6HMZj"
         );
-        // Distinct from the master and from each other.
-        assert_ne!(
-            derive_sub_account_address("default", 0),
-            derive_sub_account_address("default", 1)
-        );
+    }
+
+    #[test]
+    fn rejects_out_of_range_index() {
+        assert!(derive_sub_account_address("default", MAX_SUB_ACCOUNT_INDEX).is_ok());
+        assert!(derive_sub_account_address("default", MAX_SUB_ACCOUNT_INDEX + 1).is_err());
+        assert!(derive_sub_account_address("default", 255).is_err());
     }
 }
