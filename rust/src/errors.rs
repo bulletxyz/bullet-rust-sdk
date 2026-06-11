@@ -137,6 +137,13 @@ pub enum SDKError {
     #[error("Invalid multisig: {0}")]
     InvalidMultisig(String),
 
+    /// Sub-account index out of range. The runtime tracks sub-account
+    /// existence in a `u32` bitmask, so valid indices are `0..=31`. Carries the
+    /// caller-supplied value as `u32` so an out-of-`u8` value (e.g. from a JS
+    /// number) is reported faithfully rather than truncated.
+    #[error("Sub-account index {0} out of range (0..=31)")]
+    InvalidSubAccountIndex(u32),
+
     #[error(transparent)]
     WebsocketError(#[from] Box<WSErrors>),
 }

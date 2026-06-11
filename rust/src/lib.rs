@@ -2,10 +2,12 @@ mod client;
 mod keypair;
 mod metadata;
 mod multisig;
+mod sub_account;
 mod trading;
 mod transaction_builder;
 mod vault;
 
+pub use sub_account::derive_sub_account_address;
 pub use trading::NewOrderExt;
 pub use vault::derive_vault_address;
 
