@@ -1,0 +1,19 @@
+wasm/pnpm-workspace.yaml
+  s_6d21e72af8c921::t_a90fe6affe92ce 1-4,6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "9a1798ec9ac70660e2f6a587754579d7c0abf0ff",
+  "prompts": {},
+  "sessions": {
+    "s_6d21e72af8c921": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1ae91ab-e650-45d7-885d-4902e3c8511f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
