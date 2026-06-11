@@ -1,5 +1,7 @@
 use wasm_bindgen::prelude::*;
 
+use crate::errors::WasmError;
+
 /// Derive a sub-account's on-chain address from its master address and index.
 ///
 /// Sub-account addresses are deterministic — the runtime seeds them with the
@@ -17,6 +19,6 @@ use wasm_bindgen::prelude::*;
 /// const account = await client.accountInfo(sub);
 /// await client.sendCallMessage(User.placeOrders(marketId, orders, false, 1));
 #[wasm_bindgen(js_name = deriveSubAccountAddress)]
-pub fn derive_sub_account_address(master: &str, index: u8) -> Result<String, JsError> {
-    bullet_rust_sdk::derive_sub_account_address(master, index).map_err(|e| JsError::new(&e))
+pub fn derive_sub_account_address(master: &str, index: u8) -> Result<String, WasmError> {
+    bullet_rust_sdk::derive_sub_account_address(master, index).map_err(WasmError::from)
 }

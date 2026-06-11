@@ -3,6 +3,8 @@
 use bullet_exchange_interface::address::Address;
 use sha2::{Digest, Sha256};
 
+use crate::errors::{SDKError, SDKResult};
+
 /// Highest valid sub-account index. The runtime tracks sub-account existence in
 /// a `u32` bitmask (`MasterV1 { sub_account_mask }`), so only `0..=31` slots
 /// exist.
@@ -26,15 +28,13 @@ pub const MAX_SUB_ACCOUNT_INDEX: u8 = 31;
 /// test. If the runtime ever changes its seed scheme, this function and its
 /// test must be updated to match.
 ///
-/// Returns `Err` for an out-of-range `index` (`> `[`MAX_SUB_ACCOUNT_INDEX`]):
-/// such an index can never correspond to a real sub-account, so deriving an
-/// address for it would yield a valid-looking but meaningless address. Rejected
-/// rather than silently returned.
-pub fn derive_sub_account_address(master: &str, index: u8) -> Result<String, String> {
+/// Returns [`SDKError::InvalidSubAccountIndex`] for an out-of-range `index`
+/// (`> `[`MAX_SUB_ACCOUNT_INDEX`]): such an index can never correspond to a real
+/// sub-account, so deriving an address for it would yield a valid-looking but
+/// meaningless address. Rejected rather than silently returned.
+pub fn derive_sub_account_address(master: &str, index: u8) -> SDKResult<String> {
     if index > MAX_SUB_ACCOUNT_INDEX {
-        return Err(format!(
-            "sub-account index {index} out of range (0..={MAX_SUB_ACCOUNT_INDEX})"
-        ));
+        return Err(SDKError::InvalidSubAccountIndex(index));
     }
     let mut seed = master.as_bytes().to_vec();
     seed.push(index);
