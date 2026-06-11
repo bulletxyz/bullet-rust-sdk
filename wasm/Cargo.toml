@@ -1,17 +1,17 @@
 [package]
 name = "bullet-rust-sdk-wasm"
-version = "0.0.13"
-edition = "2024"
-license = "MIT"
+version = "0.0.25"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "WebAssembly bindings for the Bullet trading SDK"
-repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 publish = false # ships to npm as @bulletxyz/sdk-wasm, not crates.io
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bullet-rust-sdk = { path = "../rust" }
+bullet-rust-sdk = { workspace = true }
 bullet-exchange-interface.workspace = true
 
 wasm-bindgen         = "0.2"
@@ -32,10 +32,10 @@ getrandom = { version = "0.2", features = ["js"] }
 
 [build-dependencies]
 bullet-exchange-interface = { workspace = true, features = ["schema"] }
-sov-universal-wallet = { version = "0.3", features = ["serde"] }
+sov-universal-wallet = { version = "0.4", features = ["serde"] }
 heck = "0.5"
 quote = "1"
 proc-macro2 = "1"
 syn = "2"
 prettyplease = "0.2"
-strum = "0.26"
+strum = "0.28"

@@ -1,11 +1,13 @@
 use std::ops::Deref;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use bon::bon;
 use bullet_exchange_interface::message::UserActionDiscriminants;
 use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
 use bullet_exchange_interface::types::MarketId;
 use url::Url;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::generated::Client as GeneratedClient;
 use crate::metadata::{ExchangeMetadata, SymbolInfo};
@@ -36,14 +38,26 @@ use crate::{Keypair, SDKError, SDKResult};
 pub struct Client {
     rest_url: String,
     ws_url: String,
-    solana_offchain_url: String,
     generated_client: GeneratedClient,
-    pub(crate) http_client: reqwest::Client,
     pub(crate) ws_client: reqwest::Client,
     chain_id: u64,
     chain_hash: Mutex<[u8; 32]>,
     chain_name: String,
     user_actions: Option<Vec<UserActionDiscriminants>>,
+
+    /// Monotonic counter for the default `Window` uniqueness. Each call raises
+    /// it to at least the current millisecond unix timestamp and then
+    /// increments, so values track the wall clock (independent clients with
+    /// synchronised clocks converge and don't collide unless they submit in the
+    /// very same millisecond) while staying unique within this client under
+    /// sub-millisecond bursts.
+    ///
+    /// The counter is in-memory: a client restarted *mid-burst* re-seeds from
+    /// the wall clock, so a sub-millisecond burst larger than the restart
+    /// latency could briefly reuse values (rejected as replays within the
+    /// rollup's window). Throughput-sensitive or multi-instance setups that
+    /// can't tolerate this should set an explicit `uniqueness` on the builder.
+    window_nonce: AtomicU64,
 
     keypair: Option<Keypair>,
 
@@ -133,12 +147,6 @@ impl Client {
         max_fee: Option<Amount>,
         gas_limit: Option<Gas>,
         keypair: Option<Keypair>,
-        /// Override the Solana offchain sequencer endpoint.
-        ///
-        /// By default this is derived from the selected Bullet network and used
-        /// by `Client::send_offchain_transaction`.
-        #[builder(into)]
-        solana_offchain_url: Option<String>,
         /// Restrict schema validation to specific `UserAction` variants.
         ///
         /// By default (`None`), the client validates every exchange `CallMessage`
@@ -162,8 +170,6 @@ impl Client {
         };
         let http_client = reqwest_client.unwrap_or_default();
         let generated_client = GeneratedClient::new_with_client(&rest_url, http_client.clone());
-        let solana_offchain_url =
-            solana_offchain_url.unwrap_or_else(|| Self::default_solana_offchain_url(&rest_url));
 
         // WebSocket requires HTTP/1.1 (HTTP/2 does not support the Upgrade mechanism).
         // We always build a dedicated HTTP/1.1 client for WS, regardless of whether
@@ -185,20 +191,33 @@ impl Client {
         Ok(Self {
             rest_url,
             ws_url,
-            solana_offchain_url,
             generated_client,
-            http_client,
             ws_client,
             chain_id: chain_data.chain_id,
             chain_hash: Mutex::new(chain_data.chain_hash),
             chain_name: chain_data.chain_name,
             user_actions,
+            window_nonce: AtomicU64::new(0),
             gas_limit,
             max_priority_fee_bips,
             max_fee,
             keypair,
             metadata,
         })
+    }
+
+    /// Return the next value for the default `Window` uniqueness and advance the
+    /// counter.
+    ///
+    /// Raises the counter to at least the current millisecond unix timestamp
+    /// (so independent clients with synchronised clocks pick converging values)
+    /// and then increments, keeping each value unique and monotonic within this
+    /// client even under sub-millisecond bursts.
+    pub(crate) fn next_window_nonce(&self) -> u64 {
+        let now =
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        self.window_nonce.fetch_max(now, Ordering::Relaxed);
+        self.window_nonce.fetch_add(1, Ordering::Relaxed)
     }
 
     async fn fetch_schema(
@@ -249,24 +268,6 @@ impl Client {
         Ok(())
     }
 
-    fn default_solana_offchain_url(rest_url: &str) -> String {
-        let Ok(parsed) = Url::parse(rest_url) else {
-            return rest_url.to_string();
-        };
-
-        let path = "/sequencer/solana_offchain_txs";
-        match parsed.host_str() {
-            Some("tradingapi.bullet.xyz") => {
-                "https://rollup.mainnet.bullet.xyz/sequencer/solana_offchain_txs".to_string()
-            }
-            Some("tradingapi.testnet.bullet.xyz") => {
-                "https://rollup.testnet.bullet.xyz/sequencer/solana_offchain_txs".to_string()
-            }
-            Some(_) => format!("{}://{}{}", parsed.scheme(), parsed.authority(), path),
-            None => rest_url.to_string(),
-        }
-    }
-
     /// Decides whether a given enum variant should be included in the schema
     /// comparison between our compiled types and the remote API.
     ///
@@ -304,6 +305,14 @@ impl Client {
                     .unwrap_or(false),
                 None => true,
             },
+            // Validate only the `Generation` arm: it's the uniqueness variant
+            // present in every deployed network's schema today. `Window` (the
+            // SDK default) and `Nonce` exist in the local interface but aren't
+            // on mainnet's schema yet, so checking them here would falsely
+            // reject connecting to a mainnet that trails the local interface.
+            // Their layout is a plain `u64` pinned by the shared
+            // `bullet-exchange-interface` version; broaden this to `Window`
+            // once mainnet exposes it.
             "UniquenessData" => variant == "Generation",
             _ => {
                 // include the variant - to be sure we fail afterwards
@@ -379,11 +388,6 @@ impl Client {
     /// The websocket URL.
     pub fn ws_url(&self) -> &str {
         &self.ws_url
-    }
-
-    /// The Solana offchain sequencer URL.
-    pub fn solana_offchain_url(&self) -> &str {
-        &self.solana_offchain_url
     }
 
     /// Get the default keypair for signing transactions.
@@ -471,26 +475,10 @@ mod tests {
     use crate::types::UserAction;
 
     #[test]
-    fn default_solana_offchain_url_derives_non_public_bullet_hosts_from_rest_url() {
-        let environment = ["stag", "ing"].concat();
-        let rest_url = format!("https://tradingapi.{environment}.bullet.xyz");
-
-        assert_eq!(
-            Client::default_solana_offchain_url(&rest_url),
-            format!("{rest_url}/sequencer/solana_offchain_txs")
-        );
-    }
-
-    #[test]
-    fn default_solana_offchain_url_maps_known_public_networks_to_rollup() {
-        assert_eq!(
-            Client::default_solana_offchain_url("https://tradingapi.bullet.xyz"),
-            "https://rollup.mainnet.bullet.xyz/sequencer/solana_offchain_txs"
-        );
-        assert_eq!(
-            Client::default_solana_offchain_url("https://tradingapi.testnet.bullet.xyz"),
-            "https://rollup.testnet.bullet.xyz/sequencer/solana_offchain_txs"
-        );
+    fn network_from_resolves_named_networks_and_custom_urls() {
+        assert!(matches!(Network::from("mainnet"), Network::Mainnet));
+        assert!(matches!(Network::from("testnet"), Network::Testnet));
+        assert!(matches!(Network::from("https://custom.example.com"), Network::Custom(_)));
     }
 
     #[test]

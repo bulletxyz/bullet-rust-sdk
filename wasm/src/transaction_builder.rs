@@ -32,14 +32,15 @@ use bullet_exchange_interface::message::*;
 use bullet_exchange_interface::time::UnixTimestampMicros;
 use bullet_exchange_interface::transaction::{Gas, Transaction};
 use bullet_exchange_interface::types::{
-    AdminType, AssetId, ClientOrderId, FeeTier, MarketId, OrderId, OrderType, Side,
-    SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
+    AdminType, AssetId, ClientOrderId, FeeTier, MarketId, MarketTradingStatus, OrderId, OrderType,
+    Side, SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
     TriggerPriceCondition, TwapId,
 };
 use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{
+    RuntimeCall, SolanaLedgerTransaction as RustSolanaLedgerTransaction,
     SolanaOffchainTransaction as RustSolanaOffchainTransaction, Transaction as RustTransaction,
-    UnsignedTransaction,
+    UniquenessData, UnsignedTransaction,
 };
 use wasm_bindgen::prelude::*;
 
@@ -89,6 +90,55 @@ pub struct WasmCallMessage {
 // `WasmCallMessage` instances. Generated from the Transaction schema by build.rs.
 include!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
 
+// ── WasmRuntimeCall ─────────────────────────────────────────────────────────
+
+/// A whole runtime call — the single action a transaction carries.
+///
+/// This is the one input to [`Transaction.builder().call(...)`](WasmTransactionBuilder::call).
+/// Construct it either from a typed call message or from JSON:
+///
+/// ```js
+/// // Typed (the common case) — factories return a CallMessage:
+/// const call = RuntimeCall.exchange(Admin.updateGlobalConfig(args));
+///
+/// // Dynamic / schema-driven — parse a serde JSON RuntimeCall
+/// // (the `{ "exchange": { ... } }` / `{ "bank": { ... } }` tagged form,
+/// // decimals as strings):
+/// const call = RuntimeCall.fromJson(json);
+///
+/// Transaction.builder().call(call).buildUnsigned(client);
+/// ```
+#[wasm_bindgen(js_name = RuntimeCall)]
+pub struct WasmRuntimeCall {
+    pub(crate) inner: RuntimeCall,
+}
+
+#[wasm_bindgen(js_class = RuntimeCall)]
+impl WasmRuntimeCall {
+    /// Wrap a typed exchange [`CallMessage`](WasmCallMessage) (e.g. the result of
+    /// `Admin.updateGlobalConfig(...)`) as a `RuntimeCall`.
+    /// @param {CallMessage} call - The typed exchange call message to wrap.
+    /// @returns {RuntimeCall}
+    pub fn exchange(call: WasmCallMessage) -> WasmRuntimeCall {
+        WasmRuntimeCall { inner: RuntimeCall::Exchange(call.inner) }
+    }
+
+    /// Parse a `RuntimeCall` from its serde JSON representation.
+    ///
+    /// Accepts the tagged form (`{ "exchange": { ... } }` / `{ "bank": { ... } }`,
+    /// decimals as strings). The JSON is validated against the runtime-call type
+    /// here; it is validated against the connected chain's schema at build time.
+    ///
+    /// @param {string} json - JSON-serialized `RuntimeCall`.
+    /// @returns {RuntimeCall}
+    #[wasm_bindgen(js_name = fromJson)]
+    pub fn from_json(json: &str) -> WasmResult<WasmRuntimeCall> {
+        let inner: RuntimeCall =
+            serde_json::from_str(json).map_err(|e| format!("invalid RuntimeCall JSON: {e}"))?;
+        Ok(WasmRuntimeCall { inner })
+    }
+}
+
 // ── WasmUnsignedTransaction ───────────────────────────────────────────────────
 
 /// An unsigned transaction ready for external signing.
@@ -118,6 +168,35 @@ impl WasmUnsignedTransaction {
         Ok(self.inner.to_bytes()?)
     }
 
+    /// Reconstruct an `UnsignedTransaction` from the canonical bytes produced
+    /// by `toBytes()` — the inverse of that method.
+    ///
+    /// Lets a coordinator (e.g. a multisig UI) persist a proposal as its exact
+    /// signable bytes and rebuild the transaction later for display
+    /// (`toDisplayMessage()`) and submission, without re-deriving it from a
+    /// stored JSON representation. The rebuilt bytes are byte-identical to what
+    /// was signed. `client` supplies the chain name and validates that the
+    /// embedded chain hash matches the connected network.
+    ///
+    /// @param {Uint8Array} bytes - Bytes from a previous `toBytes()` call.
+    /// @param {Client} client - The trading API client.
+    /// @returns {UnsignedTransaction}
+    /// @example
+    /// ```js
+    /// const unsigned = UnsignedTransaction.fromBytes(storedBytes, client);
+    /// const display = unsigned.toDisplayMessage();
+    /// const signableBytes = unsigned.toLedgerMultisigSignableBytes(config);
+    /// ```
+    #[wasm_bindgen(js_name = fromBytes)]
+    pub fn from_bytes(
+        bytes: &[u8],
+        client: &WasmTradingApi,
+    ) -> WasmResult<WasmUnsignedTransaction> {
+        Ok(WasmUnsignedTransaction {
+            inner: UnsignedTransaction::from_bytes(bytes, &client.inner)?,
+        })
+    }
+
     /// Render the unsigned transaction payload as a human-readable message.
     ///
     /// Use this string in your own confirmation UI when an external wallet shows
@@ -139,10 +218,10 @@ impl WasmUnsignedTransaction {
     /// Serialize into readable JSON bytes for offchain signing.
     ///
     /// External Solana wallets should sign these bytes when the backend uses
-    /// the `solanaSimple` authenticator. The JSON includes the chain hash as
-    /// the signed domain separator. Assemble the result with
-    /// `SolanaOffchainTransaction.fromParts(...)` and submit it with
-    /// `client.sendOffChainTransaction(...)`.
+    /// the `solanaSimple` authenticator. The JSON includes `chain_name` and
+    /// `chain_id`; the current sequencer offchain authenticator also requires
+    /// the envelope assembled by `SolanaOffchainTransaction.fromParts(...)`.
+    /// Submit the result with `client.sendOffChainTransaction(...)`.
     ///
     /// @returns {Uint8Array} UTF-8 JSON bytes to pass to `wallet.signMessage`.
     /// @example
@@ -157,6 +236,86 @@ impl WasmUnsignedTransaction {
     #[wasm_bindgen(js_name = toMessageBytes)]
     pub fn to_message_bytes(&self) -> WasmResult<Vec<u8>> {
         Ok(self.inner.to_message_bytes()?)
+    }
+
+    /// Build the bytes a Ledger hardware wallet must sign.
+    ///
+    /// Returns the 85-byte Solana off-chain preamble (using the chain hash as
+    /// application domain) concatenated with the JSON message bytes. Pass the
+    /// result to `wallet.signMessage`; then assemble and submit with
+    /// `SolanaLedgerTransaction.fromParts(unsigned, pubKey, signature)` and
+    /// `client.sendLedgerTransaction(tx)`.
+    ///
+    /// @param {Uint8Array} pubKey - 32-byte Solana public key.
+    /// @returns {Uint8Array} Bytes to pass to `wallet.signMessage`.
+    /// @example
+    /// ```js
+    /// const unsigned = Transaction.builder().callMessage(msg).buildUnsigned(client);
+    /// const pubKey = ledgerWallet.publicKey.toBytes();
+    /// const signableBytes = unsigned.toLedgerSignableBytes(pubKey);
+    /// const signature = await ledgerWallet.signMessage(signableBytes);
+    /// const tx = SolanaLedgerTransaction.fromParts(unsigned, pubKey, signature);
+    /// await client.sendLedgerTransaction(tx);
+    /// ```
+    #[wasm_bindgen(js_name = toLedgerSignableBytes)]
+    pub fn to_ledger_signable_bytes(&self, pub_key: &[u8]) -> WasmResult<Vec<u8>> {
+        let pub_key: [u8; 32] = pub_key
+            .try_into()
+            .map_err(|_| format!("expected 32-byte public key, got {}", pub_key.len()))?;
+        Ok(self.inner.to_ledger_signable_bytes(&pub_key)?)
+    }
+}
+
+// ── WasmSolanaLedgerTransaction ──────────────────────────────────────────────
+
+/// A Solana offchain transaction using the spec-compliant Ledger wire format.
+///
+/// Use this for Ledger hardware wallets. Obtain bytes to sign from
+/// `unsigned.toLedgerSignableBytes(pubKey)`, sign with the Ledger, then
+/// assemble with `fromParts` and submit via `client.sendLedgerTransaction`.
+#[wasm_bindgen(js_name = SolanaLedgerTransaction)]
+pub struct WasmSolanaLedgerTransaction {
+    pub(crate) inner: RustSolanaLedgerTransaction,
+}
+
+#[wasm_bindgen(js_class = SolanaLedgerTransaction)]
+impl WasmSolanaLedgerTransaction {
+    /// Assemble a Ledger transaction from an unsigned transaction, a 32-byte
+    /// public key, and a 64-byte Ed25519 signature.
+    ///
+    /// @param {UnsignedTransaction} unsignedTx - The unsigned transaction.
+    /// @param {Uint8Array} pubKey - 32-byte Solana public key.
+    /// @param {Uint8Array} signature - 64-byte Ed25519 signature.
+    /// @returns {SolanaLedgerTransaction}
+    #[wasm_bindgen(js_name = fromParts)]
+    pub fn from_parts(
+        unsigned_tx: WasmUnsignedTransaction,
+        pub_key: &[u8],
+        signature: &[u8],
+    ) -> WasmResult<WasmSolanaLedgerTransaction> {
+        let pub_key: [u8; 32] = pub_key
+            .try_into()
+            .map_err(|_| format!("expected 32-byte public key, got {}", pub_key.len()))?;
+        let signature: [u8; 64] = signature
+            .try_into()
+            .map_err(|_| format!("expected 64-byte signature, got {}", signature.len()))?;
+        Ok(WasmSolanaLedgerTransaction {
+            inner: RustSolanaLedgerTransaction::from_parts(unsigned_tx.inner, pub_key, signature)?,
+        })
+    }
+
+    /// Serialize to the raw binary wire format.
+    /// @returns {Uint8Array}
+    #[wasm_bindgen(js_name = toBytes)]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.inner.to_bytes()
+    }
+
+    /// Serialize to wire format and base64-encode.
+    /// @returns {string}
+    #[wasm_bindgen(js_name = toBase64)]
+    pub fn to_base64(&self) -> String {
+        self.inner.to_base64()
     }
 }
 
@@ -301,23 +460,27 @@ impl WasmTransactionEntry {
 /// - `maxFee` - Maximum fee willing to pay (in base units)
 /// - `priorityFeeBips` - Priority fee in basis points
 /// - `gasLimit` - Optional gas limit [ref_time, proof_size]
+/// - `generation` - Uniqueness generation value (default: current unix timestamp in milliseconds)
+/// - `nonce` / `window` - Alternative uniqueness types (mutually exclusive with `generation`)
 /// - `signer` - Keypair to sign the transaction (not required for `buildUnsigned`)
 #[wasm_bindgen(js_name = TransactionBuilder)]
 pub struct WasmTransactionBuilder {
-    call_message: Option<WasmCallMessage>,
+    call: Option<WasmRuntimeCall>,
     max_fee: Option<u64>,
     priority_fee_bips: Option<u64>,
     gas_limit: Option<[u64; 2]>,
+    uniqueness: Option<UniquenessData>,
     signer: Option<WasmKeypair>,
 }
 
 impl WasmTransactionBuilder {
     fn new() -> Self {
         WasmTransactionBuilder {
-            call_message: None,
+            call: None,
             max_fee: None,
             priority_fee_bips: None,
             gas_limit: None,
+            uniqueness: None,
             signer: None,
         }
     }
@@ -325,10 +488,25 @@ impl WasmTransactionBuilder {
 
 #[wasm_bindgen(js_class = TransactionBuilder)]
 impl WasmTransactionBuilder {
-    /// Set the call message for this transaction (required).
+    /// Set the action for this transaction (required).
+    ///
+    /// Build a `RuntimeCall` with `RuntimeCall.exchange(typedCallMessage)` or
+    /// `RuntimeCall.fromJson(json)`.
+    /// @param {RuntimeCall} call - The runtime call (exchange action) to send.
+    /// @returns {TransactionBuilder}
+    pub fn call(mut self, call: WasmRuntimeCall) -> WasmTransactionBuilder {
+        self.call = Some(call);
+        self
+    }
+
+    /// Set the action from a typed call message.
+    ///
+    /// @deprecated Use `.call(RuntimeCall.exchange(msg))` instead. Kept as a
+    /// convenience for the typed factories; equivalent to wrapping `msg` as an
+    /// exchange `RuntimeCall`.
     #[wasm_bindgen(js_name = callMessage)]
     pub fn call_message(mut self, msg: WasmCallMessage) -> WasmTransactionBuilder {
-        self.call_message = Some(msg);
+        self.call = Some(WasmRuntimeCall::exchange(msg));
         self
     }
 
@@ -355,6 +533,39 @@ impl WasmTransactionBuilder {
         self
     }
 
+    /// Use window-based uniqueness with an explicit value.
+    ///
+    /// This is the default uniqueness mode (seeded with a microsecond unix
+    /// timestamp when unset); call this only to pin a specific value. Window
+    /// values must be unique per credential but need not be consecutive.
+    /// Setting `nonce`/`generation`/`window` more than once keeps the last.
+    /// @param {bigint} window - The window value to use.
+    /// @returns {TransactionBuilder}
+    pub fn window(mut self, window: u64) -> WasmTransactionBuilder {
+        self.uniqueness = Some(UniquenessData::Window(window));
+        self
+    }
+
+    /// Use generation-based uniqueness.
+    ///
+    /// Setting `nonce`/`generation`/`window` more than once keeps the last.
+    /// @param {bigint} generation - The generation value to use.
+    /// @returns {TransactionBuilder}
+    pub fn generation(mut self, generation: u64) -> WasmTransactionBuilder {
+        self.uniqueness = Some(UniquenessData::Generation(generation));
+        self
+    }
+
+    /// Use nonce-based uniqueness (unique and consecutive per credential).
+    ///
+    /// Setting `nonce`/`generation`/`window` more than once keeps the last.
+    /// @param {bigint} nonce - The credential nonce.
+    /// @returns {TransactionBuilder}
+    pub fn nonce(mut self, nonce: u64) -> WasmTransactionBuilder {
+        self.uniqueness = Some(UniquenessData::Nonce(nonce));
+        self
+    }
+
     /// Set the keypair used to sign this transaction.
     pub fn signer(mut self, keypair: WasmKeypair) -> WasmTransactionBuilder {
         self.signer = Some(keypair);
@@ -377,40 +588,42 @@ impl WasmTransactionBuilder {
     /// ```
     #[wasm_bindgen(js_name = buildUnsigned)]
     pub fn build_unsigned(self, client: &WasmTradingApi) -> WasmResult<WasmUnsignedTransaction> {
-        let call_message = self.call_message.ok_or("call_message is required")?;
+        let call = self.call.ok_or("call is required (set via .call(...))")?;
 
         let max_fee = self.max_fee.map(|f| f as u128).unwrap_or_else(|| client.inner.max_fee().0);
         let priority_fee_bips =
             self.priority_fee_bips.unwrap_or_else(|| client.inner.max_priority_fee_bips().0);
         let gas_limit = self.gas_limit.map(Gas).or_else(|| client.inner.gas_limit());
 
-        let unsigned = UnsignedTransaction::builder()
-            .call_message(call_message.inner)
-            .max_fee(max_fee)
-            .priority_fee_bips(priority_fee_bips)
-            .maybe_gas_limit(gas_limit)
-            .client(&client.inner)
-            .build()?;
+        let unsigned = UnsignedTransaction::from_runtime_call(
+            call.inner,
+            max_fee,
+            priority_fee_bips,
+            gas_limit,
+            self.uniqueness,
+            &client.inner,
+        )?;
 
         Ok(WasmUnsignedTransaction { inner: unsigned })
     }
 
     /// Build the signed transaction without sending it.
     pub fn build(self, client: &WasmTradingApi) -> WasmResult<WasmTransaction> {
-        let call_message = self.call_message.ok_or("call_message is required")?;
+        let call = self.call.ok_or("call is required (set via .call(...))")?;
 
         let max_fee = self.max_fee.map(|f| f as u128);
         let gas_limit = self.gas_limit.map(Gas);
         let signer_ref = self.signer.as_ref().map(|s| &s.inner);
 
-        let signed = RustTransaction::builder()
-            .call_message(call_message.inner)
-            .maybe_max_fee(max_fee)
-            .maybe_priority_fee_bips(self.priority_fee_bips)
-            .maybe_gas_limit(gas_limit)
-            .maybe_signer(signer_ref)
-            .client(&client.inner)
-            .build()?;
+        let signed = RustTransaction::from_runtime_call(
+            call.inner,
+            max_fee,
+            self.priority_fee_bips,
+            gas_limit,
+            self.uniqueness,
+            signer_ref,
+            &client.inner,
+        )?;
 
         Ok(WasmTransaction { inner: signed })
     }
@@ -461,6 +674,23 @@ impl WasmTradingApi {
         Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
 
+    /// Send a Ledger-signed transaction to the sequencer via REST.
+    ///
+    /// Use this with Ledger hardware wallets. Sign with
+    /// `unsigned.toLedgerSignableBytes(pubKey)`, then assemble via
+    /// `SolanaLedgerTransaction.fromParts(unsigned, pubKey, signature)`.
+    ///
+    /// @param {SolanaLedgerTransaction} tx - A signed Ledger transaction.
+    /// @returns {Promise<SubmitTxResponse>}
+    #[wasm_bindgen(js_name = sendLedgerTransaction)]
+    pub async fn send_ledger_transaction(
+        &self,
+        tx: &WasmSolanaLedgerTransaction,
+    ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
+        let resp = self.inner.send_ledger_transaction(&tx.inner).await?;
+        Ok(crate::generated::WasmSubmitTxResponse(resp))
+    }
+
     /// Sign and submit a call message in one step.
     ///
     /// This is a convenience method that wraps
@@ -480,9 +710,7 @@ impl WasmTradingApi {
         &self,
         msg: WasmCallMessage,
     ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
-        let signed =
-            RustTransaction::builder().call_message(msg.inner).client(&self.inner).build()?;
-        let resp = self.inner.send_transaction(&signed).await?;
+        let resp = self.inner.send_call_message(msg.inner).await?;
         Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
 }

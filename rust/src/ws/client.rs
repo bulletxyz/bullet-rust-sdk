@@ -501,6 +501,68 @@ impl WebsocketHandle {
         self.send(ClientMessage::OrderCancel { id, params: OrderParams { tx: tx.into() } }).await
     }
 
+    /// Amend an order via WebSocket.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Base64-encoded raw transaction bytes
+    /// * `id` - Optional request ID for matching the server's response
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use bullet_rust_sdk::Client;
+    /// use bullet_rust_sdk::types::RequestId;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let api = Client::mainnet().await?;
+    /// let mut ws = api.connect_ws().call().await?;
+    ///
+    /// let tx_bytes = "base64_encoded_amend_transaction";
+    /// ws.order_amend(tx_bytes, Some(RequestId::new(1))).await?;
+    /// // Match response by request_id
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn order_amend(
+        &mut self,
+        tx: impl Into<String>,
+        id: Option<RequestId>,
+    ) -> SDKResult<(), WSErrors> {
+        self.send(ClientMessage::OrderAmend { id, params: OrderParams { tx: tx.into() } }).await
+    }
+
+    /// Cancel all open orders for a market via WebSocket.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Base64-encoded raw transaction bytes
+    /// * `id` - Optional request ID for matching the server's response
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use bullet_rust_sdk::Client;
+    /// use bullet_rust_sdk::types::RequestId;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let api = Client::mainnet().await?;
+    /// let mut ws = api.connect_ws().call().await?;
+    ///
+    /// let tx_bytes = "base64_encoded_cancel_all_transaction";
+    /// ws.order_cancel_all(tx_bytes, Some(RequestId::new(1))).await?;
+    /// // Match response by request_id
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn order_cancel_all(
+        &mut self,
+        tx: impl Into<String>,
+        id: Option<RequestId>,
+    ) -> SDKResult<(), WSErrors> {
+        self.send(ClientMessage::OrderCancelAll { id, params: OrderParams { tx: tx.into() } }).await
+    }
+
     /// Place an order via WebSocket using a signed transaction.
     ///
     /// This is a convenience wrapper around [`order_place`](Self::order_place) that
@@ -553,5 +615,59 @@ impl WebsocketHandle {
         let base64 =
             crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
         self.order_cancel(base64, id).await
+    }
+
+    /// Amend an order via WebSocket using a signed transaction.
+    ///
+    /// This is a convenience wrapper around [`order_amend`](Self::order_amend) that
+    /// handles base64 encoding internally.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use bullet_rust_sdk::{Client, Transaction};
+    ///
+    /// let signed = Transaction::builder()
+    ///     .call_message(amend_msg)
+    ///     .client(&client)
+    ///     .build()?;
+    ///
+    /// ws.amend_order(&signed, None).await?;
+    /// ```
+    pub async fn amend_order(
+        &mut self,
+        signed: &bullet_exchange_interface::transaction::Transaction,
+        id: Option<RequestId>,
+    ) -> SDKResult<(), WSErrors> {
+        let base64 =
+            crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
+        self.order_amend(base64, id).await
+    }
+
+    /// Cancel all open orders via WebSocket using a signed transaction.
+    ///
+    /// This is a convenience wrapper around [`order_cancel_all`](Self::order_cancel_all) that
+    /// handles base64 encoding internally.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use bullet_rust_sdk::{Client, Transaction};
+    ///
+    /// let signed = Transaction::builder()
+    ///     .call_message(cancel_all_msg)
+    ///     .client(&client)
+    ///     .build()?;
+    ///
+    /// ws.cancel_all_orders(&signed, None).await?;
+    /// ```
+    pub async fn cancel_all_orders(
+        &mut self,
+        signed: &bullet_exchange_interface::transaction::Transaction,
+        id: Option<RequestId>,
+    ) -> SDKResult<(), WSErrors> {
+        let base64 =
+            crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
+        self.order_cancel_all(base64, id).await
     }
 }

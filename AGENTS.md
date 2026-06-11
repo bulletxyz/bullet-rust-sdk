@@ -142,3 +142,23 @@ just lint
 # Format code
 just fmt
 ```
+
+## OpenAPI Spec Workflow
+
+The SDK builds against the committed `rust/openapi.json` by default — no network access required at build time. The codegen (progenitor) is deterministic given the committed spec.
+
+**To update the spec when trading-api changes upstream:**
+
+```bash
+just refresh-spec               # writes the live spec into rust/openapi.json
+```
+
+Review the diff, fix any hand-written code that the new spec requires (`errors.rs`, `transaction_builder.rs`, test mocks), then commit the spec update and the code fixes together.
+
+**One-off live fetch during a build** (without committing the spec):
+
+```bash
+BULLET_REFRESH_SPEC=1 cargo build
+```
+
+This hard-fails if the live fetch is unreachable, so it's only appropriate when you have confirmed network access to `tradingapi.bullet.xyz`. The `BULLET_API_ENDPOINT` env var still works to point at a non-default endpoint when `BULLET_REFRESH_SPEC` is set.

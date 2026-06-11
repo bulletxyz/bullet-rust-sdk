@@ -91,11 +91,11 @@ lint:
 
 # Format all source files
 fmt:
-    cargo +nightly fmt --all -- --config-path rustfmt.nightly.toml
+    cargo fmt --all
 
 # Check formatting without modifying files
 fmt-check:
-    cargo +nightly fmt --all -- --check --config-path rustfmt.nightly.toml
+    cargo fmt --all -- --check
 
 # ── Examples ──────────────────────────────────────────────────────────────────
 
@@ -153,9 +153,6 @@ ci:
     step "Rust: clippy"
     just lint
 
-    step "Rust: build"
-    just build
-
     step "Rust: unit tests"
     just test
 
@@ -184,6 +181,23 @@ ci:
 
 # ── OpenAPI spec ──────────────────────────────────────────────────────────────
 
-# Fetch and cache the latest OpenAPI spec from mainnet
-fetch-spec endpoint="https://tradingapi.bullet.xyz":
-    curl -sSf {{ endpoint }}/docs/rest/openapi.json | jq -- . > rust/openapi.json
+# Refresh rust/openapi.json from the live trading-api endpoint. Use this
+# when upstream spec changes need to be tracked in the SDK; commit the
+# resulting diff alongside any hand-written code updates the new spec
+# requires. The SDK build itself uses the committed file — see build.rs.
+#
+# `--indent 4` matches the trading-api's (utoipa) native 4-space formatting, so
+# a refresh produces a content-only diff instead of reformatting the whole file.
+refresh-spec endpoint="https://tradingapi.bullet.xyz":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+    curl -sSf "{{ endpoint }}/docs/rest/openapi.json" -o "$tmp"
+    jq --indent 4 -- . "$tmp" > rust/openapi.json
+
+# Verify rust/openapi.json is canonically formatted (jq --indent 4 idempotent).
+# Guards against hand-edits or a different formatter producing whole-file diffs.
+check-spec:
+    @jq --indent 4 -- . rust/openapi.json | diff -u rust/openapi.json - \
+        || { echo "ERROR: rust/openapi.json is not canonical. Run: just refresh-spec"; exit 1; }
