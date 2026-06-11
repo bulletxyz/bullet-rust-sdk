@@ -1,10 +1,13 @@
 mod client;
 mod keypair;
 mod metadata;
+mod multisig;
 mod trading;
 mod transaction_builder;
+mod vault;
 
 pub use trading::NewOrderExt;
+pub use vault::derive_vault_address;
 
 /// Error types for the SDK.
 pub mod errors;
@@ -14,9 +17,12 @@ pub use client::{Client, Network};
 pub use errors::{SDKError, SDKResult, WSErrors};
 pub use generated::types::ApiErrorResponse;
 pub use keypair::Keypair;
+pub use multisig::{MAX_MULTISIG_SIGNERS, MultisigConfig, SolanaLedgerMultisigTransaction};
 // Re-export WebSocket close code for pattern matching
 pub use reqwest_websocket::CloseCode;
-pub use transaction_builder::{Transaction, UnsignedTransaction};
+pub use transaction_builder::{
+    SolanaLedgerTransaction, SolanaOffchainTransaction, Transaction, UnsignedTransaction,
+};
 pub use types::CallMessage;
 
 // Re-export WebSocket module and types
@@ -54,6 +60,13 @@ pub use bullet_exchange_interface::message::{
     AmendOrderArgs, CancelOrderArgs, NewOrderArgs, NewTriggerOrderArgs, NewTwapOrderArgs,
     PendingTpslPair, Tpsl, TpslPair,
 };
+/// A decoded runtime call (the exchange instruction carried by a transaction).
+pub use bullet_exchange_interface::transaction::RuntimeCall;
+/// Transaction uniqueness/replay-protection data: `Nonce`, `Generation`, or `Window`.
+///
+/// Set on a transaction via `UnsignedTransaction::builder().uniqueness(...)` or
+/// `Transaction::builder().uniqueness(...)`.
+pub use bullet_exchange_interface::transaction::UniquenessData;
 /// Client-assigned order identifier. Wraps a `u64`.
 pub use bullet_exchange_interface::types::ClientOrderId;
 /// Numeric market identifier. Wraps a `u16`.

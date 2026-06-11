@@ -19,11 +19,7 @@ pub fn map_primitive(prim: &Primitive) -> ParamMapping {
         Primitive::String => ("&str".into(), "{v}.into()".into()),
     };
 
-    ParamMapping {
-        param_type,
-        conversion,
-        is_optional: false,
-    }
+    ParamMapping { param_type, conversion, is_optional: false }
 }
 
 /// Map an immediate primitive from the raw schema `Primitive` type.

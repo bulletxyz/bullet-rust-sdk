@@ -29,10 +29,7 @@ use super::{CodeModel, TypeInfo};
 /// Parse the progenitor-generated codegen.rs and build a `CodeModel`.
 pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
     let source = std::fs::read_to_string(codegen_path).unwrap_or_else(|e| {
-        panic!(
-            "failed to read progenitor codegen at {}: {e}",
-            codegen_path.display()
-        )
+        panic!("failed to read progenitor codegen at {}: {e}", codegen_path.display())
     });
 
     let file = syn::parse_file(&source)

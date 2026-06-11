@@ -25,15 +25,22 @@ pub enum NewtypeKind {
 
 /// Try to map a known newtype. Returns `None` if the type is not a known newtype.
 pub fn try_map_newtype(
+    field_name: &str,
     idx: usize,
     types: &Types,
     serde_metadata: &SerdeMetadata,
 ) -> Option<ParamMapping> {
-    classify(idx, types, serde_metadata).map(NewtypeKind::scalar_mapping)
+    classify(field_name, idx, types, serde_metadata).map(NewtypeKind::scalar_mapping)
 }
 
-pub fn classify(idx: usize, types: &Types, serde_metadata: &SerdeMetadata) -> Option<NewtypeKind> {
+pub fn classify(
+    field_name: &str,
+    idx: usize,
+    types: &Types,
+    serde_metadata: &SerdeMetadata,
+) -> Option<NewtypeKind> {
     classify_index(idx, types, serde_metadata, NewtypeHint::Any)
+        .or_else(|| classify_index_by_field_name(field_name, idx, types))
 }
 
 pub fn classify_link_as(
@@ -99,6 +106,20 @@ fn classify_index_by_expected_shape(
     }
 }
 
+fn classify_index_by_field_name(
+    field_name: &str,
+    idx: usize,
+    types: &Types,
+) -> Option<NewtypeKind> {
+    match &types[idx] {
+        Ty::Tuple(tuple) if tuple.fields.len() == 1 => {
+            classify_tuple_field_by_name(field_name, &tuple.fields[0].value, types)
+        }
+        Ty::Struct(s) if s.type_name == "SurrogateDecimal" => Some(NewtypeKind::SurrogateDecimal),
+        _ => None,
+    }
+}
+
 fn classify_link(
     link: &Link,
     types: &Types,
@@ -135,6 +156,92 @@ fn classify_immediate(prim: &SchemaPrimitive, hint: NewtypeHint) -> Option<Newty
     kind.matches_immediate(prim).then_some(kind)
 }
 
+fn classify_tuple_field_by_name(
+    field_name: &str,
+    value: &Link,
+    types: &Types,
+) -> Option<NewtypeKind> {
+    match value {
+        Link::Immediate(SchemaPrimitive::ByteArray { len: 32, display }) => {
+            matches!(display, ByteDisplay::Base58).then_some(NewtypeKind::Address)
+        }
+        Link::Immediate(SchemaPrimitive::Integer(IntegerType::u16, _)) => {
+            classify_u16_field(field_name)
+        }
+        Link::Immediate(SchemaPrimitive::Integer(IntegerType::u64, _)) => {
+            classify_u64_field(field_name)
+        }
+        Link::Immediate(SchemaPrimitive::Integer(IntegerType::i64, _))
+            if is_timestamp_field(field_name) =>
+        {
+            Some(NewtypeKind::UnixTimestampMicros)
+        }
+        Link::Immediate(SchemaPrimitive::String) if is_token_id_field(field_name) => {
+            Some(NewtypeKind::TokenId)
+        }
+        Link::ByIndex(inner_idx) if is_surrogate_decimal(*inner_idx, types) => {
+            Some(NewtypeKind::PositiveDecimal)
+        }
+        _ => None,
+    }
+}
+
+fn classify_u16_field(field_name: &str) -> Option<NewtypeKind> {
+    if is_market_id_field(field_name) {
+        Some(NewtypeKind::MarketId)
+    } else if is_asset_id_field(field_name) {
+        Some(NewtypeKind::AssetId)
+    } else {
+        None
+    }
+}
+
+fn classify_u64_field(field_name: &str) -> Option<NewtypeKind> {
+    if is_client_order_id_field(field_name) {
+        Some(NewtypeKind::ClientOrderId)
+    } else if is_trigger_order_id_field(field_name) {
+        Some(NewtypeKind::TriggerOrderId)
+    } else if is_twap_id_field(field_name) {
+        Some(NewtypeKind::TwapId)
+    } else if is_order_id_field(field_name) {
+        Some(NewtypeKind::OrderId)
+    } else {
+        None
+    }
+}
+
+fn is_client_order_id_field(field_name: &str) -> bool {
+    field_name.ends_with("client_order_id") || field_name.ends_with("client_order_ids")
+}
+
+fn is_trigger_order_id_field(field_name: &str) -> bool {
+    field_name.ends_with("trigger_order_id") || field_name.ends_with("trigger_order_ids")
+}
+
+fn is_twap_id_field(field_name: &str) -> bool {
+    field_name.ends_with("twap_id") || field_name.ends_with("twap_ids")
+}
+
+fn is_order_id_field(field_name: &str) -> bool {
+    field_name.ends_with("order_id") || field_name.ends_with("order_ids")
+}
+
+fn is_asset_id_field(field_name: &str) -> bool {
+    field_name.ends_with("asset_id") || field_name.ends_with("asset_ids")
+}
+
+fn is_market_id_field(field_name: &str) -> bool {
+    field_name.ends_with("market_id") || field_name.ends_with("market_ids")
+}
+
+fn is_token_id_field(field_name: &str) -> bool {
+    field_name.ends_with("token_id")
+}
+
+fn is_timestamp_field(field_name: &str) -> bool {
+    field_name == "timestamp" || field_name.ends_with("_timestamp") || field_name == "expires_at"
+}
+
 fn metadata_kind(idx: usize, serde_metadata: &SerdeMetadata) -> Option<NewtypeKind> {
     let name = serde_metadata.get(idx)?.name.as_str();
     kind_from_name(name)
@@ -165,17 +272,7 @@ fn explicit_index_kind(idx: usize) -> Option<NewtypeKind> {
     // Keep this table narrow and shape-guarded; do not infer these wrappers
     // from field names.
     match idx {
-        7 => Some(NewtypeKind::Address),
-        15 => Some(NewtypeKind::AssetId),
-        16 => Some(NewtypeKind::PositiveDecimal),
-        17 => Some(NewtypeKind::SurrogateDecimal),
-        30 => Some(NewtypeKind::MarketId),
         40 => Some(NewtypeKind::UnixTimestampMicros),
-        47 => Some(NewtypeKind::ClientOrderId),
-        59 => Some(NewtypeKind::OrderId),
-        71 => Some(NewtypeKind::TriggerOrderId),
-        75 => Some(NewtypeKind::TwapId),
-        168 => Some(NewtypeKind::TokenId),
         _ => None,
     }
 }
@@ -200,10 +297,7 @@ fn kind_matches_index(kind: NewtypeKind, idx: usize, types: &Types) -> bool {
             tuple_inner(idx, types).is_some_and(|link| matches_integer(link, IntegerType::u64))
         }
         NewtypeKind::TokenId => {
-            matches!(
-                tuple_inner(idx, types),
-                Some(Link::Immediate(SchemaPrimitive::String))
-            )
+            matches!(tuple_inner(idx, types), Some(Link::Immediate(SchemaPrimitive::String)))
         }
     }
 }
@@ -281,7 +375,9 @@ impl NewtypeKind {
             NewtypeKind::OrderId => ("u64", "OrderId({v})"),
             NewtypeKind::TriggerOrderId => ("u64", "TriggerOrderId({v})"),
             NewtypeKind::TwapId => ("u64", "TwapId({v})"),
-            NewtypeKind::TokenId => ("&str", "TokenId::from_str({v}).unwrap()"),
+            NewtypeKind::TokenId => {
+                ("&str", "TokenId::from_str({v}).map_err(|e| format!(\"{e:?}\"))?")
+            }
         };
 
         ParamMapping {
@@ -293,10 +389,9 @@ impl NewtypeKind {
 
     pub fn vec_mapping(self) -> Option<ParamMapping> {
         let (param_type, conversion) = match self {
-            NewtypeKind::Address => (
-                "Vec<String>",
-                "{v}.iter().map(|s| parse_addr(s)).collect::<Result<Vec<_>, _>>()?",
-            ),
+            NewtypeKind::Address => {
+                ("Vec<String>", "{v}.iter().map(|s| parse_addr(s)).collect::<Result<Vec<_>, _>>()?")
+            }
             NewtypeKind::AssetId => ("Vec<u16>", "{v}.into_iter().map(AssetId).collect()"),
             NewtypeKind::MarketId => ("Vec<u16>", "{v}.into_iter().map(MarketId).collect()"),
             NewtypeKind::ClientOrderId => {

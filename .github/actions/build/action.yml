@@ -1,0 +1,49 @@
+name: "Build"
+description: "Sets up environment and builds the WASM package"
+
+inputs:
+  node-version:
+    description: "Node.js version to install"
+    required: false
+    default: "24"
+  setup-npm-registry:
+    description: "Setup NPM registry URL"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: ${{ inputs.setup-npm-registry == 'true' && 'https://registry.npmjs.org' || '' }}
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Rust cache
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install wasm-pack
+      # Don't use `cargo binstall` here — rust-cache (above) restores
+      # `.crates2.json` metadata so binstall no-ops without placing the
+      # binary on PATH.
+      uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-pack
+
+    - name: Install just
+      uses: extractions/setup-just@v2
+
+    - name: Install npm dependencies
+      shell: bash
+      working-directory: ./wasm
+      run: npm install
+
+    - name: Build WASM
+      shell: bash
+      run: just build-wasm

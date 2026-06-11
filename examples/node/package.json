@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node index.mjs",
+    "create-vault": "node create_vault.ts",
     "test": "node --test test.mjs"
   },
   "dependencies": {

@@ -17,10 +17,21 @@ commit_parsers = [
     { message = "^build", skip = true },
 ]
 
-# wasm crate ships to npm as @bulletxyz/sdk-wasm via a separate workflow_dispatch
-# flow; release-plz only manages the Rust crate.
-# `publish = false` mirrors wasm/Cargo.toml so release-plz's consistency check passes.
+# Force a single shared `v<version>` tag for the whole release. By default
+# release-plz uses per-package `<crate>-v<version>` tags in multi-package
+# workspaces; we override that on the Rust crate and disable tag/release
+# creation for the wasm crate entirely. The wasm crate still gets its version
+# bumped in lockstep with the Rust crate (it path-depends on it) and its
+# `npm publish` is driven from the same `v<version>` tag by npm-publish.yml.
+[[package]]
+name = "bullet-rust-sdk"
+git_tag_name = "v{{ version }}"
+
+# wasm crate ships to npm as @bulletxyz/sdk-wasm (not crates.io). Skip
+# crates.io publish, and skip the separate git tag / GitHub release so we
+# don't get a duplicate `bullet-rust-sdk-wasm-v<version>` tag.
 [[package]]
 name = "bullet-rust-sdk-wasm"
-release = false
 publish = false
+git_tag_enable = false
+git_release_enable = false

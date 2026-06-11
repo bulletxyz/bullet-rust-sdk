@@ -4,3 +4,4 @@ node_modules/
 wasm/pkg/
 .claude/settings.local.json
 .claude/worktrees/
+.DS_Store

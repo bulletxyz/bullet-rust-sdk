@@ -12,6 +12,7 @@ use super::{ParamMapping, primitives};
 /// Map a `Vec { value }` schema type.
 pub fn map_vec(
     context_name: &str,
+    field_name: &str,
     value_link: &Link,
     types: &Types,
     serde_metadata: &SerdeMetadata,
@@ -20,6 +21,7 @@ pub fn map_vec(
     match value_link {
         Link::ByIndex(inner_idx) => map_vec_by_index(
             context_name,
+            field_name,
             *inner_idx,
             types,
             serde_metadata,
@@ -40,14 +42,15 @@ pub fn map_vec(
 
 fn map_vec_by_index(
     context_name: &str,
+    field_name: &str,
     inner_idx: usize,
     types: &Types,
     serde_metadata: &SerdeMetadata,
     wrapper_indices: &HashSet<usize>,
 ) -> ParamMapping {
     // Known newtype Vecs.
-    if let Some(m) =
-        newtypes::classify(inner_idx, types, serde_metadata).and_then(NewtypeKind::vec_mapping)
+    if let Some(m) = newtypes::classify(field_name, inner_idx, types, serde_metadata)
+        .and_then(NewtypeKind::vec_mapping)
     {
         return m;
     }
@@ -110,21 +113,9 @@ fn map_admin_cancel_vec(
         return None;
     }
 
-    let raw_types = components
-        .iter()
-        .map(|c| c.raw_type)
-        .collect::<Vec<_>>()
-        .join(", ");
-    let bindings = components
-        .iter()
-        .map(|c| c.binding)
-        .collect::<Vec<_>>()
-        .join(", ");
-    let conversions = components
-        .iter()
-        .map(|c| c.conversion)
-        .collect::<Vec<_>>()
-        .join(", ");
+    let raw_types = components.iter().map(|c| c.raw_type).collect::<Vec<_>>().join(", ");
+    let bindings = components.iter().map(|c| c.binding).collect::<Vec<_>>().join(", ");
+    let conversions = components.iter().map(|c| c.conversion).collect::<Vec<_>>().join(", ");
 
     let conversion = format!(
         "{{ let raw: Vec<({raw_types})> = from_json({{v}})?; \
@@ -132,11 +123,7 @@ fn map_admin_cancel_vec(
          .collect::<Result<Vec<_>, String>>()? }}"
     );
 
-    Some(ParamMapping {
-        param_type: "&str".into(),
-        conversion,
-        is_optional: false,
-    })
+    Some(ParamMapping { param_type: "&str".into(), conversion, is_optional: false })
 }
 
 fn admin_cancel_id_kind(context_name: &str) -> Option<NewtypeKind> {
@@ -184,5 +171,45 @@ fn json_fallback() -> ParamMapping {
         param_type: "&str".into(),
         conversion: "from_json({v})?".into(),
         is_optional: false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use sov_universal_wallet::schema::{Link, Primitive};
+    use sov_universal_wallet::ty::{IntegerDisplay, IntegerType, Ty, UnnamedField};
+
+    use super::map_vec;
+
+    #[test]
+    fn unknown_three_tuple_vec_context_falls_back_to_json() {
+        let types = vec![Ty::Tuple(sov_universal_wallet::ty::Tuple {
+            template: None,
+            peekable: false,
+            fields: vec![immediate_u64_field(), immediate_u64_field(), immediate_u64_field()],
+        })];
+
+        let serde_metadata = Vec::new();
+        let mapping = map_vec(
+            "FutureStruct",
+            "tuple_items",
+            &Link::ByIndex(0),
+            &types,
+            &serde_metadata,
+            &HashSet::new(),
+        );
+
+        assert_eq!(mapping.param_type, "&str");
+        assert_eq!(mapping.conversion, "from_json({v})?");
+    }
+
+    fn immediate_u64_field() -> UnnamedField<sov_universal_wallet::schema::IndexLinking> {
+        UnnamedField {
+            value: Link::Immediate(Primitive::Integer(IntegerType::u64, IntegerDisplay::Decimal)),
+            silent: false,
+            doc: String::new(),
+        }
     }
 }

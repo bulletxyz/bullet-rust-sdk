@@ -70,23 +70,11 @@ impl ExchangeMetadata {
             })
             .collect();
 
-        let by_name = symbols
-            .iter()
-            .enumerate()
-            .map(|(i, s)| (s.symbol.clone(), i))
-            .collect();
+        let by_name = symbols.iter().enumerate().map(|(i, s)| (s.symbol.clone(), i)).collect();
 
-        let by_id = symbols
-            .iter()
-            .enumerate()
-            .map(|(i, s)| (s.market_id.0, i))
-            .collect();
+        let by_id = symbols.iter().enumerate().map(|(i, s)| (s.market_id.0, i)).collect();
 
-        Self {
-            symbols,
-            by_name,
-            by_id,
-        }
+        Self { symbols, by_name, by_id }
     }
 
     pub(crate) fn market_id(&self, symbol: &str) -> Option<MarketId> {
@@ -118,6 +106,7 @@ mod tests {
                 market_id: 0,
                 status: "TRADING".into(),
                 base_asset: "BTC".into(),
+                base_asset_id: 0,
                 quote_asset: "USD".into(),
                 price_precision: 2,
                 quantity_precision: 3,
@@ -145,6 +134,7 @@ mod tests {
                 market_id: 1,
                 status: "TRADING".into(),
                 base_asset: "ETH".into(),
+                base_asset_id: 1,
                 quote_asset: "USD".into(),
                 price_precision: 2,
                 quantity_precision: 4,

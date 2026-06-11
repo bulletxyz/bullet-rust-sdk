@@ -37,16 +37,7 @@ pub fn map_fields(
 ) -> Vec<ParamMapping> {
     fields
         .iter()
-        .map(|f| {
-            map_field(
-                context_name,
-                f,
-                types,
-                serde_metadata,
-                wrapper_indices,
-                enum_indices,
-            )
-        })
+        .map(|f| map_field(context_name, f, types, serde_metadata, wrapper_indices, enum_indices))
         .collect()
 }
 
@@ -63,9 +54,7 @@ fn map_field(
         return primitives::map_primitive(prim);
     }
 
-    let idx = field
-        .schema_index
-        .expect("field must have schema_index or primitive");
+    let idx = field.schema_index.expect("field must have schema_index or primitive");
     map_by_index(
         context_name,
         &field.name,
@@ -88,7 +77,7 @@ pub fn map_by_index(
     enum_indices: &HashSet<usize>,
 ) -> ParamMapping {
     // Try known newtypes first.
-    if let Some(m) = newtypes::try_map_newtype(idx, types, serde_metadata) {
+    if let Some(m) = newtypes::try_map_newtype(field_name, idx, types, serde_metadata) {
         return m;
     }
 
@@ -109,7 +98,7 @@ pub fn map_by_index(
         }
 
         Ty::Vec { value } => {
-            vecs::map_vec(context_name, value, types, serde_metadata, wrapper_indices)
+            vecs::map_vec(context_name, field_name, value, types, serde_metadata, wrapper_indices)
         }
 
         Ty::Struct(s) => structs::map_struct(&s.type_name, idx, wrapper_indices),

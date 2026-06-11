@@ -5,19 +5,40 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  CARGO_INCREMENTAL: "0"
 
 jobs:
-  test:
-    name: Test
+  rust:
+    name: Rust
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Rust toolchain
+        run: rustup show
+      - uses: taiki-e/install-action@c070f87102a1c75b3183910f391c1cb887fe13c8 # v2
         with:
-          components: clippy
+          tool: cargo-nextest,just
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: just fmt-check
+      - run: just check-spec
+      - run: just lint
+      - run: just test
+      - run: just test-doc
+
+  wasm:
+    name: WASM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Install Rust toolchain
+        run: rustup show
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24
@@ -28,8 +49,16 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - uses: taiki-e/install-action@3fa6878dc4ae603f73960271565a082bf196ab96 # v2
+      - uses: taiki-e/install-action@c070f87102a1c75b3183910f391c1cb887fe13c8 # v2
         with:
-          tool: cargo-nextest,just,wasm-pack
+          tool: just,wasm-pack
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-      - run: just ci
+        with:
+          key: wasm
+      - run: just build-wasm
+      - run: just test-wasm
+      - name: Install example dependencies
+        run: cd examples && npm ci --install-links
+      - run: cd examples/node && npm test
+      - run: cd examples/deno && deno task test
+      - run: cd examples/web && npx next build

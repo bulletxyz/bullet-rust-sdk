@@ -53,6 +53,7 @@ const client = await Client.builder()
 // Metadata
 client.chainId()             // u64
 client.chainHash()           // Uint8Array (32 bytes)
+client.chainName()           // chain name used in Solana offchain messages
 client.url()                 // REST URL
 client.wsUrl()               // WebSocket URL
 client.maxFee()              // default max fee
@@ -60,13 +61,35 @@ client.hasKeypair()          // whether a default keypair is set
 
 // Submission
 await client.sendTransaction(signedTx)  // returns JSON string
+await client.sendOffChainTransaction(offchainTx)
 ```
-
 By default the client validates every exchange `CallMessage` group (`User`,
 `Vault`, `Keeper`, `Public`, and `Admin`) against the server schema when it
 connects. `.userActions(...)` intentionally narrows validation to only the
 listed `UserAction` variants; when enabled, non-`User` call messages and
 unlisted user actions are rejected before signing.
+
+### Errors
+
+Fallible WASM calls throw `BulletSdkError`, a JavaScript `Error` subclass with
+parseable SDK metadata.
+
+```typescript
+import { BulletSdkError } from '@bulletxyz/sdk-wasm';
+
+try {
+    await client.accountBalance(address);
+} catch (err) {
+    if (err instanceof BulletSdkError) {
+        err.kind       // 'api' | 'http' | 'websocket' | 'validation' | ...
+        err.status     // HTTP status when the API returned one
+        err.details    // structured JSON details when available
+        err.errorId    // server-side correlation id, when present (for support)
+        err.retryable  // whether retry/backoff is reasonable
+        err.message    // human-readable message
+    }
+}
+```
 
 ### Transaction Builder
 
@@ -88,9 +111,29 @@ const tx = Transaction.builder()
 await client.sendTransaction(tx);
 ```
 
+### Uniqueness (replay protection)
+
+Every transaction carries a uniqueness value. By default the SDK uses
+**window-based** uniqueness from a per-client counter that tracks the
+millisecond unix timestamp and increments per transaction — a monotonic,
+duplicate-free value that needs no chain round-trip and tolerates many
+in-flight transactions.
+
+Override it with any one of `.window()`, `.generation()`, or `.nonce()` (these
+set the same single uniqueness value, so the last call wins):
+
+```typescript
+const tx = Transaction.builder()
+    .callMessage(msg)
+    .nonce(42n)        // or .generation(n) / .window(n)
+    .signer(keypair)
+    .send(client);
+```
+
 ### External Signing
 
-For hardware wallets or external signing services:
+For hardware wallets or external signing services that can sign the standard
+Borsh payload:
 
 ```typescript
 // Build unsigned (chain hash is baked in)
@@ -100,6 +143,7 @@ const unsigned = Transaction.builder()
 
 // Get signable bytes and sign externally
 const signable = unsigned.toBytes();
+const display = unsigned.toDisplayMessage(); // optional: show in your own confirmation UI
 const signature = myExternalSigner(signable);  // 64-byte Ed25519 signature
 
 // Assemble the signed transaction
@@ -114,6 +158,41 @@ chain hash so signable bytes can be produced without a client reference.
 
 ```typescript
 unsigned.toBytes()  // Uint8Array — borsh-serialized tx + chain hash (signable bytes)
+unsigned.toDisplayMessage() // string — human-readable unsigned payload for display only
+unsigned.toMessageBytes() // Uint8Array — readable JSON bytes for Solana wallets
+
+// Inverse of toBytes(): rebuild an UnsignedTransaction from stored signable
+// bytes (chain name comes from the client; mismatched chain hash is rejected).
+UnsignedTransaction.fromBytes(bytes, client) // UnsignedTransaction
+```
+
+Use `fromBytes` when a coordinator (e.g. a multisig UI) persists a transaction
+as its exact signable bytes and rebuilds it later for display and submission —
+the rebuilt bytes are byte-identical to what was signed, so the stored bytes are
+the source of truth rather than a separate JSON representation.
+
+Some external wallets display `signMessage` bytes as raw UTF-8, so `toBytes()`
+can look garbled in the wallet confirmation. That is expected: those bytes are
+what the network verifies. Use `toDisplayMessage()` in your app UI to show the
+transaction contents before asking the wallet to sign `toBytes()`.
+
+For external Solana wallets where the wallet confirmation should show readable
+JSON, use the Solana offchain path instead. `toMessageBytes()` returns the
+readable JSON payload with `chain_name` and `chain_id` as the domain fields.
+`SolanaOffchainTransaction.fromParts(...)` also carries the chain hash required
+by the current sequencer offchain authenticator envelope:
+
+```typescript
+const unsigned = Transaction.builder()
+    .callMessage(User.deposit(0, '1000.0'))
+    .buildUnsigned(client);
+
+const message = unsigned.toMessageBytes();
+const signature = await wallet.signMessage(message);
+const pubKey = wallet.publicKey.toBytes(); // 32-byte Solana public key
+const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
+
+await client.sendOffChainTransaction(tx);
 ```
 
 ### SignedTransaction
@@ -132,6 +211,58 @@ const tx = SignedTransaction.fromParts(unsigned, signature, pubKey);
 tx.toBytes()   // Uint8Array (borsh)
 tx.toBase64()  // base64 string (for WebSocket submission)
 ```
+
+### SolanaOffchainTransaction
+
+Assembled after signing `unsigned.toMessageBytes()` with a Solana
+wallet. Submit it with `client.sendOffChainTransaction(tx)`, which posts to
+the trading API's `/api/v1/solanaOffchainTx`.
+
+```typescript
+const pubKey = wallet.publicKey.toBytes(); // 32-byte Solana public key
+const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
+
+tx.toBytes()   // Uint8Array (borsh offchain envelope)
+tx.toBase64()  // base64 string
+```
+
+### Multisig
+
+M-of-N multisig over the spec-compliant Solana offchain format (the format
+Ledger hardware wallets sign). Every signer signs the same bytes; once the
+threshold is met the transaction can be submitted.
+
+```typescript
+// 2-of-3 multisig. Keys are canonicalized (sorted) internally, so input
+// order never matters.
+const config = new MultisigConfig(2, [pubkeyA, pubkeyB, pubkeyC]);
+
+config.credentialId()  // Uint8Array — sha256(minSigners || borsh(sorted pubkeys))
+config.multisigId()    // string — base58 credential id (committed into the signed message)
+config.minSigners()    // number
+config.pubkeys()       // Uint8Array[] — canonical order
+
+const unsigned = Transaction.builder()
+    .callMessage(User.deposit(0, '1000.0'))
+    .buildUnsigned(client);
+
+// Collect signatures — each signer signs the same signable bytes
+const tx = new SolanaLedgerMultisigTransaction(unsigned, config);
+const signature = await ledgerWallet.signMessage(tx.signableBytes());
+tx.addSignature(pubkeyA, signature);   // validates membership + signature
+// ... pass tx.signableBytes() to the other signers ...
+tx.addSignature(pubkeyB, signatureB);
+
+tx.signatureCount() // number
+tx.isComplete()     // true once minSigners signatures are collected
+
+// Submit (throws if below threshold)
+await client.sendLedgerMultisigTransaction(tx);
+```
+
+The signable bytes can also be produced without assembling a transaction:
+`unsigned.toLedgerMultisigSignableBytes(config)` (preamble + JSON) and
+`unsigned.toMultisigMessageBytes(config)` (JSON payload only).
 
 ### Keypair
 
@@ -168,11 +299,19 @@ User.cancelAllOrders()
 // Public actions (no signing required, but still need a tx)
 Public.applyFunding(addresses)
 
+// Vault actions (User.createVault, plus Vault leader ops)
+User.createVault(args)
+Vault.delegateVaultUserV1(vault, delegate, 'bot', 0)
+
 // Order types
 const order = new NewOrderArgs(price, size, Side.Bid, OrderType.Limit, reduceOnly);
 const cancel = new CancelOrderArgs(orderId, clientOrderId);
 const amend = new AmendOrderArgs(cancel, newOrder);
 ```
+
+`deriveVaultAddress(name)` computes a vault's address from its name. See
+[`examples/node/create_vault.ts`](../examples/node/create_vault.ts) for a runnable
+vault example.
 
 ### WebSocket
 
@@ -185,6 +324,7 @@ await ws.subscribe([
     Topic.depth('ETH-USD', OrderbookDepth.D10),
     Topic.bookTicker('SOL-USD'),
     Topic.kline('BTC-USD', KlineInterval.H1),
+    Topic.userOrders('0xabc'),
     Topic.allTickers(),
 ]);
 
@@ -198,6 +338,9 @@ const tx = Transaction.builder()
     .build(client);
 
 await ws.orderPlace(tx.toBase64());
+// also: ws.orderCancel(tx.toBase64()), ws.orderAmend(tx.toBase64()), ws.orderCancelAll(tx.toBase64())
+// or the convenience forms that take a Transaction directly:
+// ws.placeOrder(tx), ws.cancelOrder(tx), ws.amendOrder(tx), ws.cancelAllOrders(tx)
 ```
 
 ### Managed WebSocket (auto-reconnect)
@@ -234,6 +377,8 @@ while (true) {
 // Order submission — fire-and-forget; acks arrive as 'message' events
 ws.placeOrder(tx);
 ws.cancelOrder(cancelTx);
+ws.amendOrder(amendTx);
+ws.cancelAllOrders(cancelAllTx);
 ```
 
 ### Decimal
@@ -288,7 +433,7 @@ await client.chainInfo()
 |----------|--------|
 | Node.js  | `import { Client } from '@bulletxyz/sdk-wasm'` |
 | Deno     | `import { Client } from '@bulletxyz/sdk-wasm'` |
-| Browser  | `import init, { Client } from '@bulletxyz/sdk-wasm/pkg/bullet_rust_sdk_wasm.js'` then `await init()` |
+| Browser  | `import init, { Client } from '@bulletxyz/sdk-wasm'` then `await init()` |
 
 ## License
 

@@ -27,10 +27,7 @@ pub fn emit_struct(s: &SchemaStruct) -> TokenStream {
         .iter()
         .map(|&i| {
             let name = format_ident!("{}", s.fields[i].name);
-            let ty: TokenStream = s.fields[i]
-                .param_type
-                .parse()
-                .expect("param type should parse");
+            let ty: TokenStream = s.fields[i].param_type.parse().expect("param type should parse");
             quote! { #name: #ty }
         })
         .collect();

@@ -11,6 +11,16 @@ import init, {
   Transaction,
 } from "@bulletxyz/sdk-wasm";
 
+let wasmInitPromise: ReturnType<typeof init> | null = null;
+
+function initWasm() {
+  wasmInitPromise ??= init().catch((err) => {
+    wasmInitPromise = null;
+    throw err;
+  });
+  return wasmInitPromise;
+}
+
 interface TxResult {
   publicKey: string;
   base64Length: number;
@@ -31,9 +41,11 @@ export function ClientDemo() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     (async () => {
       try {
-        await init();
+        await initWasm();
 
         const client = await Client.builder()
           .network("https://tradingapi.bullet.xyz")
@@ -52,23 +64,30 @@ export function ClientDemo() {
 
         // Sign with a throwaway keypair (in a real app, use the user's key)
         const kp = Keypair.generate();
+        const publicKey = kp.addressHex();
         const tx = Transaction.builder()
           .callMessage(callMsg)
           .maxFee(10_000_000n)
           .signer(kp)
           .build(client);
 
+        if (cancelled) return;
         setTxResult({
-          publicKey: kp.addressHex(),
+          publicKey,
           base64Length: tx.toBase64().length,
         });
       } catch (err: any) {
+        if (cancelled) return;
         setError(err.message ?? String(err));
-        throw err;
       } finally {
+        if (cancelled) return;
         setLoading(false);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) return <p>Initializing WASM in browser…</p>;

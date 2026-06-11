@@ -1,11 +1,13 @@
 use std::ops::Deref;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use bon::bon;
 use bullet_exchange_interface::message::UserActionDiscriminants;
 use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
 use bullet_exchange_interface::types::MarketId;
 use url::Url;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 use crate::generated::Client as GeneratedClient;
 use crate::metadata::{ExchangeMetadata, SymbolInfo};
@@ -40,7 +42,22 @@ pub struct Client {
     pub(crate) ws_client: reqwest::Client,
     chain_id: u64,
     chain_hash: Mutex<[u8; 32]>,
+    chain_name: String,
     user_actions: Option<Vec<UserActionDiscriminants>>,
+
+    /// Monotonic counter for the default `Window` uniqueness. Each call raises
+    /// it to at least the current millisecond unix timestamp and then
+    /// increments, so values track the wall clock (independent clients with
+    /// synchronised clocks converge and don't collide unless they submit in the
+    /// very same millisecond) while staying unique within this client under
+    /// sub-millisecond bursts.
+    ///
+    /// The counter is in-memory: a client restarted *mid-burst* re-seeds from
+    /// the wall clock, so a sub-millisecond burst larger than the restart
+    /// latency could briefly reuse values (rejected as replays within the
+    /// rollup's window). Throughput-sensitive or multi-instance setups that
+    /// can't tolerate this should set an explicit `uniqueness` on the builder.
+    window_nonce: AtomicU64,
 
     keypair: Option<Keypair>,
 
@@ -108,6 +125,7 @@ impl From<String> for Network {
 pub struct ChainData {
     pub chain_hash: [u8; 32],
     pub chain_id: u64,
+    pub chain_name: String,
 }
 
 pub const MAX_FEE: &Amount = &Amount(10000000000_u128);
@@ -150,10 +168,8 @@ impl Client {
             "http" => (url.to_string(), format!("ws://{}/ws", parsed.authority())),
             _ => return Err(SDKError::InvalidNetworkUrl),
         };
-        let generated_client = match reqwest_client {
-            Some(client) => GeneratedClient::new_with_client(&rest_url, client),
-            None => GeneratedClient::new(&rest_url),
-        };
+        let http_client = reqwest_client.unwrap_or_default();
+        let generated_client = GeneratedClient::new_with_client(&rest_url, http_client.clone());
 
         // WebSocket requires HTTP/1.1 (HTTP/2 does not support the Upgrade mechanism).
         // We always build a dedicated HTTP/1.1 client for WS, regardless of whether
@@ -179,13 +195,29 @@ impl Client {
             ws_client,
             chain_id: chain_data.chain_id,
             chain_hash: Mutex::new(chain_data.chain_hash),
+            chain_name: chain_data.chain_name,
             user_actions,
+            window_nonce: AtomicU64::new(0),
             gas_limit,
             max_priority_fee_bips,
             max_fee,
             keypair,
             metadata,
         })
+    }
+
+    /// Return the next value for the default `Window` uniqueness and advance the
+    /// counter.
+    ///
+    /// Raises the counter to at least the current millisecond unix timestamp
+    /// (so independent clients with synchronised clocks pick converging values)
+    /// and then increments, keeping each value unique and monotonic within this
+    /// client even under sub-millisecond bursts.
+    pub(crate) fn next_window_nonce(&self) -> u64 {
+        let now =
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        self.window_nonce.fetch_max(now, Ordering::Relaxed);
+        self.window_nonce.fetch_add(1, Ordering::Relaxed)
     }
 
     async fn fetch_schema(
@@ -222,10 +254,8 @@ impl Client {
             SDKError::InvalidChainHash(format!("expected 32 bytes, got {}", v.len()))
         })?;
         let chain_id = schema_file.schema.chain_data().chain_id;
-        Ok(ChainData {
-            chain_hash,
-            chain_id,
-        })
+        let chain_name = schema_file.schema.chain_data().chain_name.clone();
+        Ok(ChainData { chain_hash, chain_id, chain_name })
     }
 
     pub async fn update_schema(&self) -> SDKResult<()> {
@@ -233,10 +263,8 @@ impl Client {
 
         // The expect is fine here as we just read and write the
         // object. We never hold a lock in code that can panic.
-        *self
-            .chain_hash
-            .lock()
-            .expect("Taking the chain-hash lock can never fail.") = chain_data.chain_hash;
+        *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.") =
+            chain_data.chain_hash;
         Ok(())
     }
 
@@ -277,6 +305,14 @@ impl Client {
                     .unwrap_or(false),
                 None => true,
             },
+            // Validate only the `Generation` arm: it's the uniqueness variant
+            // present in every deployed network's schema today. `Window` (the
+            // SDK default) and `Nonce` exist in the local interface but aren't
+            // on mainnet's schema yet, so checking them here would falsely
+            // reject connecting to a mainnet that trails the local interface.
+            // Their layout is a plain `u64` pinned by the shared
+            // `bullet-exchange-interface` version; broaden this to `Window`
+            // once mainnet exposes it.
             "UniquenessData" => variant == "Generation",
             _ => {
                 // include the variant - to be sure we fail afterwards
@@ -333,10 +369,12 @@ impl Client {
     pub fn chain_hash(&self) -> [u8; 32] {
         // The expect is fine here as we just read and write the
         // object. We never hold a lock in code that can panic.
-        *self
-            .chain_hash
-            .lock()
-            .expect("Taking the chain-hash lock can never fail.")
+        *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.")
+    }
+
+    /// Get the chain name for this network.
+    pub fn chain_name(&self) -> String {
+        self.chain_name.clone()
     }
 
     pub fn user_actions(&self) -> &Option<Vec<UserActionDiscriminants>> {
@@ -437,6 +475,13 @@ mod tests {
     use crate::types::UserAction;
 
     #[test]
+    fn network_from_resolves_named_networks_and_custom_urls() {
+        assert!(matches!(Network::from("mainnet"), Network::Mainnet));
+        assert!(matches!(Network::from("testnet"), Network::Testnet));
+        assert!(matches!(Network::from("https://custom.example.com"), Network::Custom(_)));
+    }
+
+    #[test]
     fn default_schema_filter_keeps_all_call_message_groups() {
         for variant in ["User", "Vault", "Keeper", "Public", "Admin"] {
             assert!(Client::filter_variants("CallMessage", variant, None));
@@ -447,17 +492,9 @@ mod tests {
     fn selective_schema_filter_keeps_only_user_call_messages() {
         let selected = [UserActionDiscriminants::PlaceOrders];
 
-        assert!(Client::filter_variants(
-            "CallMessage",
-            "User",
-            Some(&selected)
-        ));
+        assert!(Client::filter_variants("CallMessage", "User", Some(&selected)));
         for variant in ["Vault", "Keeper", "Public", "Admin"] {
-            assert!(!Client::filter_variants(
-                "CallMessage",
-                variant,
-                Some(&selected)
-            ));
+            assert!(!Client::filter_variants("CallMessage", variant, Some(&selected)));
         }
     }
 
@@ -465,33 +502,18 @@ mod tests {
     fn selective_schema_filter_keeps_only_selected_user_actions() {
         let selected = [UserActionDiscriminants::PlaceOrders];
 
-        assert!(Client::filter_variants(
-            "UserAction",
-            "PlaceOrders",
-            Some(&selected)
-        ));
-        assert!(!Client::filter_variants(
-            "UserAction",
-            "CancelOrders",
-            Some(&selected)
-        ));
+        assert!(Client::filter_variants("UserAction", "PlaceOrders", Some(&selected)));
+        assert!(!Client::filter_variants("UserAction", "CancelOrders", Some(&selected)));
     }
 
     #[test]
     fn selective_mode_rejects_unvalidated_call_messages() {
         let selected = [UserActionDiscriminants::PlaceOrders];
         let public_call = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
-        let unselected_user_call = CallMessage::User(UserAction::CancelAllOrders {
-            sub_account_index: None,
-        });
+        let unselected_user_call =
+            CallMessage::User(UserAction::CancelAllOrders { sub_account_index: None });
 
-        assert!(!Client::call_message_was_validated(
-            &public_call,
-            Some(&selected)
-        ));
-        assert!(!Client::call_message_was_validated(
-            &unselected_user_call,
-            Some(&selected),
-        ));
+        assert!(!Client::call_message_was_validated(&public_call, Some(&selected)));
+        assert!(!Client::call_message_was_validated(&unselected_user_call, Some(&selected),));
     }
 }
