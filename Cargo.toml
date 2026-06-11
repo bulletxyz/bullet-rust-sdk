@@ -1,10 +1,23 @@
 [workspace]
 members = ["rust", "wasm"]
-resolver = "2"
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 
 [workspace.dependencies]
 bon = "3.9.0"
-bullet-exchange-interface = { version = "0.2", features = ["schema"] }
+bullet-exchange-interface = { version = "0.7", features = ["schema"] }
+
+# Versioned path dep so release-plz cascades rust crate bumps into the wasm
+# crate (otherwise a path-only dep is treated as "no version requirement" and
+# the wasm crate's version stays frozen while rust bumps). release-plz keeps
+# the version field in lockstep with rust/Cargo.toml on every release PR.
+bullet-rust-sdk = { path = "rust", version = "0.0.25" }
+
+
 # Optimize WASM binary size without affecting the rust crate
 [profile.release]
 lto = true

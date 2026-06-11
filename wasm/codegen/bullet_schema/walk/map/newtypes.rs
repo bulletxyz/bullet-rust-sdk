@@ -272,17 +272,7 @@ fn explicit_index_kind(idx: usize) -> Option<NewtypeKind> {
     // Keep this table narrow and shape-guarded; do not infer these wrappers
     // from field names.
     match idx {
-        7 => Some(NewtypeKind::Address),
-        15 => Some(NewtypeKind::AssetId),
-        16 => Some(NewtypeKind::PositiveDecimal),
-        17 => Some(NewtypeKind::SurrogateDecimal),
-        30 => Some(NewtypeKind::MarketId),
         40 => Some(NewtypeKind::UnixTimestampMicros),
-        47 => Some(NewtypeKind::ClientOrderId),
-        59 => Some(NewtypeKind::OrderId),
-        71 => Some(NewtypeKind::TriggerOrderId),
-        75 => Some(NewtypeKind::TwapId),
-        168 => Some(NewtypeKind::TokenId),
         _ => None,
     }
 }

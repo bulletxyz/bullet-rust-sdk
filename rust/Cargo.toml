@@ -1,11 +1,11 @@
 [package]
 name = "bullet-rust-sdk"
-version = "0.0.5"
-edition = "2024"
-license = "MIT"
+version = "0.0.25"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Rust SDK for the Bullet trading platform"
 homepage = "https://www.bullet.xyz"
-repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 readme = "../README.md"
 keywords = ["bullet", "trading", "exchange", "sdk"]
 categories = ["api-bindings", "cryptography::cryptocurrencies"]
@@ -19,13 +19,14 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bullet-exchange-interface.workspace = true
-bullet-ws-interface = "0.1"
-sov-universal-wallet = { version = "0.3", features = ["serde"] }
+bullet-ws-interface = "0.2"
+sov-universal-wallet = { version = "0.4", features = ["serde"] }
+
 
 progenitor-client = "0.14"
 reqwest = { version = "0.13", features = ["blocking"] }
 rust_decimal = { version = "1", features = ["serde-with-str"] }
-serde = "1.0.216"
+serde = "1"
 strum = { version = "0.28", features = ["derive"] }
 serde_json = { version = "1.0.133", features = ["arbitrary_precision", "preserve_order"] }
 futures = "0.3"
@@ -38,6 +39,7 @@ rand = "0.10"
 borsh = "1"
 hex = "0.4"
 base64 = "0.22"
+sha2 = "0.10"
 
 # WebSocket (works on both native and WASM)
 reqwest-websocket = { version = "0.6", features = ["json"] }

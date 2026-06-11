@@ -47,6 +47,7 @@ pub struct WasmError {
     kind: WasmErrorKind,
     status: Option<u16>,
     details: Option<JsValue>,
+    error_id: Option<String>,
     retryable: bool,
 }
 
@@ -57,6 +58,7 @@ impl WasmError {
             kind: WasmErrorKind::Unknown,
             status: None,
             details: None,
+            error_id: None,
             retryable: false,
         }
     }
@@ -88,6 +90,10 @@ impl From<WasmError> for JsValue {
             set_property(&options, "details", &details);
         }
 
+        if let Some(error_id) = e.error_id {
+            set_property(&options, "errorId", &JsValue::from_str(&error_id));
+        }
+
         JsBulletSdkError::new(&e.message, &options).into()
     }
 }
@@ -105,6 +111,8 @@ impl From<SDKError> for WasmError {
             | SDKError::InvalidPublicKeyLength(_)
             | SDKError::UnsupportedCallMessage(_)
             | SDKError::TransactionOutdated
+            | SDKError::InvalidMultisig(_)
+            | SDKError::InvalidSubAccountIndex(_)
             | SDKError::RequestError(_) => WasmErrorKind::Validation,
             SDKError::JsonSerializeError(_)
             | SDKError::StringParseError(_)
@@ -127,6 +135,7 @@ impl From<SDKError> for WasmError {
                 .details
                 .as_ref()
                 .map(|details| serde_wasm_bindgen::to_value(details).unwrap_or(JsValue::NULL));
+            err.error_id = api_error.error_id.clone();
         }
 
         err

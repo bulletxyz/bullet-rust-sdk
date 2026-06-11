@@ -333,6 +333,30 @@ impl ManagedWebsocket {
         }))
     }
 
+    /// Amend an order via WebSocket.
+    pub fn order_amend(
+        &self,
+        tx: impl Into<String>,
+        id: Option<RequestId>,
+    ) -> Result<(), ManagedWsError> {
+        self.try_send_cmd(WsCommand::Send(ClientMessage::OrderAmend {
+            id,
+            params: OrderParams { tx: tx.into() },
+        }))
+    }
+
+    /// Cancel all open orders for a market via WebSocket.
+    pub fn order_cancel_all(
+        &self,
+        tx: impl Into<String>,
+        id: Option<RequestId>,
+    ) -> Result<(), ManagedWsError> {
+        self.try_send_cmd(WsCommand::Send(ClientMessage::OrderCancelAll {
+            id,
+            params: OrderParams { tx: tx.into() },
+        }))
+    }
+
     /// Place an order using a signed [`Transaction`]. Base64-encodes internally.
     ///
     /// Returns a `SDKResult`-style error instead of `ManagedWsError` because
@@ -360,6 +384,32 @@ impl ManagedWebsocket {
         let base64 =
             crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
         self.order_cancel(base64, id).map_err(|e| WSErrors::WsError(e.to_string()))
+    }
+
+    /// Amend an order using a signed [`Transaction`]. Base64-encodes internally.
+    ///
+    /// [`Transaction`]: bullet_exchange_interface::transaction::Transaction
+    pub fn amend_order(
+        &self,
+        signed: &bullet_exchange_interface::transaction::Transaction,
+        id: Option<RequestId>,
+    ) -> Result<(), WSErrors> {
+        let base64 =
+            crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
+        self.order_amend(base64, id).map_err(|e| WSErrors::WsError(e.to_string()))
+    }
+
+    /// Cancel all open orders using a signed [`Transaction`]. Base64-encodes internally.
+    ///
+    /// [`Transaction`]: bullet_exchange_interface::transaction::Transaction
+    pub fn cancel_all_orders(
+        &self,
+        signed: &bullet_exchange_interface::transaction::Transaction,
+        id: Option<RequestId>,
+    ) -> Result<(), WSErrors> {
+        let base64 =
+            crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
+        self.order_cancel_all(base64, id).map_err(|e| WSErrors::WsError(e.to_string()))
     }
 
     /// Stop the managed WebSocket and its background task.
