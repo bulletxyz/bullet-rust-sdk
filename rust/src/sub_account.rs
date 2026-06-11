@@ -8,7 +8,7 @@ use crate::errors::{SDKError, SDKResult};
 /// Highest valid sub-account index. The runtime tracks sub-account existence in
 /// a `u32` bitmask (`MasterV1 { sub_account_mask }`), so only `0..=31` slots
 /// exist.
-pub const MAX_SUB_ACCOUNT_INDEX: u8 = 31;
+pub const MAX_SUB_ACCOUNT_INDEX: u32 = 31;
 
 /// Derive a sub-account's on-chain address from its master address and index.
 ///
@@ -21,7 +21,9 @@ pub const MAX_SUB_ACCOUNT_INDEX: u8 = 31;
 /// sub-account.
 ///
 /// `master` must be the master account's canonical base58 address string (its
-/// `Display`); `index` is the sub-account index. This mirrors the runtime's
+/// `Display`); `index` is the sub-account index (a `u32` so a wasm/JS caller's
+/// out-of-range value is validated rather than silently truncated into a `u8`).
+/// This mirrors the runtime's
 /// `generate_sub_account_address`, which lives in the exchange crate (not
 /// `bullet-exchange-interface`), so there is no shared source of truth to
 /// import — it's duplicated here by necessity and locked by a golden-vector
@@ -32,12 +34,12 @@ pub const MAX_SUB_ACCOUNT_INDEX: u8 = 31;
 /// (`> `[`MAX_SUB_ACCOUNT_INDEX`]): such an index can never correspond to a real
 /// sub-account, so deriving an address for it would yield a valid-looking but
 /// meaningless address. Rejected rather than silently returned.
-pub fn derive_sub_account_address(master: &str, index: u8) -> SDKResult<String> {
+pub fn derive_sub_account_address(master: &str, index: u32) -> SDKResult<String> {
     if index > MAX_SUB_ACCOUNT_INDEX {
         return Err(SDKError::InvalidSubAccountIndex(index));
     }
     let mut seed = master.as_bytes().to_vec();
-    seed.push(index);
+    seed.push(index as u8); // safe: validated <= 31 above
     let hash: [u8; 32] = Sha256::digest(&seed).into();
     Ok(Address(hash).to_string())
 }
@@ -68,5 +70,9 @@ mod tests {
         assert!(derive_sub_account_address("default", MAX_SUB_ACCOUNT_INDEX).is_ok());
         assert!(derive_sub_account_address("default", MAX_SUB_ACCOUNT_INDEX + 1).is_err());
         assert!(derive_sub_account_address("default", 255).is_err());
+        // Values that would wrap if narrowed to u8 (257 % 256 == 1) must still
+        // be rejected — the u32 param prevents the silent truncation.
+        assert!(derive_sub_account_address("default", 257).is_err());
+        assert!(derive_sub_account_address("default", 288).is_err()); // 288 % 256 == 32
     }
 }
