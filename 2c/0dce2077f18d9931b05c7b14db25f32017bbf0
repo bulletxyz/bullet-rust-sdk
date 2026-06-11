@@ -1,0 +1,27 @@
+rust/src/errors.rs
+  s_c536712181ff95::t_43e3a8595cfbf6 140-144
+rust/src/sub_account.rs
+  s_c536712181ff95::t_ae64956653fdfa 31-35,37
+  s_c536712181ff95::t_cb859392ee4090 6-7
+wasm/src/errors.rs
+  s_c536712181ff95::t_df528773648674 115
+wasm/src/sub_account.rs
+  s_c536712181ff95::t_bdb45fd14afa21 3-4
+  s_c536712181ff95::t_54a2cf643ac41c 22-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "2c0dce2077f18d9931b05c7b14db25f32017bbf0",
+  "prompts": {},
+  "sessions": {
+    "s_c536712181ff95": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "992df283-63f5-4657-9614-9881f82fe30d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
