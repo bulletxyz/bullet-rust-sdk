@@ -1,4 +1,6 @@
-# Approve build scripts for native deps that ship prebuilt binaries.
-# unrs-resolver is pulled in transitively by jest 30 (jest-resolve).
+# Build-script policy for native deps. unrs-resolver is pulled in
+# transitively by jest 30 (jest-resolve). Its prebuilt binary ships via
+# registry optionalDependencies, so its postinstall (a `check` step) is
+# not needed — skip it rather than run install-time code.
 allowBuilds:
-  unrs-resolver: true
+  unrs-resolver: false
