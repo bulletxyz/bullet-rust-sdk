@@ -1,0 +1,4 @@
+# Approve build scripts for native deps that ship prebuilt binaries.
+# unrs-resolver is pulled in transitively by jest 30 (jest-resolve).
+allowBuilds:
+  unrs-resolver: true
