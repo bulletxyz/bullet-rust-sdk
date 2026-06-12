@@ -15,7 +15,7 @@ import { jest } from '@jest/globals';
 
 import {
   // Namespace modules
-  User, Public, Admin, Keeper, Vault,
+  User, Public, Admin, Keeper, Vault, Warp,
   // Struct wrappers
   NewOrderArgs, AmendOrderArgs, CancelOrderArgs,
   NewTriggerOrderArgs, NewTwapOrderArgs,
@@ -51,6 +51,8 @@ describe('namespace modules exist', () => {
     expect(typeof User.delegateUser).toBe('function');
     expect(typeof User.createVault).toBe('function');
     expect(typeof User.depositToVault).toBe('function');
+    expect(typeof User.delegateUserV2).toBe('function');
+    expect(typeof User.revokeDelegationV1).toBe('function');
   });
 
   test('Public namespace has permissionless methods', () => {
@@ -88,6 +90,10 @@ describe('namespace modules exist', () => {
     expect(typeof Vault.processWithdrawalQueue).toBe('function');
     expect(typeof Vault.whitelistDepositor).toBe('function');
     expect(typeof Vault.delegateVaultUser).toBe('function');
+  });
+
+  test('Warp namespace has bridge methods', () => {
+    expect(typeof Warp.transferRemote).toBe('function');
   });
 });
 
@@ -156,6 +162,51 @@ describe('simple factory methods', () => {
       'my-delegate',
     );
     expect(msg).toBeDefined();
+  });
+
+  test('User.delegateUserV2', () => {
+    const msg = User.delegateUserV2(
+      '11111111111111111111111111111111',
+      'my-delegate',
+      7,
+      2,
+      1_700_000_000_000_000n,
+    );
+    expect(msg).toBeDefined();
+  });
+
+  test('User.revokeDelegationV1', () => {
+    const msg = User.revokeDelegationV1(
+      '11111111111111111111111111111111',
+      2,
+    );
+    expect(msg).toBeDefined();
+  });
+
+  test('Warp.transferRemote', () => {
+    const msg = Warp.transferRemote({
+      warpRoute: `0x${'11'.repeat(32)}`,
+      amount: '12345678901234567890',
+      destinationDomain: 1234,
+      gasPaymentLimit: '400000',
+      recipient: `0x${'22'.repeat(32)}`,
+      relayer: '11111111111111111111111111111111',
+    });
+    expect(msg).toBeDefined();
+  });
+
+  test('Warp.transferRemote rejects ambiguous relayer tags', () => {
+    expect(() => Warp.transferRemote({
+      warpRoute: `0x${'11'.repeat(32)}`,
+      amount: '12345678901234567890',
+      destinationDomain: 1234,
+      gasPaymentLimit: '400000',
+      recipient: `0x${'22'.repeat(32)}`,
+      relayer: {
+        Standard: '11111111111111111111111111111111',
+        Vm: `0x${'33'.repeat(32)}`,
+      },
+    })).toThrow(/either Standard or Vm/i);
   });
 
   test('Public.applyFunding', () => {

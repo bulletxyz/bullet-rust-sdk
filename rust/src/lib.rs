@@ -2,6 +2,7 @@ mod client;
 mod keypair;
 mod metadata;
 mod multisig;
+mod receipts;
 mod sub_account;
 mod trading;
 mod transaction_builder;
@@ -15,6 +16,10 @@ pub use vault::derive_vault_address;
 pub mod errors;
 
 // Re-export main types at crate root for ergonomic imports
+pub use bullet_exchange_interface::transaction::{
+    Amount as WarpAmount, RuntimeCall, Transaction as SignedTransaction, WarpBytes32 as HexBytes32,
+    WarpCall,
+};
 pub use client::{Client, Network};
 pub use errors::{SDKError, SDKResult, WSErrors};
 pub use generated::types::ApiErrorResponse;
@@ -62,8 +67,6 @@ pub use bullet_exchange_interface::message::{
     AmendOrderArgs, CancelOrderArgs, NewOrderArgs, NewTriggerOrderArgs, NewTwapOrderArgs,
     PendingTpslPair, Tpsl, TpslPair,
 };
-/// A decoded runtime call (the exchange instruction carried by a transaction).
-pub use bullet_exchange_interface::transaction::RuntimeCall;
 /// Transaction uniqueness/replay-protection data: `Nonce`, `Generation`, or `Window`.
 ///
 /// Set on a transaction via `UnsignedTransaction::builder().uniqueness(...)` or

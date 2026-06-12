@@ -362,10 +362,10 @@ impl ManagedWebsocket {
     /// Returns a `SDKResult`-style error instead of `ManagedWsError` because
     /// encoding can fail independently of the channel state.
     ///
-    /// [`Transaction`]: bullet_exchange_interface::transaction::Transaction
+    /// [`Transaction`]: crate::SignedTransaction
     pub fn place_order(
         &self,
-        signed: &bullet_exchange_interface::transaction::Transaction,
+        signed: &crate::SignedTransaction,
         id: Option<RequestId>,
     ) -> Result<(), WSErrors> {
         let base64 =
@@ -375,10 +375,10 @@ impl ManagedWebsocket {
 
     /// Cancel an order using a signed [`Transaction`]. Base64-encodes internally.
     ///
-    /// [`Transaction`]: bullet_exchange_interface::transaction::Transaction
+    /// [`Transaction`]: crate::SignedTransaction
     pub fn cancel_order(
         &self,
-        signed: &bullet_exchange_interface::transaction::Transaction,
+        signed: &crate::SignedTransaction,
         id: Option<RequestId>,
     ) -> Result<(), WSErrors> {
         let base64 =
@@ -388,10 +388,10 @@ impl ManagedWebsocket {
 
     /// Amend an order using a signed [`Transaction`]. Base64-encodes internally.
     ///
-    /// [`Transaction`]: bullet_exchange_interface::transaction::Transaction
+    /// [`Transaction`]: crate::SignedTransaction
     pub fn amend_order(
         &self,
-        signed: &bullet_exchange_interface::transaction::Transaction,
+        signed: &crate::SignedTransaction,
         id: Option<RequestId>,
     ) -> Result<(), WSErrors> {
         let base64 =
@@ -401,10 +401,10 @@ impl ManagedWebsocket {
 
     /// Cancel all open orders using a signed [`Transaction`]. Base64-encodes internally.
     ///
-    /// [`Transaction`]: bullet_exchange_interface::transaction::Transaction
+    /// [`Transaction`]: crate::SignedTransaction
     pub fn cancel_all_orders(
         &self,
-        signed: &bullet_exchange_interface::transaction::Transaction,
+        signed: &crate::SignedTransaction,
         id: Option<RequestId>,
     ) -> Result<(), WSErrors> {
         let base64 =

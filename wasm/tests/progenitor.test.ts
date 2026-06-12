@@ -17,11 +17,11 @@ import {
   // Enums
   TxResult, TxStatus, HealthState,
   // Type wrappers
-  Account, AccountAsset, AccountPosition,
+  Account, AccountAsset, AccountConfig, AccountPosition,
   Asset, Balance,
   BinanceOrder, Bracket, LeverageBracket,
   BorrowLendPoolResponse, InsuranceAsset, InsuranceBalance,
-  ChainInfo, ModuleRef, RateLimit, RateParams, RollupConstants,
+  ChainInfo, Delegate, ModuleRef, RateLimit, RateParams, RollupConstants,
   ExchangeInfo, FundingRate, OrderBook,
   PingResponse, PriceTicker, TradingSymbol, Ticker24hr, TimeResponse, Trade,
   LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
@@ -70,11 +70,11 @@ describe('progenitor enum wrappers', () => {
 
 describe('progenitor type wrappers are exported', () => {
   const expectedClasses = [
-    'Account', 'AccountAsset', 'AccountPosition',
+    'Account', 'AccountAsset', 'AccountConfig', 'AccountPosition',
     'Asset', 'Balance',
     'BinanceOrder', 'Bracket', 'LeverageBracket',
     'BorrowLendPoolResponse', 'InsuranceAsset', 'InsuranceBalance',
-    'ChainInfo', 'ModuleRef', 'RateLimit', 'RateParams', 'RollupConstants',
+    'ChainInfo', 'Delegate', 'ModuleRef', 'RateLimit', 'RateParams', 'RollupConstants',
     'ExchangeInfo', 'FundingRate', 'OrderBook',
     'PingResponse', 'PriceTicker', 'TradingSymbol', 'Ticker24hr', 'TimeResponse', 'Trade',
     'LedgerEvent', 'SubmitTxRequest', 'SubmitTxResponse', 'TxReceipt',
@@ -82,11 +82,11 @@ describe('progenitor type wrappers are exported', () => {
   ];
 
   const exportedClasses: Record<string, unknown> = {
-    Account, AccountAsset, AccountPosition,
+    Account, AccountAsset, AccountConfig, AccountPosition,
     Asset, Balance,
     BinanceOrder, Bracket, LeverageBracket,
     BorrowLendPoolResponse, InsuranceAsset, InsuranceBalance,
-    ChainInfo, ModuleRef, RateLimit, RateParams, RollupConstants,
+    ChainInfo, Delegate, ModuleRef, RateLimit, RateParams, RollupConstants,
     ExchangeInfo, FundingRate, OrderBook,
     PingResponse, PriceTicker, TradingSymbol, Ticker24hr, TimeResponse, Trade,
     LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
@@ -97,6 +97,68 @@ describe('progenitor type wrappers are exported', () => {
     const Ctor = exportedClasses[name];
     expect(Ctor).toBeDefined();
     expect(typeof Ctor).toBe('function');
+  });
+});
+
+describe('submit response helpers', () => {
+  test('SubmitTxResponse.messageId extracts a Hyperlane message id from events', () => {
+    const messageId = `0x${'ab'.repeat(32)}`;
+    const response = SubmitTxResponse.fromJson(JSON.stringify({
+      id: '0xtx',
+      status: 'processed',
+      events: [{
+        key: 'dispatch',
+        module: { name: 'warp' },
+        number: 1,
+        type: 'dispatch',
+        value: { message_id: messageId },
+      }],
+    }));
+
+    expect(response.messageId).toBe(messageId);
+  });
+
+  test('SubmitTxResponse.messageId extracts nested mailbox dispatch ids', () => {
+    const messageId = `0x${'34'.repeat(32)}`;
+    const response = SubmitTxResponse.fromJson(JSON.stringify({
+      id: '0xtx',
+      status: 'processed',
+      events: [{
+        key: 'dispatch',
+        module: { name: 'warp' },
+        number: 1,
+        type: 'dispatch',
+        value: {
+          mailbox: {
+            dispatch: {
+              id: messageId,
+            },
+          },
+        },
+      }],
+    }));
+
+    expect(response.messageId).toBe(messageId);
+  });
+});
+
+describe('account config delegate wrappers', () => {
+  test('AccountConfig.delegates exposes delegate session fields', () => {
+    const address = '11111111111111111111111111111111';
+    const config = AccountConfig.fromJson(JSON.stringify({
+      delegates: [{
+        address,
+        name: 'session',
+        flags: 7,
+        expiresAt: 1_700_000_000_000_000,
+      }],
+    }));
+
+    const [delegate] = config.delegates;
+    expect(delegate.address).toBe(address);
+    expect(delegate.name).toBe('session');
+    expect(delegate.flags).toBe(7);
+    expect(delegate.expiresAt).toBe(1_700_000_000_000_000n);
   });
 });
 

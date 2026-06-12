@@ -582,7 +582,7 @@ impl WebsocketHandle {
     /// ```
     pub async fn place_order(
         &mut self,
-        signed: &bullet_exchange_interface::transaction::Transaction,
+        signed: &crate::SignedTransaction,
         id: Option<RequestId>,
     ) -> SDKResult<(), WSErrors> {
         let base64 =
@@ -609,7 +609,7 @@ impl WebsocketHandle {
     /// ```
     pub async fn cancel_order(
         &mut self,
-        signed: &bullet_exchange_interface::transaction::Transaction,
+        signed: &crate::SignedTransaction,
         id: Option<RequestId>,
     ) -> SDKResult<(), WSErrors> {
         let base64 =
@@ -636,7 +636,7 @@ impl WebsocketHandle {
     /// ```
     pub async fn amend_order(
         &mut self,
-        signed: &bullet_exchange_interface::transaction::Transaction,
+        signed: &crate::SignedTransaction,
         id: Option<RequestId>,
     ) -> SDKResult<(), WSErrors> {
         let base64 =
@@ -663,7 +663,7 @@ impl WebsocketHandle {
     /// ```
     pub async fn cancel_all_orders(
         &mut self,
-        signed: &bullet_exchange_interface::transaction::Transaction,
+        signed: &crate::SignedTransaction,
         id: Option<RequestId>,
     ) -> SDKResult<(), WSErrors> {
         let base64 =
