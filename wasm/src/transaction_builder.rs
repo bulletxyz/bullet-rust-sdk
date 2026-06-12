@@ -150,6 +150,8 @@ struct WasmWarpTransferRemoteArgs {
 
 struct WasmWarpAmount(Amount);
 
+const MAX_SAFE_JS_INTEGER: f64 = 9_007_199_254_740_991.0;
+
 impl<'de> Deserialize<'de> for WasmWarpAmount {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -165,7 +167,7 @@ impl<'de> Visitor<'de> for WasmWarpAmountVisitor {
     type Value = WasmWarpAmount;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("a u128 amount as a decimal string or integer")
+        formatter.write_str("a u128 amount as a decimal string, bigint, or safe integer number")
     }
 
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
@@ -203,10 +205,39 @@ impl<'de> Visitor<'de> for WasmWarpAmountVisitor {
         if !value.is_finite() || value < 0.0 || value.fract() != 0.0 {
             return Err(E::custom("amount number must be a non-negative integer"));
         }
-        if value > u128::MAX as f64 {
-            return Err(E::custom("amount exceeds u128"));
+        if value > MAX_SAFE_JS_INTEGER {
+            return Err(E::custom(
+                "amount number exceeds JavaScript safe integer range; pass a decimal string",
+            ));
         }
         Ok(WasmWarpAmount(Amount(value as u128)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::de::Visitor as _;
+    use serde::de::value::Error;
+
+    use super::{MAX_SAFE_JS_INTEGER, WasmWarpAmountVisitor};
+
+    #[test]
+    fn warp_amount_rejects_unsafe_f64_numbers() {
+        let err = match WasmWarpAmountVisitor.visit_f64::<Error>(MAX_SAFE_JS_INTEGER + 1.0) {
+            Ok(_) => panic!("unsafe JS number should be rejected"),
+            Err(err) => err,
+        };
+
+        assert!(err.to_string().contains("safe integer"), "{err}");
+    }
+
+    #[test]
+    fn warp_amount_accepts_safe_f64_numbers() {
+        let amount = WasmWarpAmountVisitor
+            .visit_f64::<Error>(MAX_SAFE_JS_INTEGER)
+            .expect("safe JS number should be accepted");
+
+        assert_eq!(amount.0.0, MAX_SAFE_JS_INTEGER as u128);
     }
 }
 
@@ -246,7 +277,8 @@ impl Warp {
     /// Create a remote warp transfer runtime call.
     /// @param {{warpRoute: string, amount: string | number, destinationDomain: number,
     /// gasPaymentLimit: string | number, recipient: string, relayer?: {Standard: string} | {Vm:
-    /// string} | string | null}} args - Transfer arguments. @returns {CallMessage}
+    /// string} | string | null}} args - Transfer arguments. Use decimal strings for amounts
+    /// above `Number.MAX_SAFE_INTEGER`. @returns {CallMessage}
     /// @example
     /// ```js
     /// const call = Warp.transferRemote({

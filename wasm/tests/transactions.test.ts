@@ -277,6 +277,29 @@ describe("external signing", () => {
       },
     });
   });
+
+  test("Warp.transferRemote rejects unsafe numeric amounts", () => {
+    const warpRoute = `0x${"11".repeat(32)}`;
+    const recipient = `0x${"22".repeat(32)}`;
+
+    expect(() => Warp.transferRemote({
+      warpRoute,
+      amount: Number.MAX_SAFE_INTEGER + 1,
+      destinationDomain: 1234,
+      gasPaymentLimit: "400000",
+      recipient,
+      relayer: null,
+    })).toThrow(/safe integer/);
+
+    expect(() => Warp.transferRemote({
+      warpRoute,
+      amount: "1000000",
+      destinationDomain: 1234,
+      gasPaymentLimit: Number.MAX_SAFE_INTEGER + 1,
+      recipient,
+      relayer: null,
+    })).toThrow(/safe integer/);
+  });
 });
 
 // ── Error handling ───────────────────────────────────────────────────────────

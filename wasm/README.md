@@ -363,6 +363,10 @@ const unsigned = Transaction.builder()
     .buildUnsigned(client);
 ```
 
+Use decimal strings for `amount` and `gasPaymentLimit` values above
+`Number.MAX_SAFE_INTEGER`; unsafe JavaScript numbers are rejected to avoid
+rounding token amounts before signing.
+
 After submission, bridge responses expose the Hyperlane message id when the
 Trading API includes it in transaction events:
 
