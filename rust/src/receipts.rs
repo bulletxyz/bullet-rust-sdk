@@ -11,25 +11,42 @@ impl SubmitTxResponse {
     /// `messageId` / `message_id` spellings and returns a normalized `0x`-
     /// prefixed bytes32 hex string.
     pub fn message_id(&self) -> Option<String> {
-        self.events.iter().find_map(|event| find_message_id_in_map(&event.value, false))
+        self.events.iter().find_map(|event| {
+            find_message_id_in_map(&event.value, MessageIdSearchContext::default())
+        })
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+struct MessageIdSearchContext {
+    allow_id_key: bool,
+    allow_direct_string: bool,
+}
+
+impl MessageIdSearchContext {
+    fn exact_message_id_value() -> Self {
+        Self { allow_id_key: true, allow_direct_string: true }
     }
 }
 
 fn find_message_id_in_map(
     map: &serde_json::Map<String, Value>,
-    allow_id_key: bool,
+    context: MessageIdSearchContext,
 ) -> Option<String> {
     for (key, value) in map {
         let key = normalize_key(key);
-        let key_is_message_id = is_message_id_key(&key) || (allow_id_key && key == "id");
-        if key_is_message_id && let Some(message_id) = message_id_from_value(value, true) {
+        let key_is_message_id = is_message_id_key(&key) || (context.allow_id_key && key == "id");
+        if key_is_message_id
+            && let Some(message_id) =
+                message_id_from_value(value, MessageIdSearchContext::exact_message_id_value())
+        {
             return Some(message_id);
         }
     }
 
     for (key, value) in map {
-        let allow_child_id_key = is_message_id_container_key(&normalize_key(key));
-        if let Some(message_id) = message_id_from_value(value, allow_child_id_key) {
+        let child_context = child_message_id_context(&normalize_key(key), context);
+        if let Some(message_id) = message_id_from_value(value, child_context) {
             return Some(message_id);
         }
     }
@@ -37,13 +54,13 @@ fn find_message_id_in_map(
     None
 }
 
-fn message_id_from_value(value: &Value, allow_direct_string: bool) -> Option<String> {
+fn message_id_from_value(value: &Value, context: MessageIdSearchContext) -> Option<String> {
     match value {
-        Value::String(value) if allow_direct_string => normalize_message_id(value),
+        Value::String(value) if context.allow_direct_string => normalize_message_id(value),
         Value::Array(values) => {
-            values.iter().find_map(|value| message_id_from_value(value, allow_direct_string))
+            values.iter().find_map(|value| message_id_from_value(value, context))
         }
-        Value::Object(map) => find_message_id_in_map(map, allow_direct_string),
+        Value::Object(map) => find_message_id_in_map(map, context),
         _ => None,
     }
 }
@@ -70,8 +87,21 @@ fn is_message_id_key(key: &str) -> bool {
     )
 }
 
-fn is_message_id_container_key(key: &str) -> bool {
-    matches!(key, "message" | "msg" | "hyperlanemessage")
+fn child_message_id_context(
+    key: &str,
+    parent_context: MessageIdSearchContext,
+) -> MessageIdSearchContext {
+    if matches!(key, "message" | "msg" | "hyperlanemessage") {
+        return MessageIdSearchContext { allow_id_key: true, allow_direct_string: true };
+    }
+
+    if matches!(key, "mailbox" | "hyperlane" | "hyperlanemailbox")
+        || (parent_context.allow_id_key && key == "dispatch")
+    {
+        return MessageIdSearchContext { allow_id_key: true, allow_direct_string: false };
+    }
+
+    MessageIdSearchContext::default()
 }
 
 fn normalize_key(key: &str) -> String {
@@ -120,6 +150,20 @@ mod tests {
     }
 
     #[test]
+    fn message_id_extracts_nested_mailbox_dispatch_id() {
+        let message_id = format!("0x{}", "34".repeat(32));
+        let response = response_with_value(json!({
+            "mailbox": {
+                "dispatch": {
+                    "id": message_id,
+                },
+            },
+        }));
+
+        assert_eq!(response.message_id(), Some(message_id));
+    }
+
+    #[test]
     fn message_id_ignores_non_bytes32_ids() {
         let response = response_with_value(json!({ "id": "0xtx" }));
 
@@ -138,6 +182,14 @@ mod tests {
     fn message_id_ignores_bare_event_ids() {
         let unrelated_id = format!("0x{}", "12".repeat(32));
         let response = response_with_value(json!({ "id": unrelated_id }));
+
+        assert_eq!(response.message_id(), None);
+    }
+
+    #[test]
+    fn message_id_ignores_standalone_dispatch_ids() {
+        let unrelated_id = format!("0x{}", "56".repeat(32));
+        let response = response_with_value(json!({ "dispatch": { "id": unrelated_id } }));
 
         assert_eq!(response.message_id(), None);
     }

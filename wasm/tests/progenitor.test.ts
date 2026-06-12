@@ -117,6 +117,29 @@ describe('submit response helpers', () => {
 
     expect(response.messageId).toBe(messageId);
   });
+
+  test('SubmitTxResponse.messageId extracts nested mailbox dispatch ids', () => {
+    const messageId = `0x${'34'.repeat(32)}`;
+    const response = SubmitTxResponse.fromJson(JSON.stringify({
+      id: '0xtx',
+      status: 'processed',
+      events: [{
+        key: 'dispatch',
+        module: { name: 'warp' },
+        number: 1,
+        type: 'dispatch',
+        value: {
+          mailbox: {
+            dispatch: {
+              id: messageId,
+            },
+          },
+        },
+      }],
+    }));
+
+    expect(response.messageId).toBe(messageId);
+  });
 });
 
 describe('account config delegate wrappers', () => {
