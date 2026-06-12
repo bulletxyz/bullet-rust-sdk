@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.27](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.26...v0.0.27) - 2026-06-12
+
+### Features
+
+- *(wasm)* add delegate v2 and warp call messages ([#96](https://github.com/bulletxyz/bullet-rust-sdk/pull/96))
+
 ## [0.0.26](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.25...v0.0.26) - 2026-06-12
 
 ### Features
