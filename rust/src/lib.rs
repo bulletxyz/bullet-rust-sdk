@@ -3,7 +3,6 @@ mod keypair;
 mod metadata;
 mod multisig;
 mod receipts;
-mod runtime_call;
 mod sub_account;
 mod trading;
 mod transaction_builder;
@@ -17,6 +16,10 @@ pub use vault::derive_vault_address;
 pub mod errors;
 
 // Re-export main types at crate root for ergonomic imports
+pub use bullet_exchange_interface::transaction::{
+    Amount as WarpAmount, RuntimeCall, Transaction as SignedTransaction, WarpBytes32 as HexBytes32,
+    WarpCall,
+};
 pub use client::{Client, Network};
 pub use errors::{SDKError, SDKResult, WSErrors};
 pub use generated::types::ApiErrorResponse;
@@ -24,9 +27,6 @@ pub use keypair::Keypair;
 pub use multisig::{MAX_MULTISIG_SIGNERS, MultisigConfig, SolanaLedgerMultisigTransaction};
 // Re-export WebSocket close code for pattern matching
 pub use reqwest_websocket::CloseCode;
-pub use runtime_call::{
-    HexBytes32, RuntimeCall, SignedTransaction, Warp, WarpAmount, WarpCall, WarpTransferRemoteArgs,
-};
 pub use transaction_builder::{
     SolanaLedgerTransaction, SolanaOffchainTransaction, Transaction, UnsignedTransaction,
 };

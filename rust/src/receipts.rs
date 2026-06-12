@@ -11,26 +11,25 @@ impl SubmitTxResponse {
     /// `messageId` / `message_id` spellings and returns a normalized `0x`-
     /// prefixed bytes32 hex string.
     pub fn message_id(&self) -> Option<String> {
-        self.events.iter().find_map(|event| {
-            let context = mentions_message_id_source(&event.key)
-                || mentions_message_id_source(&event.type_)
-                || mentions_message_id_source(&event.module.name);
-            find_message_id_in_map(&event.value, context)
-        })
+        self.events.iter().find_map(|event| find_message_id_in_map(&event.value, false))
     }
 }
 
-fn find_message_id_in_map(map: &serde_json::Map<String, Value>, context: bool) -> Option<String> {
+fn find_message_id_in_map(
+    map: &serde_json::Map<String, Value>,
+    allow_id_key: bool,
+) -> Option<String> {
     for (key, value) in map {
-        let key_is_message_id = is_message_id_key(key) || (context && normalize_key(key) == "id");
+        let key = normalize_key(key);
+        let key_is_message_id = is_message_id_key(&key) || (allow_id_key && key == "id");
         if key_is_message_id && let Some(message_id) = message_id_from_value(value, true) {
             return Some(message_id);
         }
     }
 
     for (key, value) in map {
-        let child_context = context || mentions_message_id_source(key);
-        if let Some(message_id) = message_id_from_value(value, child_context) {
+        let allow_child_id_key = is_message_id_container_key(&normalize_key(key));
+        if let Some(message_id) = message_id_from_value(value, allow_child_id_key) {
             return Some(message_id);
         }
     }
@@ -38,13 +37,13 @@ fn find_message_id_in_map(map: &serde_json::Map<String, Value>, context: bool) -
     None
 }
 
-fn message_id_from_value(value: &Value, context: bool) -> Option<String> {
+fn message_id_from_value(value: &Value, allow_direct_string: bool) -> Option<String> {
     match value {
-        Value::String(value) if context => normalize_message_id(value),
+        Value::String(value) if allow_direct_string => normalize_message_id(value),
         Value::Array(values) => {
-            values.iter().find_map(|value| message_id_from_value(value, context))
+            values.iter().find_map(|value| message_id_from_value(value, allow_direct_string))
         }
-        Value::Object(map) => find_message_id_in_map(map, context),
+        Value::Object(map) => find_message_id_in_map(map, allow_direct_string),
         _ => None,
     }
 }
@@ -60,18 +59,19 @@ fn normalize_message_id(value: &str) -> Option<String> {
 }
 
 fn is_message_id_key(key: &str) -> bool {
-    let key = normalize_key(key);
-    matches!(key.as_str(), "messageid" | "msgid" | "hyperlanemessageid")
-        || (key.contains("message") && key.ends_with("id"))
+    matches!(
+        key,
+        "messageid"
+            | "msgid"
+            | "hyperlanemessageid"
+            | "dispatchid"
+            | "dispatchmessageid"
+            | "mailboxmessageid"
+    )
 }
 
-fn mentions_message_id_source(key: &str) -> bool {
-    let key = normalize_key(key);
-    key.contains("message")
-        || key.contains("hyperlane")
-        || key.contains("dispatch")
-        || key.contains("mailbox")
-        || key == "msg"
+fn is_message_id_container_key(key: &str) -> bool {
+    matches!(key, "message" | "msg" | "hyperlanemessage")
 }
 
 fn normalize_key(key: &str) -> String {
@@ -122,6 +122,22 @@ mod tests {
     #[test]
     fn message_id_ignores_non_bytes32_ids() {
         let response = response_with_value(json!({ "id": "0xtx" }));
+
+        assert_eq!(response.message_id(), None);
+    }
+
+    #[test]
+    fn message_id_ignores_unrelated_message_suffixed_keys() {
+        let unrelated_id = format!("0x{}", "ef".repeat(32));
+        let response = response_with_value(json!({ "account_message_id": unrelated_id }));
+
+        assert_eq!(response.message_id(), None);
+    }
+
+    #[test]
+    fn message_id_ignores_bare_event_ids() {
+        let unrelated_id = format!("0x{}", "12".repeat(32));
+        let response = response_with_value(json!({ "id": unrelated_id }));
 
         assert_eq!(response.message_id(), None);
     }

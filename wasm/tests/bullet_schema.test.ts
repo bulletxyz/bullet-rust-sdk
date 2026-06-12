@@ -195,6 +195,20 @@ describe('simple factory methods', () => {
     expect(msg).toBeDefined();
   });
 
+  test('Warp.transferRemote rejects ambiguous relayer tags', () => {
+    expect(() => Warp.transferRemote({
+      warpRoute: `0x${'11'.repeat(32)}`,
+      amount: '12345678901234567890',
+      destinationDomain: 1234,
+      gasPaymentLimit: '400000',
+      recipient: `0x${'22'.repeat(32)}`,
+      relayer: {
+        Standard: '11111111111111111111111111111111',
+        Vm: `0x${'33'.repeat(32)}`,
+      },
+    })).toThrow(/either Standard or Vm/i);
+  });
+
   test('Public.applyFunding', () => {
     const msg = Public.applyFunding([]);
     expect(msg).toBeDefined();

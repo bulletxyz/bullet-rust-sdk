@@ -35,17 +35,14 @@ use bon::bon;
 use borsh::{BorshDeserialize, BorshSerialize};
 use bullet_exchange_interface::schema::Schema;
 use bullet_exchange_interface::transaction::{
-    Amount, Gas, PriorityFeeBips, TxDetails, UniquenessData,
-    UnsignedTransaction as InterfaceUnsignedTransaction,
+    Amount, Gas, PriorityFeeBips, RuntimeCall, Transaction as SignedTransaction, TxDetails,
+    UniquenessData, UnsignedTransaction as RawUnsignedTransaction, Version0,
 };
 use serde_json::Value;
 
 use crate::codegen::Error::ErrorResponse;
 use crate::generated::types::{
     ApiErrorResponse, SubmitSolanaOffchainTxRequest, SubmitTxRequest, SubmitTxResponse,
-};
-use crate::runtime_call::{
-    RuntimeCall, SignedTransaction, UnsignedTransactionPayload as RawUnsignedTransaction, Version0,
 };
 use crate::types::CallMessage;
 use crate::{Client, Keypair, SDKError, SDKResult};
@@ -121,17 +118,11 @@ impl UnsignedTransaction {
     /// during signing. The returned string is for display only; sign the bytes
     /// from [`to_bytes`](UnsignedTransaction::to_bytes).
     pub fn to_display_message(&self) -> SDKResult<String> {
-        if let Some(interface_inner) = self.inner.to_interface() {
-            let schema = Schema::of_single_type::<InterfaceUnsignedTransaction>()
-                .map_err(|e| SDKError::SerializationError(e.to_string()))?;
-            let bytes = borsh::to_vec(&interface_inner)
-                .map_err(|e| SDKError::SerializationError(e.to_string()))?;
-            return schema
-                .display(0, &bytes)
-                .map_err(|e| SDKError::SerializationError(e.to_string()));
-        }
-
-        serde_json::to_string_pretty(&self.inner).map_err(Into::into)
+        let schema = Schema::of_single_type::<RawUnsignedTransaction>()
+            .map_err(|e| SDKError::SerializationError(e.to_string()))?;
+        let bytes =
+            borsh::to_vec(&self.inner).map_err(|e| SDKError::SerializationError(e.to_string()))?;
+        schema.display(0, &bytes).map_err(|e| SDKError::SerializationError(e.to_string()))
     }
 
     /// Build the bytes a Ledger hardware wallet must sign.
@@ -673,7 +664,8 @@ mod tests {
     use bullet_exchange_interface::message::{CancelOrderArgs, PublicAction, UserAction};
     use bullet_exchange_interface::schema::Schema;
     use bullet_exchange_interface::transaction::{
-        Amount, PriorityFeeBips, Transaction as InterfaceTransaction, TxDetails, UniquenessData,
+        Amount, PriorityFeeBips, RuntimeCall, Transaction as InterfaceTransaction, TxDetails,
+        UniquenessData, UnsignedTransaction as RawUnsignedTransaction, WarpBytes32, warp,
     };
     use bullet_exchange_interface::types::{MarketId, OrderId};
     use ed25519_dalek::{Signature, Verifier, VerifyingKey};
@@ -681,10 +673,13 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
-    use crate::runtime_call::{
-        HexBytes32, RuntimeCall, UnsignedTransactionPayload as RawUnsignedTransaction, WarpAmount,
-        WarpTransferRemoteArgs,
-    };
+
+    fn warp_bytes32(value: &str) -> WarpBytes32 {
+        let raw = value.strip_prefix("0x").unwrap_or(value);
+        let mut bytes = [0u8; 32];
+        hex::decode_to_slice(raw, &mut bytes).unwrap();
+        WarpBytes32(bytes)
+    }
 
     fn test_unsigned_tx() -> UnsignedTransaction {
         let inner = RawUnsignedTransaction {
@@ -971,13 +966,13 @@ mod tests {
             .parse::<bullet_exchange_interface::address::Address>()
             .unwrap();
         let inner = RawUnsignedTransaction {
-            runtime_call: RuntimeCall::warp_transfer_remote(WarpTransferRemoteArgs {
-                warp_route: warp_route.parse::<HexBytes32>().unwrap(),
-                amount: WarpAmount(12_345_678_901_234_567_890),
+            runtime_call: RuntimeCall::Warp(warp::CallMessage::TransferRemote {
+                warp_route: warp_bytes32(warp_route),
                 destination_domain: 1234,
-                gas_payment_limit: WarpAmount(400_000),
-                recipient: recipient.parse::<HexBytes32>().unwrap(),
+                recipient: warp_bytes32(recipient),
+                amount: Amount(12_345_678_901_234_567_890),
                 relayer: Some(relayer),
+                gas_payment_limit: Amount(400_000),
             }),
             uniqueness: UniquenessData::Window(42),
             details: TxDetails {
@@ -1179,7 +1174,9 @@ mod tests {
             .build()
             .unwrap();
 
-        let SignedTransaction::V0(version_0) = signed;
+        let SignedTransaction::V0(version_0) = signed else {
+            panic!("expected V0 signed transaction");
+        };
         assert!(
             matches!(version_0.uniqueness, UniquenessData::Window(_)),
             "{:?}",
@@ -1256,7 +1253,9 @@ mod tests {
         let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
 
         let signed = Transaction::from_parts(unsigned, signature, pub_key);
-        let SignedTransaction::V0(version_0) = signed;
+        let SignedTransaction::V0(version_0) = signed else {
+            panic!("expected V0 signed transaction");
+        };
 
         assert!(verify_signature(version_0.pub_key, &signable, version_0.signature));
     }

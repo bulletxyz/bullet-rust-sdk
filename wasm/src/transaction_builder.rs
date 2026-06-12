@@ -24,13 +24,16 @@
 //! await client.sendTransaction(signed);
 //! ```
 
+use std::fmt;
 use std::str::FromStr;
 
 use bullet_exchange_interface::address::Address;
 use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::*;
 use bullet_exchange_interface::time::UnixTimestampMicros;
-use bullet_exchange_interface::transaction::Gas;
+use bullet_exchange_interface::transaction::{
+    Amount, Gas, RuntimeCall, Transaction as RustSignedTransaction, WarpBytes32, warp,
+};
 use bullet_exchange_interface::types::{
     AdminType, AssetId, ClientOrderId, FeeTier, MarketId, MarketTradingStatus, OrderId, OrderType,
     Side, SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
@@ -38,12 +41,12 @@ use bullet_exchange_interface::types::{
 };
 use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{
-    HexBytes32, RuntimeCall, SignedTransaction as RustSignedTransaction,
     SolanaLedgerTransaction as RustSolanaLedgerTransaction,
     SolanaOffchainTransaction as RustSolanaOffchainTransaction, Transaction as RustTransaction,
-    UniquenessData, UnsignedTransaction, Warp as RustWarp, WarpAmount, WarpTransferRemoteArgs,
+    UniquenessData, UnsignedTransaction,
 };
-use serde::Deserialize;
+use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer};
 use wasm_bindgen::prelude::*;
 
 use crate::client::WasmTradingApi;
@@ -61,10 +64,36 @@ fn parse_addr(s: &str) -> Result<Address, String> {
 /// Parse an address-like relayer value from either Bullet base58 or hex bytes32.
 fn parse_addr_like(s: &str) -> Result<Address, String> {
     s.parse::<Address>().or_else(|address_err| {
-        s.parse::<HexBytes32>()
+        parse_warp_bytes32(s)
             .map(|bytes| Address(bytes.0))
             .map_err(|bytes_err| format!("{address_err}; {bytes_err}"))
     })
+}
+
+/// Parse a 32-byte Warp value. Also accepts 20-byte EVM hex and left-pads it.
+fn parse_warp_bytes32(value: &str) -> Result<WarpBytes32, String> {
+    let raw = value.strip_prefix("0x").or_else(|| value.strip_prefix("0X")).unwrap_or(value);
+    if !raw.chars().all(|c| c.is_ascii_hexdigit()) {
+        return value
+            .parse::<Address>()
+            .map(|address| WarpBytes32(address.0))
+            .map_err(|_| format!("expected hex bytes32 or base58 address, got `{value}`"));
+    }
+
+    let decoded = hex::decode(raw).map_err(|e| format!("invalid hex bytes32: {e}"))?;
+    match decoded.len() {
+        32 => {
+            let mut out = [0u8; 32];
+            out.copy_from_slice(&decoded);
+            Ok(WarpBytes32(out))
+        }
+        20 => {
+            let mut out = [0u8; 32];
+            out[12..].copy_from_slice(&decoded);
+            Ok(WarpBytes32(out))
+        }
+        len => Err(format!("expected 20 or 32 bytes, got {len}")),
+    }
 }
 
 /// Parse a decimal string into `PositiveDecimal`.
@@ -110,13 +139,75 @@ include!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
 struct WasmWarpTransferRemoteArgs {
     #[serde(alias = "warp_route")]
     warp_route: String,
-    amount: WarpAmount,
+    amount: WasmWarpAmount,
     #[serde(alias = "destination_domain")]
     destination_domain: u32,
     #[serde(alias = "gas_payment_limit")]
-    gas_payment_limit: WarpAmount,
+    gas_payment_limit: WasmWarpAmount,
     recipient: String,
     relayer: Option<WasmRelayerInput>,
+}
+
+struct WasmWarpAmount(Amount);
+
+impl<'de> Deserialize<'de> for WasmWarpAmount {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(WasmWarpAmountVisitor)
+    }
+}
+
+struct WasmWarpAmountVisitor;
+
+impl<'de> Visitor<'de> for WasmWarpAmountVisitor {
+    type Value = WasmWarpAmount;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a u128 amount as a decimal string or integer")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        value.parse::<u128>().map(|value| WasmWarpAmount(Amount(value))).map_err(E::custom)
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        self.visit_str(&value)
+    }
+
+    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(WasmWarpAmount(Amount(value as u128)))
+    }
+
+    fn visit_u128<E>(self, value: u128) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(WasmWarpAmount(Amount(value)))
+    }
+
+    fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        if !value.is_finite() || value < 0.0 || value.fract() != 0.0 {
+            return Err(E::custom("amount number must be a non-negative integer"));
+        }
+        if value > u128::MAX as f64 {
+            return Err(E::custom("amount exceeds u128"));
+        }
+        Ok(WasmWarpAmount(Amount(value as u128)))
+    }
 }
 
 #[derive(Deserialize)]
@@ -135,10 +226,13 @@ impl WasmRelayerInput {
     fn into_address(self) -> Result<Address, String> {
         match self {
             WasmRelayerInput::Address(value) => parse_addr_like(&value),
-            WasmRelayerInput::Tagged { standard, vm } => {
-                let value = standard.or(vm).ok_or("relayer object must include Standard or Vm")?;
-                parse_addr_like(&value)
-            }
+            WasmRelayerInput::Tagged { standard, vm } => match (standard, vm) {
+                (Some(_), Some(_)) => {
+                    Err("relayer object must include either Standard or Vm, not both".to_string())
+                }
+                (Some(value), None) | (None, Some(value)) => parse_addr_like(&value),
+                (None, None) => Err("relayer object must include Standard or Vm".to_string()),
+            },
         }
     }
 }
@@ -151,7 +245,7 @@ pub struct Warp;
 impl Warp {
     /// Create a remote warp transfer runtime call.
     /// @param {{warpRoute: string, amount: string | number, destinationDomain: number,
-    /// gasPaymentLimit: string | number, recipient: string, relayer?: {Standard?: string, Vm?:
+    /// gasPaymentLimit: string | number, recipient: string, relayer?: {Standard: string} | {Vm:
     /// string} | string | null}} args - Transfer arguments. @returns {CallMessage}
     /// @example
     /// ```js
@@ -172,19 +266,15 @@ impl Warp {
         let relayer = args.relayer.map(WasmRelayerInput::into_address).transpose()?;
 
         Ok(WasmCallMessage {
-            inner: RustWarp::transfer_remote(WarpTransferRemoteArgs {
-                warp_route: args
-                    .warp_route
-                    .parse::<HexBytes32>()
+            inner: RuntimeCall::Warp(warp::CallMessage::TransferRemote {
+                warp_route: parse_warp_bytes32(&args.warp_route)
                     .map_err(|e| format!("warpRoute: {e}"))?,
-                amount: args.amount,
                 destination_domain: args.destination_domain,
-                gas_payment_limit: args.gas_payment_limit,
-                recipient: args
-                    .recipient
-                    .parse::<HexBytes32>()
+                recipient: parse_warp_bytes32(&args.recipient)
                     .map_err(|e| format!("recipient: {e}"))?,
+                amount: args.amount.0,
                 relayer,
+                gas_payment_limit: args.gas_payment_limit.0,
             }),
         })
     }
