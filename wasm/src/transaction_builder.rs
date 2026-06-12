@@ -30,7 +30,7 @@ use bullet_exchange_interface::address::Address;
 use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::*;
 use bullet_exchange_interface::time::UnixTimestampMicros;
-use bullet_exchange_interface::transaction::{Gas, Transaction};
+use bullet_exchange_interface::transaction::Gas;
 use bullet_exchange_interface::types::{
     AdminType, AssetId, ClientOrderId, FeeTier, MarketId, MarketTradingStatus, OrderId, OrderType,
     Side, SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
@@ -38,14 +38,17 @@ use bullet_exchange_interface::types::{
 };
 use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{
-    RuntimeCall, SolanaLedgerTransaction as RustSolanaLedgerTransaction,
+    HexBytes32, RuntimeCall, SignedTransaction as RustSignedTransaction,
+    SolanaLedgerTransaction as RustSolanaLedgerTransaction,
     SolanaOffchainTransaction as RustSolanaOffchainTransaction, Transaction as RustTransaction,
-    UniquenessData, UnsignedTransaction,
+    UniquenessData, UnsignedTransaction, Warp as RustWarp, WarpAmount, WarpTransferRemoteArgs,
 };
+use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
 use crate::client::WasmTradingApi;
 use crate::errors::WasmResult;
+use crate::generated::WasmSubmitTxResponse;
 use crate::keypair::WasmKeypair;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -53,6 +56,15 @@ use crate::keypair::WasmKeypair;
 /// Parse a base58 address string.
 fn parse_addr(s: &str) -> Result<Address, String> {
     s.parse()
+}
+
+/// Parse an address-like relayer value from either Bullet base58 or hex bytes32.
+fn parse_addr_like(s: &str) -> Result<Address, String> {
+    s.parse::<Address>().or_else(|address_err| {
+        s.parse::<HexBytes32>()
+            .map(|bytes| Address(bytes.0))
+            .map_err(|bytes_err| format!("{address_err}; {bytes_err}"))
+    })
 }
 
 /// Parse a decimal string into `PositiveDecimal`.
@@ -77,11 +89,12 @@ fn from_json<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, String> {
 
 /// An opaque call message to be included in a transaction.
 ///
-/// Construct via the namespace modules: `User`, `Public`, `Admin`, `Keeper`, `Vault`.
-/// Each module has static factory methods, e.g. `User.deposit(0, "100.0")`.
+/// Construct via the namespace modules: `User`, `Public`, `Admin`, `Keeper`,
+/// `Vault`, or `Warp`. Each module has static factory methods, e.g.
+/// `User.deposit(0, "100.0")` or `Warp.transferRemote({...})`.
 #[wasm_bindgen(js_name = CallMessage)]
 pub struct WasmCallMessage {
-    pub(crate) inner: CallMessage,
+    pub(crate) inner: RuntimeCall,
 }
 
 // ── Generated namespace structs (User, Public, Admin, Keeper, Vault) ─────────
@@ -89,6 +102,105 @@ pub struct WasmCallMessage {
 // Each struct is a JS namespace with static factory methods that return
 // `WasmCallMessage` instances. Generated from the Transaction schema by build.rs.
 include!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
+
+// ── Warp namespace ───────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmWarpTransferRemoteArgs {
+    #[serde(alias = "warp_route")]
+    warp_route: String,
+    amount: WarpAmount,
+    #[serde(alias = "destination_domain")]
+    destination_domain: u32,
+    #[serde(alias = "gas_payment_limit")]
+    gas_payment_limit: WarpAmount,
+    recipient: String,
+    relayer: Option<WasmRelayerInput>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum WasmRelayerInput {
+    Address(String),
+    Tagged {
+        #[serde(rename = "Standard", alias = "standard")]
+        standard: Option<String>,
+        #[serde(rename = "Vm", alias = "vm")]
+        vm: Option<String>,
+    },
+}
+
+impl WasmRelayerInput {
+    fn into_address(self) -> Result<Address, String> {
+        match self {
+            WasmRelayerInput::Address(value) => parse_addr_like(&value),
+            WasmRelayerInput::Tagged { standard, vm } => {
+                let value = standard.or(vm).ok_or("relayer object must include Standard or Vm")?;
+                parse_addr_like(&value)
+            }
+        }
+    }
+}
+
+/// Warp bridge operations.
+#[wasm_bindgen]
+pub struct Warp;
+
+#[wasm_bindgen]
+impl Warp {
+    /// Create a remote warp transfer runtime call.
+    /// @param {{warpRoute: string, amount: string | number, destinationDomain: number,
+    /// gasPaymentLimit: string | number, recipient: string, relayer?: {Standard?: string, Vm?:
+    /// string} | string | null}} args - Transfer arguments. @returns {CallMessage}
+    /// @example
+    /// ```js
+    /// const call = Warp.transferRemote({
+    ///   warpRoute,
+    ///   amount: "1000000",
+    ///   destinationDomain: 1,
+    ///   gasPaymentLimit: "400000",
+    ///   recipient,
+    ///   relayer: null,
+    /// });
+    /// const unsigned = Transaction.builder().callMessage(call).buildUnsigned(client);
+    /// ```
+    #[wasm_bindgen(js_name = transferRemote)]
+    pub fn transfer_remote(args: JsValue) -> WasmResult<WasmCallMessage> {
+        let args: WasmWarpTransferRemoteArgs =
+            serde_wasm_bindgen::from_value(args).map_err(|e| e.to_string())?;
+        let relayer = args.relayer.map(WasmRelayerInput::into_address).transpose()?;
+
+        Ok(WasmCallMessage {
+            inner: RustWarp::transfer_remote(WarpTransferRemoteArgs {
+                warp_route: args
+                    .warp_route
+                    .parse::<HexBytes32>()
+                    .map_err(|e| format!("warpRoute: {e}"))?,
+                amount: args.amount,
+                destination_domain: args.destination_domain,
+                gas_payment_limit: args.gas_payment_limit,
+                recipient: args
+                    .recipient
+                    .parse::<HexBytes32>()
+                    .map_err(|e| format!("recipient: {e}"))?,
+                relayer,
+            }),
+        })
+    }
+}
+
+// ── Submit response helpers ─────────────────────────────────────────────────
+
+#[wasm_bindgen(js_class = SubmitTxResponse)]
+impl WasmSubmitTxResponse {
+    /// Hyperlane message id emitted by a bridge withdrawal, when present.
+    /// @returns {string | undefined}
+    #[wasm_bindgen(getter, js_name = messageId)]
+    pub fn message_id(&self) -> Option<String> {
+        self.0.message_id()
+    }
+}
 
 // ── WasmRuntimeCall ─────────────────────────────────────────────────────────
 
@@ -115,12 +227,12 @@ pub struct WasmRuntimeCall {
 
 #[wasm_bindgen(js_class = RuntimeCall)]
 impl WasmRuntimeCall {
-    /// Wrap a typed exchange [`CallMessage`](WasmCallMessage) (e.g. the result of
-    /// `Admin.updateGlobalConfig(...)`) as a `RuntimeCall`.
-    /// @param {CallMessage} call - The typed exchange call message to wrap.
+    /// Wrap a typed [`CallMessage`](WasmCallMessage) (e.g. the result of
+    /// `Admin.updateGlobalConfig(...)` or `Warp.transferRemote(...)`) as a `RuntimeCall`.
+    /// @param {CallMessage} call - The typed call message to wrap.
     /// @returns {RuntimeCall}
     pub fn exchange(call: WasmCallMessage) -> WasmRuntimeCall {
-        WasmRuntimeCall { inner: RuntimeCall::Exchange(call.inner) }
+        WasmRuntimeCall { inner: call.inner }
     }
 
     /// Parse a `RuntimeCall` from its serde JSON representation.
@@ -385,7 +497,7 @@ impl WasmSolanaOffchainTransaction {
 /// `toBase64()` for WebSocket submission.
 #[wasm_bindgen(js_name = SignedTransaction)]
 pub struct WasmTransaction {
-    pub(crate) inner: Transaction,
+    pub(crate) inner: RustSignedTransaction,
 }
 
 #[wasm_bindgen(js_class = SignedTransaction)]
@@ -506,7 +618,7 @@ impl WasmTransactionBuilder {
     /// exchange `RuntimeCall`.
     #[wasm_bindgen(js_name = callMessage)]
     pub fn call_message(mut self, msg: WasmCallMessage) -> WasmTransactionBuilder {
-        self.call = Some(WasmRuntimeCall::exchange(msg));
+        self.call = Some(WasmRuntimeCall { inner: msg.inner });
         self
     }
 
@@ -710,7 +822,7 @@ impl WasmTradingApi {
         &self,
         msg: WasmCallMessage,
     ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
-        let resp = self.inner.send_call_message(msg.inner).await?;
+        let resp = self.inner.send_runtime_call(msg.inner).await?;
         Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
 }

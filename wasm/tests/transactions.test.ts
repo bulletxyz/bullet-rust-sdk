@@ -21,6 +21,7 @@ import {
   SolanaOffchainTransaction,
   Transaction,
   User,
+  Warp,
 } from "../pkg/node";
 import { connectForUserActions } from "./helpers";
 
@@ -190,6 +191,92 @@ describe("external signing", () => {
     expect(tx.toBase64().length).toBeGreaterThan(0);
     expect(typeof client.sendOffChainTransaction).toBe("function");
   });
+
+  test("User.delegateUserV2 serializes to the expected exchange runtime call", async () => {
+    const client = await connectForUserActions(["DelegateUserV2"]);
+    const delegate = "11111111111111111111111111111111";
+
+    const unsigned = Transaction.builder()
+      .callMessage(User.delegateUserV2(delegate, "session", 7, 2, 1_700_000_000_000_000n))
+      .maxFee(10_000_000n)
+      .window(42n)
+      .buildUnsigned(client);
+
+    const message = JSON.parse(Buffer.from(unsigned.toMessageBytes()).toString());
+
+    expect(message.runtime_call).toEqual({
+      exchange: {
+        user: {
+          delegate_user_v2: {
+            delegate,
+            name: "session",
+            sub_account_index: 2,
+            expires_at: 1_700_000_000_000_000,
+            flags: 7,
+          },
+        },
+      },
+    });
+  });
+
+  test("User.revokeDelegationV1 serializes to the expected exchange runtime call", async () => {
+    const client = await connectForUserActions(["RevokeDelegationV1"]);
+    const delegate = "11111111111111111111111111111111";
+
+    const unsigned = Transaction.builder()
+      .callMessage(User.revokeDelegationV1(delegate, 2))
+      .maxFee(10_000_000n)
+      .window(42n)
+      .buildUnsigned(client);
+
+    const message = JSON.parse(Buffer.from(unsigned.toMessageBytes()).toString());
+
+    expect(message.runtime_call).toEqual({
+      exchange: {
+        user: {
+          revoke_delegation_v1: {
+            delegate,
+            sub_account_index: 2,
+          },
+        },
+      },
+    });
+  });
+
+  test("Warp.transferRemote serializes to the expected warp runtime call", async () => {
+    const client = await connectForUserActions([]);
+    const warpRoute = `0x${"11".repeat(32)}`;
+    const recipient = `0x${"22".repeat(32)}`;
+    const relayer = "11111111111111111111111111111111";
+
+    const unsigned = Transaction.builder()
+      .callMessage(Warp.transferRemote({
+        warpRoute,
+        amount: "12345678901234567890",
+        destinationDomain: 1234,
+        gasPaymentLimit: "400000",
+        recipient,
+        relayer: { Standard: relayer },
+      }))
+      .maxFee(10_000_000n)
+      .window(42n)
+      .buildUnsigned(client);
+
+    const message = JSON.parse(Buffer.from(unsigned.toMessageBytes()).toString());
+
+    expect(message.runtime_call).toEqual({
+      warp: {
+        transfer_remote: {
+          warp_route: warpRoute,
+          destination_domain: 1234,
+          recipient,
+          amount: "12345678901234567890",
+          relayer,
+          gas_payment_limit: "400000",
+        },
+      },
+    });
+  });
 });
 
 // ── Error handling ───────────────────────────────────────────────────────────
@@ -239,7 +326,7 @@ describe("error handling", () => {
   });
 });
 
-// ── RuntimeCall construction seam ─────────────────────────────────────────────
+// ── RuntimeCall construction ──────────────────────────────────────────────────
 describe("RuntimeCall", () => {
   test(".call(RuntimeCall.exchange(msg)) matches .callMessage(msg)", async () => {
     const client = await connectForUserActions(["CancelAllOrders"]);

@@ -62,15 +62,15 @@ fn emit_factory(group: &ActionGroup, variant: &VariantInfo) -> TokenStream {
     let body = if assignments.is_empty() {
         quote! {
             Ok(WasmCallMessage {
-                inner: CallMessage::#cm_variant(#action_enum::#variant_name {}),
+                inner: RuntimeCall::Exchange(CallMessage::#cm_variant(#action_enum::#variant_name {})),
             })
         }
     } else {
         quote! {
             Ok(WasmCallMessage {
-                inner: CallMessage::#cm_variant(#action_enum::#variant_name {
+                inner: RuntimeCall::Exchange(CallMessage::#cm_variant(#action_enum::#variant_name {
                     #(#assignments),*
-                }),
+                })),
             })
         }
     };

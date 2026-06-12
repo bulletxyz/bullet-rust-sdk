@@ -338,11 +338,11 @@ impl crate::Client {
 mod tests {
     use bullet_exchange_interface::message::PublicAction;
     use bullet_exchange_interface::transaction::{
-        Amount, PriorityFeeBips, RuntimeCall, TxDetails, UniquenessData,
-        UnsignedTransaction as RawUnsignedTransaction,
+        Amount, PriorityFeeBips, TxDetails, UniquenessData,
     };
 
     use super::*;
+    use crate::runtime_call::{RuntimeCall, UnsignedTransactionPayload as RawUnsignedTransaction};
     use crate::types::CallMessage;
     use crate::{Keypair, SDKError, UnsignedTransaction};
 

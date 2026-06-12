@@ -35,14 +35,17 @@ use bon::bon;
 use borsh::{BorshDeserialize, BorshSerialize};
 use bullet_exchange_interface::schema::Schema;
 use bullet_exchange_interface::transaction::{
-    Amount, Gas, PriorityFeeBips, RuntimeCall, Transaction as SignedTransaction, TxDetails,
-    UniquenessData, UnsignedTransaction as RawUnsignedTransaction, Version0,
+    Amount, Gas, PriorityFeeBips, TxDetails, UniquenessData,
+    UnsignedTransaction as InterfaceUnsignedTransaction,
 };
 use serde_json::Value;
 
 use crate::codegen::Error::ErrorResponse;
 use crate::generated::types::{
     ApiErrorResponse, SubmitSolanaOffchainTxRequest, SubmitTxRequest, SubmitTxResponse,
+};
+use crate::runtime_call::{
+    RuntimeCall, SignedTransaction, UnsignedTransactionPayload as RawUnsignedTransaction, Version0,
 };
 use crate::types::CallMessage;
 use crate::{Client, Keypair, SDKError, SDKResult};
@@ -118,11 +121,17 @@ impl UnsignedTransaction {
     /// during signing. The returned string is for display only; sign the bytes
     /// from [`to_bytes`](UnsignedTransaction::to_bytes).
     pub fn to_display_message(&self) -> SDKResult<String> {
-        let schema = Schema::of_single_type::<RawUnsignedTransaction>()
-            .map_err(|e| SDKError::SerializationError(e.to_string()))?;
-        let bytes =
-            borsh::to_vec(&self.inner).map_err(|e| SDKError::SerializationError(e.to_string()))?;
-        schema.display(0, &bytes).map_err(|e| SDKError::SerializationError(e.to_string()))
+        if let Some(interface_inner) = self.inner.to_interface() {
+            let schema = Schema::of_single_type::<InterfaceUnsignedTransaction>()
+                .map_err(|e| SDKError::SerializationError(e.to_string()))?;
+            let bytes = borsh::to_vec(&interface_inner)
+                .map_err(|e| SDKError::SerializationError(e.to_string()))?;
+            return schema
+                .display(0, &bytes)
+                .map_err(|e| SDKError::SerializationError(e.to_string()));
+        }
+
+        serde_json::to_string_pretty(&self.inner).map_err(Into::into)
     }
 
     /// Build the bytes a Ledger hardware wallet must sign.
@@ -489,7 +498,7 @@ impl Transaction {
         pub_key: [u8; 32],
     ) -> SignedTransaction {
         let RawUnsignedTransaction { runtime_call, uniqueness, details } = tx.inner;
-        SignedTransaction::V0(Version0 { runtime_call, uniqueness, details, pub_key, signature })
+        SignedTransaction::V0(Version0 { signature, pub_key, runtime_call, uniqueness, details })
     }
 
     /// Borsh-serialize a signed transaction to bytes.
@@ -579,14 +588,37 @@ impl Client {
         &self,
         call_message: CallMessage,
     ) -> SDKResult<SubmitTxResponse> {
-        let signed =
-            Transaction::builder().call_message(call_message.clone()).client(self).build()?;
+        self.send_runtime_call(RuntimeCall::Exchange(call_message)).await
+    }
+
+    /// Build, sign, and submit a runtime call in one step, retrying once if
+    /// the chain hash changed since startup.
+    pub async fn send_runtime_call(
+        &self,
+        runtime_call: RuntimeCall,
+    ) -> SDKResult<SubmitTxResponse> {
+        let signed = Transaction::from_runtime_call(
+            runtime_call.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            self,
+        )?;
         match self.send_transaction(&signed).await {
             Err(SDKError::TransactionOutdated) => {
                 // chain hash was refreshed; re-sign with the new hash and retry once.
                 // submit directly so a second 401 comes back as ApiError, not TransactionOutdated
-                let signed =
-                    Transaction::builder().call_message(call_message).client(self).build()?;
+                let signed = Transaction::from_runtime_call(
+                    runtime_call,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    self,
+                )?;
                 let body = Transaction::to_base64(&signed)?;
                 match self.client().submit_tx(&SubmitTxRequest { body }).await {
                     Ok(r) => Ok(r.into_inner()),
@@ -641,8 +673,7 @@ mod tests {
     use bullet_exchange_interface::message::{CancelOrderArgs, PublicAction, UserAction};
     use bullet_exchange_interface::schema::Schema;
     use bullet_exchange_interface::transaction::{
-        Amount, PriorityFeeBips, RuntimeCall, Transaction as InterfaceTransaction, TxDetails,
-        UniquenessData,
+        Amount, PriorityFeeBips, Transaction as InterfaceTransaction, TxDetails, UniquenessData,
     };
     use bullet_exchange_interface::types::{MarketId, OrderId};
     use ed25519_dalek::{Signature, Verifier, VerifyingKey};
@@ -650,6 +681,10 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
+    use crate::runtime_call::{
+        HexBytes32, RuntimeCall, UnsignedTransactionPayload as RawUnsignedTransaction, WarpAmount,
+        WarpTransferRemoteArgs,
+    };
 
     fn test_unsigned_tx() -> UnsignedTransaction {
         let inner = RawUnsignedTransaction {
@@ -929,6 +964,56 @@ mod tests {
     }
 
     #[test]
+    fn to_message_bytes_serializes_warp_transfer_remote_runtime_call() {
+        let warp_route = "0x1111111111111111111111111111111111111111111111111111111111111111";
+        let recipient = "0x2222222222222222222222222222222222222222222222222222222222222222";
+        let relayer = "11111111111111111111111111111111"
+            .parse::<bullet_exchange_interface::address::Address>()
+            .unwrap();
+        let inner = RawUnsignedTransaction {
+            runtime_call: RuntimeCall::warp_transfer_remote(WarpTransferRemoteArgs {
+                warp_route: warp_route.parse::<HexBytes32>().unwrap(),
+                amount: WarpAmount(12_345_678_901_234_567_890),
+                destination_domain: 1234,
+                gas_payment_limit: WarpAmount(400_000),
+                recipient: recipient.parse::<HexBytes32>().unwrap(),
+                relayer: Some(relayer),
+            }),
+            uniqueness: UniquenessData::Window(42),
+            details: TxDetails {
+                chain_id: 1,
+                max_fee: Amount(10_000_000),
+                gas_limit: None,
+                max_priority_fee_bips: PriorityFeeBips(0),
+            },
+        };
+        let unsigned = UnsignedTransaction {
+            inner,
+            chain_hash: [42u8; 32],
+            chain_name: "TestChain".to_string(),
+        };
+
+        let bytes = unsigned.to_message_bytes().unwrap();
+        let message: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(
+            message["runtime_call"],
+            serde_json::json!({
+                "warp": {
+                    "transfer_remote": {
+                        "warp_route": warp_route,
+                        "destination_domain": 1234,
+                        "recipient": recipient,
+                        "amount": "12345678901234567890",
+                        "relayer": "11111111111111111111111111111111",
+                        "gas_payment_limit": "400000",
+                    }
+                }
+            })
+        );
+    }
+
+    #[test]
     fn make_solana_preamble_layout() {
         let pubkey = [1u8; 32];
         let chain_hash = [2u8; 32];
@@ -1094,9 +1179,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let SignedTransaction::V0(version_0) = signed else {
-            panic!("expected V0 signed transaction");
-        };
+        let SignedTransaction::V0(version_0) = signed;
         assert!(
             matches!(version_0.uniqueness, UniquenessData::Window(_)),
             "{:?}",
@@ -1173,10 +1256,7 @@ mod tests {
         let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
 
         let signed = Transaction::from_parts(unsigned, signature, pub_key);
-        let version_0 = match signed {
-            SignedTransaction::V0(version_0) => version_0,
-            _ => panic!("expected Version0 signed transaction"),
-        };
+        let SignedTransaction::V0(version_0) = signed;
 
         assert!(verify_signature(version_0.pub_key, &signable, version_0.signature));
     }

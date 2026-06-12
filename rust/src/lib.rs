@@ -2,6 +2,8 @@ mod client;
 mod keypair;
 mod metadata;
 mod multisig;
+mod receipts;
+mod runtime_call;
 mod sub_account;
 mod trading;
 mod transaction_builder;
@@ -22,6 +24,9 @@ pub use keypair::Keypair;
 pub use multisig::{MAX_MULTISIG_SIGNERS, MultisigConfig, SolanaLedgerMultisigTransaction};
 // Re-export WebSocket close code for pattern matching
 pub use reqwest_websocket::CloseCode;
+pub use runtime_call::{
+    HexBytes32, RuntimeCall, SignedTransaction, Warp, WarpAmount, WarpCall, WarpTransferRemoteArgs,
+};
 pub use transaction_builder::{
     SolanaLedgerTransaction, SolanaOffchainTransaction, Transaction, UnsignedTransaction,
 };
@@ -62,8 +67,6 @@ pub use bullet_exchange_interface::message::{
     AmendOrderArgs, CancelOrderArgs, NewOrderArgs, NewTriggerOrderArgs, NewTwapOrderArgs,
     PendingTpslPair, Tpsl, TpslPair,
 };
-/// A decoded runtime call (the exchange instruction carried by a transaction).
-pub use bullet_exchange_interface::transaction::RuntimeCall;
 /// Transaction uniqueness/replay-protection data: `Nonce`, `Generation`, or `Window`.
 ///
 /// Set on a transaction via `UnsignedTransaction::builder().uniqueness(...)` or

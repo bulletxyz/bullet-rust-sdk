@@ -60,8 +60,8 @@ client.maxFee()              // default max fee
 client.hasKeypair()          // whether a default keypair is set
 
 // Submission
-await client.sendTransaction(signedTx)  // returns JSON string
-await client.sendOffChainTransaction(offchainTx)
+await client.sendTransaction(signedTx)       // SubmitTxResponse
+await client.sendOffChainTransaction(offchainTx)  // SubmitTxResponse
 ```
 By default the client validates every exchange `CallMessage` group (`User`,
 `Vault`, `Keeper`, `Public`, and `Admin`) against the server schema when it
@@ -108,7 +108,10 @@ const tx = Transaction.builder()
     .signer(keypair)
     .build(client);
 
-await client.sendTransaction(tx);
+const submitResponse = await client.sendTransaction(tx);
+submitResponse.id       // transaction hash
+submitResponse.status   // 'submitted' | 'processed' | ...
+submitResponse.events   // LedgerEvent[]
 ```
 
 ### Uniqueness (replay protection)
@@ -295,6 +298,8 @@ User.withdraw(assetId, amount)
 User.placeOrders(marketId, [order1, order2], replace)
 User.cancelOrders(marketId, [cancel1, cancel2])
 User.cancelAllOrders()
+User.delegateUserV2(delegate, 'session name', flags, subAccountIndex?, expiresAt?)
+User.revokeDelegationV1(delegate, subAccountIndex?)
 
 // Public actions (no signing required, but still need a tx)
 Public.applyFunding(addresses)
@@ -309,6 +314,22 @@ const cancel = new CancelOrderArgs(orderId, clientOrderId);
 const amend = new AmendOrderArgs(cancel, newOrder);
 ```
 
+Delegate expiry is encoded as epoch microseconds. If your app stores epoch
+milliseconds, pass `BigInt(expiresAtMs) * 1000n` for `expiresAt`.
+
+Read configured delegates with `accountConfig`:
+
+```typescript
+const config = await client.accountConfig(address);
+
+for (const delegate of config.delegates) {
+    delegate.address
+    delegate.name
+    delegate.flags
+    delegate.expiresAt  // bigint | undefined, epoch microseconds
+}
+```
+
 `deriveVaultAddress(name)` computes a vault's address from its name. See
 [`examples/node/create_vault.ts`](../examples/node/create_vault.ts) for a runnable
 vault example.
@@ -319,6 +340,36 @@ its master address and index (`0-31`). Sub-accounts are created with
 `sub_account_index` arg on order/cancel call messages; the derived address is
 only needed to read a sub-account (`client.accountInfo(sub)`). Throws on an
 out-of-range index.
+
+### Warp Bridge Withdrawals
+
+Bridge withdrawals use a normal typed call message and the same transaction
+builder path as exchange user actions:
+
+```typescript
+import { Transaction, Warp } from '@bulletxyz/sdk-wasm';
+
+const callMsg = Warp.transferRemote({
+    warpRoute: '0x...',          // bytes32 route
+    amount: '1000000',
+    destinationDomain: 1234,
+    gasPaymentLimit: '400000',
+    recipient: '0x...',          // bytes32; 20-byte EVM hex is left-padded
+    relayer: null,               // or a string / { Standard: string } / { Vm: string }
+});
+
+const unsigned = Transaction.builder()
+    .callMessage(callMsg)
+    .buildUnsigned(client);
+```
+
+After submission, bridge responses expose the Hyperlane message id when the
+Trading API includes it in transaction events:
+
+```typescript
+const response = await client.sendOffChainTransaction(tx);
+response.messageId  // string | undefined
+```
 
 ### WebSocket
 
@@ -413,25 +464,27 @@ Decimal.zero()   Decimal.one()
 
 ### REST API Methods
 
-The client exposes all REST endpoints as typed async methods. Responses are returned as JSON strings.
+The client exposes REST endpoints as typed async methods. Response objects have
+typed getters plus `toJSON()` for full JSON serialization.
 
 ```typescript
 // Market data
 await client.exchangeInfo()
 await client.tickerPrice(symbol?)
-await client.depth(symbol, limit?)
-await client.aggTrades(symbol, limit?)
-await client.klines(symbol, interval, limit?)
+await client.orderBook(symbol)
+await client.recentTrades(symbol)
+await client.fundingRate(symbol)
 
 // Account
 await client.accountInfo(address)
 await client.accountBalance(address)
-await client.openOrders(address, symbol?)
-await client.allOrders(address, ...)
+await client.accountConfig(address)
+await client.queryOpenOrders(address, symbol?)
+await client.queryOpenOrder(address, orderId)
 
 // System
 await client.health()
-await client.chainInfo()
+await client.constants()
 ```
 
 ## Platform Support
