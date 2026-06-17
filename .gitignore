@@ -2,6 +2,7 @@ target/
 node_modules/
 .direnv
 wasm/pkg/
+wasm/.generated/
 .claude/settings.local.json
 .claude/worktrees/
 .DS_Store
