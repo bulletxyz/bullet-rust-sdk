@@ -18,8 +18,13 @@ fn main() {
 
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let generated_dir = Path::new(&manifest_dir).join(".generated");
+    if generated_dir.exists() {
+        fs::remove_dir_all(&generated_dir).expect("failed to clear generated output dir");
+    }
     fs::create_dir_all(&generated_dir).expect("failed to create generated output dir");
     for (file_name, contents) in [
+        ("startup-shared.js", codegen::emit::startup_subpaths::emit_shared_js().to_string()),
+        ("startup-shared.d.ts", codegen::emit::startup_subpaths::emit_shared_dts().to_string()),
         ("calls.js", codegen::emit::startup_subpaths::emit_calls_js(&info)),
         ("calls.d.ts", codegen::emit::startup_subpaths::emit_calls_dts(&info)),
         ("primitives.js", codegen::emit::startup_subpaths::emit_primitives_js(&info)),

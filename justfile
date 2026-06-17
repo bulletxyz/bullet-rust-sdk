@@ -27,6 +27,8 @@ build-wasm:
     # Copy JS error class used by Rust wasm-bindgen imports and package exports
     cp wasm/js/bullet-sdk-error.js wasm/pkg/bullet-sdk-error.js
     cp wasm/js/bullet-sdk-error.d.ts wasm/pkg/bullet-sdk-error.d.ts
+    cp wasm/.generated/startup-shared.js wasm/pkg/startup-shared.js
+    cp wasm/.generated/startup-shared.d.ts wasm/pkg/startup-shared.d.ts
     cp wasm/.generated/calls.js wasm/pkg/calls.js
     cp wasm/.generated/calls.d.ts wasm/pkg/calls.d.ts
     cp wasm/.generated/topics.js wasm/pkg/topics.js

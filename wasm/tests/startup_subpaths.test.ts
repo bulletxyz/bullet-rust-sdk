@@ -63,6 +63,30 @@ describe("startup-safe subpaths", () => {
     }
   });
 
+  test("share internal startup helpers without exporting them as public subpaths", () => {
+    const packageJson = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    );
+    const callsSource = readFileSync(new URL("../pkg/calls.js", import.meta.url), "utf8");
+    const primitivesSource = readFileSync(
+      new URL("../pkg/primitives.js", import.meta.url),
+      "utf8",
+    );
+    const sharedSource = readFileSync(
+      new URL("../pkg/startup-shared.js", import.meta.url),
+      "utf8",
+    );
+
+    expect(packageJson.exports["./startup-shared"]).toBeUndefined();
+    expect(callsSource).toContain('from "./startup-shared.js"');
+    expect(primitivesSource).toContain('from "./startup-shared.js"');
+    expect(callsSource).not.toContain("function normalizeValue");
+    expect(primitivesSource).not.toContain("function normalizeValue");
+    expect(sharedSource).not.toContain("bullet_rust_sdk_wasm");
+    expect(sharedSource).not.toContain("_bg.wasm");
+    expect(sharedSource).not.toContain("initSync");
+  });
+
   test("builds canonical runtime-call data", () => {
     expect(CallUser.cancelAllOrders()).toEqual({
       exchange: {
