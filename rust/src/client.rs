@@ -300,6 +300,8 @@ impl Client {
         user_actions: Option<&[UserActionDiscriminants]>,
     ) -> bool {
         let Some(user_actions) = user_actions else {
+            // prune only the paths we want to keep extensible without breaking backward
+            // compatiblity
             return match name {
                 "Transaction" => variant == "V0",
                 "RuntimeCall" => matches!(variant, "Exchange" | "Bank" | "Warp"),
@@ -313,10 +315,8 @@ impl Client {
                 "PublicAction" => PublicActionDiscriminants::try_from(variant).is_ok(),
                 "UserAction" => UserActionDiscriminants::try_from(variant).is_ok(),
                 "VaultAction" => VaultActionDiscriminants::try_from(variant).is_ok(),
-                _ => {
-                    // include the variant - to be sure we fail afterwards
-                    true
-                }
+                "UniquenessData" => matches!(variant, "Nonce" | "Generation" | "Window"),
+                _ => true,
             };
         };
 
@@ -327,6 +327,7 @@ impl Client {
             "UserAction" => UserActionDiscriminants::try_from(variant)
                 .map(|v| user_actions.contains(&v))
                 .unwrap_or(false),
+            "UniquenessData" => matches!(variant, "Nonce" | "Generation" | "Window"),
             _ => {
                 // include the variant - to be sure we fail afterwards
                 true
