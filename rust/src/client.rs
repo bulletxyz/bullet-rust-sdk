@@ -3,7 +3,10 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use bon::bon;
-use bullet_exchange_interface::message::UserActionDiscriminants;
+use bullet_exchange_interface::message::{
+    AdminActionDiscriminants, KeeperActionDiscriminants, PublicActionDiscriminants,
+    UserActionDiscriminants, VaultActionDiscriminants,
+};
 use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
 use bullet_exchange_interface::types::MarketId;
 use url::Url;
@@ -151,9 +154,9 @@ impl Client {
         ///
         /// By default (`None`), the client validates every exchange `CallMessage`
         /// branch (`User`, `Vault`, `Keeper`, `Public`, and `Admin`) against the remote
-        /// schema and returns `SDKError::SchemaOutdated` if any differ. If you only use
-        /// a subset of user actions (e.g. `PlaceOrders`), you can pass them here to
-        /// intentionally prune validation down to those `UserAction` variants.
+        /// schema and returns `SDKError::SchemaOutdated` if any is not backward compatible. If
+        /// you only use a subset of user actions (e.g. `PlaceOrders`), you can pass them
+        /// here to intentionally prune validation down to those `UserAction` variants.
         ///
         /// **Warning:** When this is set, non-`User` call messages and unlisted
         /// `UserAction` variants are rejected before signing because their schema branch
@@ -279,12 +282,13 @@ impl Client {
     /// The fixed rules pin the transaction envelope the SDK serializes:
     ///   `Transaction::V0 → RuntimeCall::Exchange → CallMessage::*`
     ///
-    /// By default, every exchange `CallMessage` group is kept. When `user_actions`
-    /// is set, validation is intentionally pruned to:
-    ///   `CallMessage::User → selected UserAction::*`
+    /// By default, every exchange `CallMessage` group is kept that we
+    /// know about. When `user_actions` is set, validation is
+    /// intentionally pruned to: `CallMessage::User → selected
+    /// UserAction::*`
     ///
     /// For `UserAction`, the behaviour depends on `user_actions`:
-    /// - `None` — include every variant (full exchange schema check).
+    /// - `None` — include every variant we know about
     /// - `Some(&[PlaceOrders, CancelOrders])` — only include those two; schema changes to other
     ///   actions (e.g. `Withdraw`) are ignored.
     ///
@@ -295,25 +299,29 @@ impl Client {
         variant: &str,
         user_actions: Option<&[UserActionDiscriminants]>,
     ) -> bool {
+        let Some(user_actions) = user_actions else {
+            return match name {
+                "Transaction" => variant == "V0",
+                "RuntimeCall" => variant == "Exchange",
+                "UserAction" => UserActionDiscriminants::try_from(variant).is_ok(),
+                "AdminAction" => AdminActionDiscriminants::try_from(variant).is_ok(),
+                "PublicAction" => PublicActionDiscriminants::try_from(variant).is_ok(),
+                "KeeperAction" => KeeperActionDiscriminants::try_from(variant).is_ok(),
+                "VaultAction" => VaultActionDiscriminants::try_from(variant).is_ok(),
+                _ => {
+                    // include the variant - to be sure we fail afterwards
+                    true
+                }
+            };
+        };
+
         match name {
             "Transaction" => variant == "V0",
             "RuntimeCall" => variant == "Exchange",
-            "CallMessage" => user_actions.is_none() || variant == "User",
-            "UserAction" => match user_actions {
-                Some(actions) => UserActionDiscriminants::try_from(variant)
-                    .map(|v| actions.contains(&v))
-                    .unwrap_or(false),
-                None => true,
-            },
-            // Validate only the `Generation` arm: it's the uniqueness variant
-            // present in every deployed network's schema today. `Window` (the
-            // SDK default) and `Nonce` exist in the local interface but aren't
-            // on mainnet's schema yet, so checking them here would falsely
-            // reject connecting to a mainnet that trails the local interface.
-            // Their layout is a plain `u64` pinned by the shared
-            // `bullet-exchange-interface` version; broaden this to `Window`
-            // once mainnet exposes it.
-            "UniquenessData" => variant == "Generation",
+            "CallMessage" => variant == "User",
+            "UserAction" => UserActionDiscriminants::try_from(variant)
+                .map(|v| user_actions.contains(&v))
+                .unwrap_or(false),
             _ => {
                 // include the variant - to be sure we fail afterwards
                 true
