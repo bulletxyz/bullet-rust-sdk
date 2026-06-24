@@ -9,7 +9,7 @@ repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 
 [workspace.dependencies]
 bon = "3.9.0"
-bullet-exchange-interface = { version = "0.10", features = ["schema"] }
+bullet-exchange-interface = { version = "0.11", features = ["schema"] }
 
 # Versioned path dep so release-plz cascades rust crate bumps into the wasm
 # crate (otherwise a path-only dep is treated as "no version requirement" and

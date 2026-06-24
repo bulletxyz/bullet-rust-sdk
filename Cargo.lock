@@ -288,9 +288,9 @@ checksum = "e67218f4455dc3cffdccd9ce3623157bd990102e466199969c5834543baa9121"
 
 [[package]]
 name = "bullet-exchange-interface"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b32cbe5be1cd8b7280441df9ca83716c9e120c8477d69391de7f3cc0abaced4"
+checksum = "e55921e0d0a9a2f9b4d629208aa12c776b45de5df627bdb2034ed73d9bf4bef9"
 dependencies = [
  "borsh",
  "bullet-bs58",
