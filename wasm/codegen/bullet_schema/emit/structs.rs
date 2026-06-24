@@ -13,7 +13,10 @@ pub fn emit_struct(s: &SchemaStruct) -> TokenStream {
 
     // Some types are generic over Address.
     let inner_type_decl: TokenStream = match s.type_name.as_str() {
-        "CreateVaultArgs" | "UpdateGlobalConfigArgs" | "UpdateGlobalConfigArgsV1" => {
+        "CreateVaultArgs"
+        | "UpdateGlobalConfigArgs"
+        | "UpdateGlobalConfigArgsV1"
+        | "UpdateUserMarginDiscountArgs" => {
             quote! { #type_name<Address> }
         }
         _ => quote! { #type_name },
