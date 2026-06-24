@@ -35,9 +35,9 @@ use bullet_exchange_interface::transaction::{
     Amount, Gas, RuntimeCall, Transaction as RustSignedTransaction, WarpBytes32, warp,
 };
 use bullet_exchange_interface::types::{
-    AdminType, AssetId, ClientOrderId, FeeTier, MarketId, MarketTradingStatus, OrderId, OrderType,
-    Side, SpotCollateralTransferDirection, TokenId, TradingMode, TriggerDirection, TriggerOrderId,
-    TriggerPriceCondition, TwapId,
+    AdminType, AssetId, ClientOrderId, FeeTier, MarginDiscount, MarketId, MarketTradingStatus,
+    OrderId, OrderType, Side, SpotCollateralTransferDirection, TokenId, TradingMode,
+    TriggerDirection, TriggerOrderId, TriggerPriceCondition, TwapId,
 };
 use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{
