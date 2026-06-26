@@ -45,6 +45,7 @@ use bullet_rust_sdk::{
     SolanaOffchainTransaction as RustSolanaOffchainTransaction, Transaction as RustTransaction,
     UniquenessData, UnsignedTransaction,
 };
+use js_sys::Reflect;
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer};
 use wasm_bindgen::prelude::*;
@@ -371,6 +372,45 @@ impl WasmRuntimeCall {
             serde_json::from_str(json).map_err(|e| format!("invalid RuntimeCall JSON: {e}"))?;
         Ok(WasmRuntimeCall { inner })
     }
+
+    /// Parse a `RuntimeCall` from side-effect-free call data created by
+    /// `@bulletxyz/sdk-wasm/calls`.
+    ///
+    /// @param {object} call - Runtime-call data.
+    /// @returns {RuntimeCall}
+    /// @example
+    /// ```js
+    /// import { User } from "@bulletxyz/sdk-wasm/calls";
+    /// const call = RuntimeCall.fromCall(User.cancelAllOrders());
+    /// ```
+    #[wasm_bindgen(js_name = fromCall)]
+    pub fn from_call(call: JsValue) -> WasmResult<WasmRuntimeCall> {
+        Ok(WasmRuntimeCall { inner: runtime_call_from_call(call)? })
+    }
+}
+
+fn runtime_call_from_call(call: JsValue) -> WasmResult<RuntimeCall> {
+    serde_wasm_bindgen::from_value(call.clone())
+        .map_err(|e| e.to_string())
+        .or_else(|serde_err| match try_warp_transfer_remote_call(&call) {
+            Some(Ok(inner)) => Ok(inner),
+            Some(Err(warp_err)) => Err(format!(
+                "invalid RuntimeCall data: {serde_err}; warp transfer_remote: {warp_err}"
+            )),
+            None => Err(format!("invalid RuntimeCall data: {serde_err}")),
+        })
+        .map_err(Into::into)
+}
+
+fn try_warp_transfer_remote_call(call: &JsValue) -> Option<Result<RuntimeCall, String>> {
+    let warp = get_present_property(call, "warp")?;
+    let transfer_remote = get_present_property(&warp, "transfer_remote")?;
+    Some(Warp::transfer_remote(transfer_remote).map(|msg| msg.inner).map_err(|e| e.to_string()))
+}
+
+fn get_present_property(value: &JsValue, key: &str) -> Option<JsValue> {
+    let property = Reflect::get(value, &JsValue::from_str(key)).ok()?;
+    (!property.is_undefined() && !property.is_null()).then_some(property)
 }
 
 // ── WasmUnsignedTransaction ───────────────────────────────────────────────────
@@ -945,6 +985,26 @@ impl WasmTradingApi {
         msg: WasmCallMessage,
     ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
         let resp = self.inner.send_runtime_call(msg.inner).await?;
+        Ok(crate::generated::WasmSubmitTxResponse(resp))
+    }
+
+    /// Sign and submit side-effect-free call data in one step.
+    ///
+    /// @param {object} call - Runtime-call data from `@bulletxyz/sdk-wasm/calls`.
+    /// @returns {Promise<SubmitTxResponse>}
+    ///
+    /// @example
+    /// ```js
+    /// import { User } from "@bulletxyz/sdk-wasm/calls";
+    /// const resp = await client.sendCall(User.cancelAllOrders());
+    /// ```
+    #[wasm_bindgen(js_name = sendCall)]
+    pub async fn send_call(
+        &self,
+        call: JsValue,
+    ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
+        let runtime_call = runtime_call_from_call(call)?;
+        let resp = self.inner.send_runtime_call(runtime_call).await?;
         Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
 }
