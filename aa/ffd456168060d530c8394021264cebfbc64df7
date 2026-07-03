@@ -1,0 +1,21 @@
+Cargo.lock
+  s_d7f08c9b35685b::t_e1932bc0561b84 291,293
+Cargo.toml
+  s_d7f08c9b35685b::t_9abad34f0f4eda 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "aaffd456168060d530c8394021264cebfbc64df7",
+  "prompts": {},
+  "sessions": {
+    "s_d7f08c9b35685b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a8fa125e-5236-487c-85f7-4ec419ea6be0",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
