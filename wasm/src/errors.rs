@@ -51,6 +51,12 @@ pub struct WasmError {
     retryable: bool,
 }
 
+impl std::fmt::Display for WasmError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
 impl WasmError {
     pub fn new(msg: impl std::fmt::Display) -> Self {
         WasmError {

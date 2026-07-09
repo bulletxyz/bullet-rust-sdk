@@ -67,6 +67,22 @@
         "types": "./pkg/index.d.ts",
         "default": "./pkg/index.js"
       }
+    },
+    "./calls": {
+      "types": "./pkg/calls.d.ts",
+      "default": "./pkg/calls.js"
+    },
+    "./topics": {
+      "types": "./pkg/topics.d.ts",
+      "default": "./pkg/topics.js"
+    },
+    "./errors": {
+      "types": "./pkg/errors.d.ts",
+      "default": "./pkg/errors.js"
+    },
+    "./primitives": {
+      "types": "./pkg/primitives.d.ts",
+      "default": "./pkg/primitives.js"
     }
   },
   "files": [

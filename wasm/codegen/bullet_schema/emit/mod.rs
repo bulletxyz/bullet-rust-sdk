@@ -2,6 +2,7 @@
 
 pub mod enums;
 pub mod namespaces;
+pub mod startup_subpaths;
 pub mod structs;
 
 use proc_macro2::TokenStream;

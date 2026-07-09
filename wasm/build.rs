@@ -16,6 +16,28 @@ fn main() {
     let code = codegen::emit::emit_all(&info);
     fs::write(&call_msg_path, &code).expect("failed to write generated code");
 
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let generated_dir = Path::new(&manifest_dir).join(".generated");
+    if generated_dir.exists() {
+        fs::remove_dir_all(&generated_dir).expect("failed to clear generated output dir");
+    }
+    fs::create_dir_all(&generated_dir).expect("failed to create generated output dir");
+    for (file_name, contents) in [
+        ("startup-shared.js", codegen::emit::startup_subpaths::emit_shared_js().to_string()),
+        ("startup-shared.d.ts", codegen::emit::startup_subpaths::emit_shared_dts().to_string()),
+        ("calls.js", codegen::emit::startup_subpaths::emit_calls_js(&info)),
+        ("calls.d.ts", codegen::emit::startup_subpaths::emit_calls_dts(&info)),
+        ("primitives.js", codegen::emit::startup_subpaths::emit_primitives_js(&info)),
+        ("primitives.d.ts", codegen::emit::startup_subpaths::emit_primitives_dts(&info)),
+        ("topics.js", codegen::emit::startup_subpaths::emit_topics_js().to_string()),
+        ("topics.d.ts", codegen::emit::startup_subpaths::emit_topics_dts().to_string()),
+        ("errors.js", codegen::emit::startup_subpaths::emit_errors_js().to_string()),
+        ("errors.d.ts", codegen::emit::startup_subpaths::emit_errors_dts().to_string()),
+    ] {
+        fs::write(generated_dir.join(file_name), contents)
+            .unwrap_or_else(|err| panic!("failed to write generated {file_name}: {err}"));
+    }
+
     let total_variants: usize = info.action_groups.iter().map(|g| g.variants.len()).sum();
     println!(
         "cargo::warning=Generated {} factory methods across {} namespaces, {} struct wrappers, {} enums",

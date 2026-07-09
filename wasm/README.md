@@ -35,6 +35,38 @@ const response = await Transaction.builder()
     .send(client);
 ```
 
+## Startup-safe imports
+
+Use startup-safe subpaths in React components or other startup paths that only
+need to define transaction callbacks, websocket topics, enum values, or SDK
+error guards. These entrypoints are side-effect-free and do not import the
+generated WASM glue or `.wasm` binary.
+
+```typescript
+import { User } from '@bulletxyz/sdk-wasm/calls';
+import { NewOrderArgs, Side, OrderType } from '@bulletxyz/sdk-wasm/primitives';
+import { Topic, OrderbookDepth } from '@bulletxyz/sdk-wasm/topics';
+import { isBulletSdkError } from '@bulletxyz/sdk-wasm/errors';
+
+const order = new NewOrderArgs('50000.0', '0.1', Side.Bid, OrderType.Limit, false);
+const placeOrderCall = User.placeOrders(0, [order], false);
+const depthTopic = Topic.depth('BTC-USD', OrderbookDepth.D10);
+
+// Later, only when you are ready to initialize the runtime/client:
+const { Client, RuntimeCall, Transaction } = await import('@bulletxyz/sdk-wasm');
+const client = await Client.builder().network('mainnet').build();
+
+const tx = Transaction.builder()
+    .call(RuntimeCall.fromCall(placeOrderCall))
+    .signer(keypair)
+    .build(client);
+```
+
+Call builders return plain runtime-call data. Final parsing, schema validation,
+signing, and submission still happen in the full WASM runtime. Existing root
+imports such as `User.placeOrders(...)` and `.callMessage(...)` remain
+supported.
+
 ## API Reference
 
 ### Client
@@ -62,6 +94,7 @@ client.hasKeypair()          // whether a default keypair is set
 // Submission
 await client.sendTransaction(signedTx)       // SubmitTxResponse
 await client.sendOffChainTransaction(offchainTx)  // SubmitTxResponse
+await client.sendCall(call)                  // SubmitTxResponse
 ```
 By default the client validates every exchange `CallMessage` group (`User`,
 `Vault`, `Keeper`, `Public`, and `Admin`) against the server schema when it
@@ -76,11 +109,12 @@ parseable SDK metadata.
 
 ```typescript
 import { BulletSdkError } from '@bulletxyz/sdk-wasm';
+import { isBulletSdkError } from '@bulletxyz/sdk-wasm/errors';
 
 try {
     await client.accountBalance(address);
 } catch (err) {
-    if (err instanceof BulletSdkError) {
+    if (isBulletSdkError(err) || err instanceof BulletSdkError) {
         err.kind       // 'api' | 'http' | 'websocket' | 'validation' | ...
         err.status     // HTTP status when the API returned one
         err.details    // structured JSON details when available
@@ -99,6 +133,15 @@ All transaction construction goes through the builder:
 // Build and send in one step
 const response = await Transaction.builder()
     .callMessage(User.deposit(0, '1000.0'))
+    .signer(keypair)
+    .send(client);
+
+// Or from startup-safe call data imported from @bulletxyz/sdk-wasm/calls
+import { User as CallUser } from '@bulletxyz/sdk-wasm/calls';
+const depositCall = CallUser.deposit(0, '1000.0');
+
+const responseFromCall = await Transaction.builder()
+    .call(RuntimeCall.fromCall(depositCall))
     .signer(keypair)
     .send(client);
 
