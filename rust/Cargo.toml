@@ -70,9 +70,14 @@ prettyplease = "0.2"
 clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
-tokio = { version = "=1.52.3", features = ["rt", "macros", "io-std", "io-util"] }
+tokio = { version = "=1.52.3", features = ["rt", "macros", "io-std", "io-util", "rt-multi-thread"] }
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
 wiremock = "=0.6.5"
+criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
+
+[[bench]]
+name = "simulate"
+harness = false
 
 [features]
 default = []
