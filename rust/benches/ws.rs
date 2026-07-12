@@ -2,8 +2,10 @@ use std::sync::{Arc, Mutex};
 
 pub use base64::Engine;
 pub use base64::engine::general_purpose::STANDARD as BASE64;
+use bullet_rust_sdk::ServerMessage::Tagged;
 use bullet_rust_sdk::types::bullet_exchange_interface::message::UserAction;
 use bullet_rust_sdk::types::bullet_exchange_interface::types::MarketId;
+use bullet_rust_sdk::ws::TaggedMessage::OrderPlace;
 use bullet_rust_sdk::{CallMessage, Client, Keypair, Transaction};
 use criterion::{Criterion, criterion_group, criterion_main};
 use tokio::runtime::Runtime;
@@ -34,18 +36,23 @@ fn criterion_benchmark(c: &mut Criterion) {
     let call: CallMessage =
         UserAction::CancelMarketOrders { market_id: MarketId(0), sub_account_index: None }.into();
     c.bench_function("ws", |bench| {
-        let signed_tx = Transaction::builder()
-            .call_message(call.clone())
-            .signer(&keypair.clone())
-            .client(&client)
-            .build()
-            .expect("signing");
         bench.to_async(Runtime::new().unwrap()).iter(|| async {
+            let signed_tx = Transaction::builder()
+                .call_message(call.clone())
+                .signer(&keypair)
+                .client(&client)
+                .build()
+                .expect("signing");
             let mut ws = ws.lock().unwrap();
             ws.order_place(Transaction::to_base64(&signed_tx).unwrap(), None)
                 .await
                 .expect("order place");
-            let _ = core::hint::black_box(ws.recv().await);
+            match ws.recv().await {
+                Ok(Tagged(OrderPlace(_))) => {}
+                x => {
+                    eprintln!("{x:?}");
+                }
+            }
         });
     });
 }
