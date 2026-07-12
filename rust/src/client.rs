@@ -188,7 +188,6 @@ impl Client {
         let max_priority_fee_bips = max_priority_fee_bips.unwrap_or(*MAX_PRIORITY_FEE_BIPS);
         let max_fee = max_fee.unwrap_or(*MAX_FEE);
 
-
         Ok(Self {
             rest_url,
             ws_url,
