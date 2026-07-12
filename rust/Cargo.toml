@@ -24,7 +24,7 @@ sov-universal-wallet = { version = "0.4", features = ["serde"] }
 
 
 progenitor-client = "0.14"
-reqwest = { version = "0.13", features = ["blocking"] }
+reqwest = { version = "0.13", features = ["blocking", "http2"] }
 rust_decimal = { version = "1", features = ["serde-with-str"] }
 serde = "1"
 strum = { version = "0.28", features = ["derive"] }
@@ -74,6 +74,7 @@ tokio = { version = "=1.52.3", features = ["rt", "macros", "io-std", "io-util", 
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
 wiremock = "=0.6.5"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
+env_logger = "0.11.11"
 
 [[bench]]
 name = "simulate"

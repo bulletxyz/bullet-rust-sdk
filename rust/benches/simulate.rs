@@ -9,16 +9,23 @@ use bullet_rust_sdk::{
 use tokio::runtime::Runtime;
 
 fn criterion_benchmark(c: &mut Criterion) {
+    env_logger::init();
+
+    let keypair = Keypair::generate();
+    let rt  = Runtime::new().unwrap();
+    let http_client = reqwest::ClientBuilder::new()
+	.http2_prior_knowledge()
+	.connection_verbose(true)
+	.build().expect("need HTTP client");
+    let client = rt.block_on(async {
+	Client::builder()
+	    .reqwest_client(http_client)
+	    .network("mainnet")
+	    .keypair(keypair)
+	    .build()
+	    .await.unwrap()
+    });
     c.bench_function("simulate", |bench| {
-	let keypair = Keypair::generate();
-	let rt  = Runtime::new().unwrap();
-	let client = rt.block_on(async {
-	    Client::builder()
-		.network("mainnet")
-		.keypair(keypair)
-		.build()
-		.await.unwrap()
-	});
 	let call =
             RuntimeCall::Exchange(UserAction::CancelMarketOrders { market_id: MarketId(0), sub_account_index: None }.into());
 	let call = serde_json::to_value(call).unwrap()

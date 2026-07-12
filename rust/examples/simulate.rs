@@ -3,13 +3,20 @@ use bullet_rust_sdk::{
     types::bullet_exchange_interface::{
         message::UserAction, transaction::UniquenessData, types::MarketId,
     },
-    Client, Keypair, RuntimeCall, Transaction,
+    Client, Keypair, RuntimeCall,
 };
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
+    
     let keypair = Keypair::generate();
+    let http_client = reqwest::ClientBuilder::new()
+	.http2_prior_knowledge()
+	.connection_verbose(true)
+	.build().expect("need HTTP client");
     let client = Client::builder()
+	.reqwest_client(http_client)
         .network("mainnet")
         .keypair(keypair)
         .build()
@@ -35,7 +42,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         uniqueness,
     };
 
-    let res = client.simulate(&params).await.expect("simulation failed");
-    println!("{res:?}");
+    for _i in 0..2 {
+	let res = client.simulate(&params).await.expect("simulation failed");
+	println!("{res:?}");
+    }
     Ok(())
 }
