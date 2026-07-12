@@ -188,8 +188,6 @@ impl Client {
         let max_priority_fee_bips = max_priority_fee_bips.unwrap_or(*MAX_PRIORITY_FEE_BIPS);
         let max_fee = max_fee.unwrap_or(*MAX_FEE);
 
-        let exchange_info = generated_client.exchange_info().await?;
-        let metadata = ExchangeMetadata::from_symbols(&exchange_info.into_inner().symbols);
 
         Ok(Self {
             rest_url,
@@ -205,7 +203,7 @@ impl Client {
             max_priority_fee_bips,
             max_fee,
             keypair,
-            metadata,
+            metadata: Default::default(),
         })
     }
 

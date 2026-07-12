@@ -20,7 +20,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let client = rt.block_on(async {
 	Client::builder()
 	    .reqwest_client(http_client)
-	    .network("mainnet")
+	    .network("https://rollup.mainnet.bullet.xyz")
 	    .keypair(keypair)
 	    .build()
 	    .await.unwrap()

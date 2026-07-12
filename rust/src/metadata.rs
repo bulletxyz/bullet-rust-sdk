@@ -27,7 +27,7 @@ use bullet_exchange_interface::types::MarketId;
 use crate::generated::types::Symbol;
 
 /// Cached exchange metadata for fast symbol lookups.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct ExchangeMetadata {
     symbols: Vec<SymbolInfo>,
     /// symbol string -> index into `symbols`
