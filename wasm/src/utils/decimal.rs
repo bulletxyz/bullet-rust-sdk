@@ -126,17 +126,26 @@ impl WasmDecimal {
 
     /// Round to `dp` decimal places (half away from zero, i.e. 2.5 → 3, -2.5 → -3).
     pub fn round(&self, dp: u32) -> WasmDecimal {
-        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::MidpointAwayFromZero))
+        WasmDecimal(
+            self.0
+                .round_dp_with_strategy(dp, RoundingStrategy::MidpointAwayFromZero),
+        )
     }
 
     /// Round down (toward negative infinity) to `dp` decimal places.
     pub fn floor(&self, dp: u32) -> WasmDecimal {
-        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::ToNegativeInfinity))
+        WasmDecimal(
+            self.0
+                .round_dp_with_strategy(dp, RoundingStrategy::ToNegativeInfinity),
+        )
     }
 
     /// Round up (toward positive infinity) to `dp` decimal places.
     pub fn ceil(&self, dp: u32) -> WasmDecimal {
-        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::ToPositiveInfinity))
+        WasmDecimal(
+            self.0
+                .round_dp_with_strategy(dp, RoundingStrategy::ToPositiveInfinity),
+        )
     }
 
     /// Truncate to `dp` decimal places without rounding.

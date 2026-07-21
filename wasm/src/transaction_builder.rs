@@ -72,7 +72,10 @@ fn parse_addr_like(s: &str) -> Result<Address, String> {
 
 /// Parse a 32-byte Warp value. Also accepts 20-byte EVM hex and left-pads it.
 fn parse_warp_bytes32(value: &str) -> Result<WarpBytes32, String> {
-    let raw = value.strip_prefix("0x").or_else(|| value.strip_prefix("0X")).unwrap_or(value);
+    let raw = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+        .unwrap_or(value);
     if !raw.chars().all(|c| c.is_ascii_hexdigit()) {
         return value
             .parse::<Address>()
@@ -174,7 +177,10 @@ impl<'de> Visitor<'de> for WasmWarpAmountVisitor {
     where
         E: de::Error,
     {
-        value.parse::<u128>().map(|value| WasmWarpAmount(Amount(value))).map_err(E::custom)
+        value
+            .parse::<u128>()
+            .map(|value| WasmWarpAmount(Amount(value)))
+            .map_err(E::custom)
     }
 
     fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
@@ -295,7 +301,10 @@ impl Warp {
     pub fn transfer_remote(args: JsValue) -> WasmResult<WasmCallMessage> {
         let args: WasmWarpTransferRemoteArgs =
             serde_wasm_bindgen::from_value(args).map_err(|e| e.to_string())?;
-        let relayer = args.relayer.map(WasmRelayerInput::into_address).transpose()?;
+        let relayer = args
+            .relayer
+            .map(WasmRelayerInput::into_address)
+            .transpose()?;
 
         Ok(WasmCallMessage {
             inner: RuntimeCall::Warp(warp::CallMessage::TransferRemote {
@@ -370,6 +379,24 @@ impl WasmRuntimeCall {
         let inner: RuntimeCall =
             serde_json::from_str(json).map_err(|e| format!("invalid RuntimeCall JSON: {e}"))?;
         Ok(WasmRuntimeCall { inner })
+    }
+
+    /// The `RuntimeCall` schema this SDK build supports, as JSON.
+    ///
+    /// Derived from the compiled `RuntimeCall` type via `sov_universal_wallet` —
+    /// the same wire format the rollup's `/rollup/schema` endpoint uses, rooted
+    /// at the `RuntimeCall` enum (`root_type_indices[0]`). It contains only the
+    /// modules this SDK can actually build (Bank / Exchange / Warp), rather than
+    /// every module the chain exposes, so consumers can drive a form/module
+    /// selector straight off it with no need to filter the rollup's full set.
+    ///
+    /// @returns {string} JSON-serialized schema.
+    pub fn schema() -> WasmResult<String> {
+        use bullet_exchange_interface::schema::Schema;
+        let schema = Schema::of_single_type::<RuntimeCall>()
+            .map_err(|e| format!("failed to derive schema: {e:?}"))?;
+        Ok(serde_json::to_string(&schema)
+            .map_err(|e| format!("failed to serialize schema: {e}"))?)
     }
 }
 
@@ -824,9 +851,13 @@ impl WasmTransactionBuilder {
     pub fn build_unsigned(self, client: &WasmTradingApi) -> WasmResult<WasmUnsignedTransaction> {
         let call = self.call.ok_or("call is required (set via .call(...))")?;
 
-        let max_fee = self.max_fee.map(|f| f as u128).unwrap_or_else(|| client.inner.max_fee().0);
-        let priority_fee_bips =
-            self.priority_fee_bips.unwrap_or_else(|| client.inner.max_priority_fee_bips().0);
+        let max_fee = self
+            .max_fee
+            .map(|f| f as u128)
+            .unwrap_or_else(|| client.inner.max_fee().0);
+        let priority_fee_bips = self
+            .priority_fee_bips
+            .unwrap_or_else(|| client.inner.max_priority_fee_bips().0);
         let gas_limit = self.gas_limit.map(Gas).or_else(|| client.inner.gas_limit());
 
         let unsigned = UnsignedTransaction::from_runtime_call(

@@ -102,7 +102,13 @@ impl WasmWebsocketHandle {
     pub async fn subscribe(&mut self, topics: TopicArray, id: Option<u64>) -> WasmResult<()> {
         let arr: &Array = topics.unchecked_ref();
         let params: Vec<String> = arr.iter().filter_map(resolve_topic).collect();
-        Ok(self.inner.send(ClientMessage::Subscribe { id: id.map(RequestId::new), params }).await?)
+        Ok(self
+            .inner
+            .send(ClientMessage::Subscribe {
+                id: id.map(RequestId::new),
+                params,
+            })
+            .await?)
     }
 
     /// Unsubscribe from topics.
@@ -114,7 +120,10 @@ impl WasmWebsocketHandle {
         let params: Vec<String> = arr.iter().filter_map(resolve_topic).collect();
         Ok(self
             .inner
-            .send(ClientMessage::Unsubscribe { id: id.map(RequestId::new), params })
+            .send(ClientMessage::Unsubscribe {
+                id: id.map(RequestId::new),
+                params,
+            })
             .await?)
     }
 
@@ -123,7 +132,10 @@ impl WasmWebsocketHandle {
     /// @returns {Promise<void>}
     #[wasm_bindgen(js_name = listSubscriptions)]
     pub async fn list_subscriptions(&mut self, id: Option<u64>) -> WasmResult<()> {
-        Ok(self.inner.list_subscriptions(id.map(RequestId::new)).await?)
+        Ok(self
+            .inner
+            .list_subscriptions(id.map(RequestId::new))
+            .await?)
     }
 
     /// Place an order.
@@ -159,7 +171,10 @@ impl WasmWebsocketHandle {
     /// @returns {Promise<void>}
     #[wasm_bindgen(js_name = orderCancelAll)]
     pub async fn order_cancel_all(&mut self, tx: &str, id: Option<u64>) -> WasmResult<()> {
-        Ok(self.inner.order_cancel_all(tx, id.map(RequestId::new)).await?)
+        Ok(self
+            .inner
+            .order_cancel_all(tx, id.map(RequestId::new))
+            .await?)
     }
 
     /// Place an order using a signed transaction object.
@@ -174,7 +189,10 @@ impl WasmWebsocketHandle {
         tx: &crate::transaction_builder::WasmTransaction,
         id: Option<u64>,
     ) -> WasmResult<()> {
-        Ok(self.inner.place_order(&tx.inner, id.map(RequestId::new)).await?)
+        Ok(self
+            .inner
+            .place_order(&tx.inner, id.map(RequestId::new))
+            .await?)
     }
 
     /// Cancel an order using a signed transaction object.
@@ -189,7 +207,10 @@ impl WasmWebsocketHandle {
         tx: &crate::transaction_builder::WasmTransaction,
         id: Option<u64>,
     ) -> WasmResult<()> {
-        Ok(self.inner.cancel_order(&tx.inner, id.map(RequestId::new)).await?)
+        Ok(self
+            .inner
+            .cancel_order(&tx.inner, id.map(RequestId::new))
+            .await?)
     }
 
     /// Amend an order using a signed transaction object.
@@ -204,7 +225,10 @@ impl WasmWebsocketHandle {
         tx: &crate::transaction_builder::WasmTransaction,
         id: Option<u64>,
     ) -> WasmResult<()> {
-        Ok(self.inner.amend_order(&tx.inner, id.map(RequestId::new)).await?)
+        Ok(self
+            .inner
+            .amend_order(&tx.inner, id.map(RequestId::new))
+            .await?)
     }
 
     /// Cancel all open orders using a signed transaction object.
@@ -219,7 +243,10 @@ impl WasmWebsocketHandle {
         tx: &crate::transaction_builder::WasmTransaction,
         id: Option<u64>,
     ) -> WasmResult<()> {
-        Ok(self.inner.cancel_all_orders(&tx.inner, id.map(RequestId::new)).await?)
+        Ok(self
+            .inner
+            .cancel_all_orders(&tx.inner, id.map(RequestId::new))
+            .await?)
     }
 }
 
@@ -255,7 +282,12 @@ impl WasmTradingApi {
         config: Option<WasmWebsocketConfig>,
     ) -> WasmResult<WasmWebsocketHandle> {
         Ok(WasmWebsocketHandle {
-            inner: self.inner.connect_ws().maybe_config(config.map(|c| c.inner)).call().await?,
+            inner: self
+                .inner
+                .connect_ws()
+                .maybe_config(config.map(|c| c.inner))
+                .call()
+                .await?,
         })
     }
 
@@ -351,7 +383,9 @@ impl WasmWsEvent {
     #[wasm_bindgen(getter)]
     pub fn message(&self) -> Option<WasmServerMessage> {
         match &self.inner {
-            WsEvent::Message(m) => Some(WasmServerMessage { inner: (**m).clone() }),
+            WsEvent::Message(m) => Some(WasmServerMessage {
+                inner: (**m).clone(),
+            }),
             _ => None,
         }
     }
@@ -409,7 +443,8 @@ impl WasmManagedWebsocket {
     /// @param {number} [id]
     #[wasm_bindgen(js_name = orderPlace)]
     pub fn order_place(&self, tx: &str, id: Option<u64>) -> WasmResult<()> {
-        self.inner.order_place(tx.to_string(), id.map(RequestId::new))?;
+        self.inner
+            .order_place(tx.to_string(), id.map(RequestId::new))?;
         Ok(())
     }
 
@@ -418,7 +453,8 @@ impl WasmManagedWebsocket {
     /// @param {number} [id]
     #[wasm_bindgen(js_name = orderCancel)]
     pub fn order_cancel(&self, tx: &str, id: Option<u64>) -> WasmResult<()> {
-        self.inner.order_cancel(tx.to_string(), id.map(RequestId::new))?;
+        self.inner
+            .order_cancel(tx.to_string(), id.map(RequestId::new))?;
         Ok(())
     }
 
@@ -427,7 +463,8 @@ impl WasmManagedWebsocket {
     /// @param {number} [id]
     #[wasm_bindgen(js_name = orderAmend)]
     pub fn order_amend(&self, tx: &str, id: Option<u64>) -> WasmResult<()> {
-        self.inner.order_amend(tx.to_string(), id.map(RequestId::new))?;
+        self.inner
+            .order_amend(tx.to_string(), id.map(RequestId::new))?;
         Ok(())
     }
 
@@ -436,7 +473,8 @@ impl WasmManagedWebsocket {
     /// @param {number} [id]
     #[wasm_bindgen(js_name = orderCancelAll)]
     pub fn order_cancel_all(&self, tx: &str, id: Option<u64>) -> WasmResult<()> {
-        self.inner.order_cancel_all(tx.to_string(), id.map(RequestId::new))?;
+        self.inner
+            .order_cancel_all(tx.to_string(), id.map(RequestId::new))?;
         Ok(())
     }
 
@@ -488,7 +526,8 @@ impl WasmManagedWebsocket {
         tx: &crate::transaction_builder::WasmTransaction,
         id: Option<u64>,
     ) -> WasmResult<()> {
-        self.inner.cancel_all_orders(&tx.inner, id.map(RequestId::new))?;
+        self.inner
+            .cancel_all_orders(&tx.inner, id.map(RequestId::new))?;
         Ok(())
     }
 }

@@ -79,7 +79,10 @@ pub enum ServerMessage {
 impl ServerMessage {
     /// Returns true if this is an error message
     pub fn is_error(&self) -> bool {
-        matches!(self, ServerMessage::Tagged(TaggedMessage::Error(_)) | ServerMessage::Error(_))
+        matches!(
+            self,
+            ServerMessage::Tagged(TaggedMessage::Error(_)) | ServerMessage::Error(_)
+        )
     }
 
     /// Returns the request ID if present
@@ -283,7 +286,10 @@ mod tests {
         }"#;
 
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::Status(_))));
+        assert!(matches!(
+            msg,
+            ServerMessage::Tagged(TaggedMessage::Status(_))
+        ));
 
         if let ServerMessage::Tagged(TaggedMessage::Status(s)) = msg {
             assert_eq!(s.status, "connected");
@@ -350,7 +356,10 @@ mod tests {
         }"#;
 
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::Subscribe(_))));
+        assert!(matches!(
+            msg,
+            ServerMessage::Tagged(TaggedMessage::Subscribe(_))
+        ));
         assert_eq!(msg.request_id(), Some(RequestId::from(5)));
 
         if let ServerMessage::Tagged(TaggedMessage::Subscribe(s)) = msg {
@@ -368,7 +377,10 @@ mod tests {
         }"#;
 
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::Unsubscribe(_))));
+        assert!(matches!(
+            msg,
+            ServerMessage::Tagged(TaggedMessage::Unsubscribe(_))
+        ));
         assert_eq!(msg.request_id(), Some(RequestId::from(6)));
     }
 
@@ -382,7 +394,10 @@ mod tests {
         }"#;
 
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::ListSubscriptions(_))));
+        assert!(matches!(
+            msg,
+            ServerMessage::Tagged(TaggedMessage::ListSubscriptions(_))
+        ));
 
         if let ServerMessage::Tagged(TaggedMessage::ListSubscriptions(l)) = msg {
             assert_eq!(l.result.len(), 2);
@@ -405,7 +420,10 @@ mod tests {
         }"#;
 
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderPlace(_))));
+        assert!(matches!(
+            msg,
+            ServerMessage::Tagged(TaggedMessage::OrderPlace(_))
+        ));
         assert_eq!(msg.request_id(), Some(RequestId::from(10)));
         if let ServerMessage::Tagged(TaggedMessage::OrderPlace(r)) = msg {
             assert_eq!(r.results.tx_id, "0xabc");
@@ -445,7 +463,10 @@ mod tests {
         }"#;
 
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderCancelAll(_))));
+        assert!(matches!(
+            msg,
+            ServerMessage::Tagged(TaggedMessage::OrderCancelAll(_))
+        ));
         assert_eq!(msg.request_id(), Some(RequestId::from(12)));
         if let ServerMessage::Tagged(TaggedMessage::OrderCancelAll(r)) = msg {
             assert_eq!(r.results.order_ids.len(), 3);
@@ -468,7 +489,10 @@ mod tests {
             }
         }"#;
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderCancel(_))));
+        assert!(matches!(
+            msg,
+            ServerMessage::Tagged(TaggedMessage::OrderCancel(_))
+        ));
         assert_eq!(msg.request_id(), Some(RequestId::from(20)));
     }
 
@@ -508,7 +532,10 @@ mod tests {
         // Server may omit `id` on unsolicited pushes; request_id() must return None.
         let json = r#"{"e":"order.place","E":1706745600000000,"results":{"tx_id":"0x1","status":"processed"}}"#;
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::OrderPlace(_))));
+        assert!(matches!(
+            msg,
+            ServerMessage::Tagged(TaggedMessage::OrderPlace(_))
+        ));
         assert_eq!(msg.request_id(), None);
     }
 
@@ -527,6 +554,9 @@ mod tests {
         // Status messages must NOT be misclassified as an order result.
         let json = r#"{"e":"status","E":1234567890,"status":"connected","clientId":"x"}"#;
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
-        assert!(matches!(msg, ServerMessage::Tagged(TaggedMessage::Status(_))));
+        assert!(matches!(
+            msg,
+            ServerMessage::Tagged(TaggedMessage::Status(_))
+        ));
     }
 }

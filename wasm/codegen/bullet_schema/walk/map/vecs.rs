@@ -113,9 +113,21 @@ fn map_admin_cancel_vec(
         return None;
     }
 
-    let raw_types = components.iter().map(|c| c.raw_type).collect::<Vec<_>>().join(", ");
-    let bindings = components.iter().map(|c| c.binding).collect::<Vec<_>>().join(", ");
-    let conversions = components.iter().map(|c| c.conversion).collect::<Vec<_>>().join(", ");
+    let raw_types = components
+        .iter()
+        .map(|c| c.raw_type)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let bindings = components
+        .iter()
+        .map(|c| c.binding)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let conversions = components
+        .iter()
+        .map(|c| c.conversion)
+        .collect::<Vec<_>>()
+        .join(", ");
 
     let conversion = format!(
         "{{ let raw: Vec<({raw_types})> = from_json({{v}})?; \
@@ -123,7 +135,11 @@ fn map_admin_cancel_vec(
          .collect::<Result<Vec<_>, String>>()? }}"
     );
 
-    Some(ParamMapping { param_type: "&str".into(), conversion, is_optional: false })
+    Some(ParamMapping {
+        param_type: "&str".into(),
+        conversion,
+        is_optional: false,
+    })
 }
 
 fn admin_cancel_id_kind(context_name: &str) -> Option<NewtypeKind> {
@@ -188,7 +204,11 @@ mod tests {
         let types = vec![Ty::Tuple(sov_universal_wallet::ty::Tuple {
             template: None,
             peekable: false,
-            fields: vec![immediate_u64_field(), immediate_u64_field(), immediate_u64_field()],
+            fields: vec![
+                immediate_u64_field(),
+                immediate_u64_field(),
+                immediate_u64_field(),
+            ],
         })];
 
         let serde_metadata = Vec::new();
@@ -207,7 +227,10 @@ mod tests {
 
     fn immediate_u64_field() -> UnnamedField<sov_universal_wallet::schema::IndexLinking> {
         UnnamedField {
-            value: Link::Immediate(Primitive::Integer(IntegerType::u64, IntegerDisplay::Decimal)),
+            value: Link::Immediate(Primitive::Integer(
+                IntegerType::u64,
+                IntegerDisplay::Decimal,
+            )),
             silent: false,
             doc: String::new(),
         }

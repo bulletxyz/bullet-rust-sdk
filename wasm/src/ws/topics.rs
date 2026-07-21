@@ -57,7 +57,9 @@ impl WasmTopic {
     /// @returns {Topic}
     #[wasm_bindgen(js_name = aggTrade)]
     pub fn agg_trade(symbol: &str) -> WasmTopic {
-        WasmTopic { inner: SdkTopic::agg_trade(symbol).to_string() }
+        WasmTopic {
+            inner: SdkTopic::agg_trade(symbol).to_string(),
+        }
     }
 
     /// Create an orderbook depth topic, e.g. `"BTC-USD@depth10"`.
@@ -70,7 +72,9 @@ impl WasmTopic {
             WasmOrderbookDepth::D10 => SdkDepth::D10,
             WasmOrderbookDepth::D20 => SdkDepth::D20,
         };
-        WasmTopic { inner: SdkTopic::depth(symbol, d).to_string() }
+        WasmTopic {
+            inner: SdkTopic::depth(symbol, d).to_string(),
+        }
     }
 
     /// Create a book ticker topic, e.g. `"BTC-USD@bookTicker"`.
@@ -78,7 +82,9 @@ impl WasmTopic {
     /// @returns {Topic}
     #[wasm_bindgen(js_name = bookTicker)]
     pub fn book_ticker(symbol: &str) -> WasmTopic {
-        WasmTopic { inner: SdkTopic::book_ticker(symbol).to_string() }
+        WasmTopic {
+            inner: SdkTopic::book_ticker(symbol).to_string(),
+        }
     }
 
     /// Create a mark price topic, e.g. `"BTC-USD@markPrice"`.
@@ -86,7 +92,9 @@ impl WasmTopic {
     /// @returns {Topic}
     #[wasm_bindgen(js_name = markPrice)]
     pub fn mark_price(symbol: &str) -> WasmTopic {
-        WasmTopic { inner: SdkTopic::mark_price(symbol).to_string() }
+        WasmTopic {
+            inner: SdkTopic::mark_price(symbol).to_string(),
+        }
     }
 
     /// Create a kline/candlestick topic, e.g. `"BTC-USD@kline_1h"`.
@@ -103,7 +111,9 @@ impl WasmTopic {
             WasmKlineInterval::H4 => SdkKlineInterval::H4,
             WasmKlineInterval::D1 => SdkKlineInterval::D1,
         };
-        WasmTopic { inner: SdkTopic::kline(symbol, i).to_string() }
+        WasmTopic {
+            inner: SdkTopic::kline(symbol, i).to_string(),
+        }
     }
 
     /// Create a force order / liquidation topic, e.g. `"BTC-USD@forceOrder"`.
@@ -111,7 +121,9 @@ impl WasmTopic {
     /// @returns {Topic}
     #[wasm_bindgen(js_name = forceOrder)]
     pub fn force_order(symbol: &str) -> WasmTopic {
-        WasmTopic { inner: SdkTopic::force_order(symbol).to_string() }
+        WasmTopic {
+            inner: SdkTopic::force_order(symbol).to_string(),
+        }
     }
 
     /// Create a user order topic, e.g. `"0xabc@user.orders"`.
@@ -119,35 +131,45 @@ impl WasmTopic {
     /// @returns {Topic}
     #[wasm_bindgen(js_name = userOrders)]
     pub fn user_orders(address: &str) -> WasmTopic {
-        WasmTopic { inner: SdkTopic::user_orders(address).to_string() }
+        WasmTopic {
+            inner: SdkTopic::user_orders(address).to_string(),
+        }
     }
 
     /// Subscribe to all market tickers.
     /// @returns {Topic}
     #[wasm_bindgen(js_name = allTickers)]
     pub fn all_tickers() -> WasmTopic {
-        WasmTopic { inner: SdkTopic::all_tickers().to_string() }
+        WasmTopic {
+            inner: SdkTopic::all_tickers().to_string(),
+        }
     }
 
     /// Subscribe to all mark prices.
     /// @returns {Topic}
     #[wasm_bindgen(js_name = allMarkPrices)]
     pub fn all_mark_prices() -> WasmTopic {
-        WasmTopic { inner: SdkTopic::all_mark_prices().to_string() }
+        WasmTopic {
+            inner: SdkTopic::all_mark_prices().to_string(),
+        }
     }
 
     /// Subscribe to all book tickers.
     /// @returns {Topic}
     #[wasm_bindgen(js_name = allBookTickers)]
     pub fn all_book_tickers() -> WasmTopic {
-        WasmTopic { inner: SdkTopic::all_book_tickers().to_string() }
+        WasmTopic {
+            inner: SdkTopic::all_book_tickers().to_string(),
+        }
     }
 
     /// Subscribe to all force orders / liquidations.
     /// @returns {Topic}
     #[wasm_bindgen(js_name = allForceOrders)]
     pub fn all_force_orders() -> WasmTopic {
-        WasmTopic { inner: SdkTopic::all_force_orders().to_string() }
+        WasmTopic {
+            inner: SdkTopic::all_force_orders().to_string(),
+        }
     }
 
     /// Wire-format string, e.g. `"BTC-USD@depth10"`.

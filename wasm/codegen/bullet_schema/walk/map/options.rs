@@ -17,7 +17,11 @@ pub fn map_option(inner: ParamMapping) -> ParamMapping {
 
     let conversion = build_option_conversion(&inner);
 
-    ParamMapping { param_type, conversion, is_optional: true }
+    ParamMapping {
+        param_type,
+        conversion,
+        is_optional: true,
+    }
 }
 
 fn build_option_conversion(inner: &ParamMapping) -> String {
@@ -52,7 +56,11 @@ fn build_option_conversion(inner: &ParamMapping) -> String {
 /// Extract simple callable conversions like `TypeName({v})` or `Type::function({v})`.
 fn simple_callable(conversion: &str) -> Option<&str> {
     let path = conversion.strip_suffix("({v})")?;
-    if path.split("::").all(is_rust_ident) { Some(path) } else { None }
+    if path.split("::").all(is_rust_ident) {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 fn is_rust_ident(value: &str) -> bool {
@@ -102,6 +110,9 @@ mod tests {
             is_optional: false,
         });
 
-        assert_eq!(mapping.conversion, "{v}.map(UnixTimestampMicros::from_micros)");
+        assert_eq!(
+            mapping.conversion,
+            "{v}.map(UnixTimestampMicros::from_micros)"
+        );
     }
 }

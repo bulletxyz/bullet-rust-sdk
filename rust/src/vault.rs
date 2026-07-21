@@ -34,6 +34,9 @@ mod tests {
         // Golden vector: sha256("default") base58-encoded, computed
         // independently of this implementation. Matches the runtime's
         // `generate_address_with_seed(b"default")`.
-        assert_eq!(derive_vault_address("default"), "4kGq3HJ6gYLf5ekoFgZJ3hGAUuHP6sK1v2LPs5zKHaCn");
+        assert_eq!(
+            derive_vault_address("default"),
+            "4kGq3HJ6gYLf5ekoFgZJ3hGAUuHP6sK1v2LPs5zKHaCn"
+        );
     }
 }

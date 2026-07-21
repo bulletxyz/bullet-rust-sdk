@@ -286,7 +286,9 @@ mod tests {
 
         let client = crate::generated::Client::new(&server.uri());
         let result = client
-            .submit_tx(&crate::generated::types::SubmitTxRequest { body: "dGVzdA==".into() })
+            .submit_tx(&crate::generated::types::SubmitTxRequest {
+                body: "dGVzdA==".into(),
+            })
             .await;
 
         (server, result.unwrap_err().into())
@@ -308,7 +310,10 @@ mod tests {
 
         let resp = err.api_error().expect("should be ApiError");
         assert_eq!(resp.status, 400);
-        assert_eq!(resp.message, "Transaction validation failed: insufficient funds");
+        assert_eq!(
+            resp.message,
+            "Transaction validation failed: insufficient funds"
+        );
         match resp.details.as_ref().expect("details present") {
             ApiErrorDetail::Object(map) => {
                 assert_eq!(map["reason"], "insufficient_balance");
@@ -348,7 +353,9 @@ mod tests {
 
         let client = crate::generated::Client::new(&server.uri());
         let result = client
-            .submit_tx(&crate::generated::types::SubmitTxRequest { body: "dGVzdA==".into() })
+            .submit_tx(&crate::generated::types::SubmitTxRequest {
+                body: "dGVzdA==".into(),
+            })
             .await;
 
         let err: SDKError = result.unwrap_err().into();
@@ -377,8 +384,14 @@ mod tests {
         .await;
 
         let resp = err.api_error().expect("should be ApiError");
-        assert_eq!(resp.error_id.as_deref(), Some("8b2e4d9f-7a1c-4f0e-9c5d-3e6a8b1c2d4f"));
-        assert!(err.to_string().contains("8b2e4d9f-7a1c-4f0e-9c5d-3e6a8b1c2d4f"));
+        assert_eq!(
+            resp.error_id.as_deref(),
+            Some("8b2e4d9f-7a1c-4f0e-9c5d-3e6a8b1c2d4f")
+        );
+        assert!(
+            err.to_string()
+                .contains("8b2e4d9f-7a1c-4f0e-9c5d-3e6a8b1c2d4f")
+        );
     }
 
     #[tokio::test]

@@ -64,7 +64,7 @@ fn classify_index(
     serde_metadata: &SerdeMetadata,
     hint: NewtypeHint,
 ) -> Option<NewtypeKind> {
-    if let Some(kind) = metadata_kind(idx, serde_metadata).or_else(|| explicit_index_kind(idx)) {
+    if let Some(kind) = metadata_kind(idx, serde_metadata) {
         return classify_known_index(idx, kind, types, hint);
     }
 
@@ -239,7 +239,10 @@ fn is_token_id_field(field_name: &str) -> bool {
 }
 
 fn is_timestamp_field(field_name: &str) -> bool {
-    field_name == "timestamp" || field_name.ends_with("_timestamp") || field_name == "expires_at"
+    field_name == "timestamp"
+        || field_name.ends_with("_timestamp")
+        || field_name == "expires_at"
+        || field_name == "internal_pricing_time_constant"
 }
 
 fn metadata_kind(idx: usize, serde_metadata: &SerdeMetadata) -> Option<NewtypeKind> {
@@ -265,18 +268,6 @@ fn kind_from_name(name: &str) -> Option<NewtypeKind> {
     }
 }
 
-fn explicit_index_kind(idx: usize) -> Option<NewtypeKind> {
-    // `sov_universal_wallet` currently leaves serde metadata names empty for
-    // tuple wrappers, so these anonymous schema indices are the only explicit
-    // identifiers available for the current bullet-exchange-interface schema.
-    // Keep this table narrow and shape-guarded; do not infer these wrappers
-    // from field names.
-    match idx {
-        40 => Some(NewtypeKind::UnixTimestampMicros),
-        _ => None,
-    }
-}
-
 fn kind_matches_index(kind: NewtypeKind, idx: usize, types: &Types) -> bool {
     match kind {
         NewtypeKind::Address => tuple_inner(idx, types).is_some_and(matches_base58_address),
@@ -297,7 +288,10 @@ fn kind_matches_index(kind: NewtypeKind, idx: usize, types: &Types) -> bool {
             tuple_inner(idx, types).is_some_and(|link| matches_integer(link, IntegerType::u64))
         }
         NewtypeKind::TokenId => {
-            matches!(tuple_inner(idx, types), Some(Link::Immediate(SchemaPrimitive::String)))
+            matches!(
+                tuple_inner(idx, types),
+                Some(Link::Immediate(SchemaPrimitive::String))
+            )
         }
     }
 }
@@ -375,9 +369,10 @@ impl NewtypeKind {
             NewtypeKind::OrderId => ("u64", "OrderId({v})"),
             NewtypeKind::TriggerOrderId => ("u64", "TriggerOrderId({v})"),
             NewtypeKind::TwapId => ("u64", "TwapId({v})"),
-            NewtypeKind::TokenId => {
-                ("&str", "TokenId::from_str({v}).map_err(|e| format!(\"{e:?}\"))?")
-            }
+            NewtypeKind::TokenId => (
+                "&str",
+                "TokenId::from_str({v}).map_err(|e| format!(\"{e:?}\"))?",
+            ),
         };
 
         ParamMapping {
@@ -389,9 +384,10 @@ impl NewtypeKind {
 
     pub fn vec_mapping(self) -> Option<ParamMapping> {
         let (param_type, conversion) = match self {
-            NewtypeKind::Address => {
-                ("Vec<String>", "{v}.iter().map(|s| parse_addr(s)).collect::<Result<Vec<_>, _>>()?")
-            }
+            NewtypeKind::Address => (
+                "Vec<String>",
+                "{v}.iter().map(|s| parse_addr(s)).collect::<Result<Vec<_>, _>>()?",
+            ),
             NewtypeKind::AssetId => ("Vec<u16>", "{v}.into_iter().map(AssetId).collect()"),
             NewtypeKind::MarketId => ("Vec<u16>", "{v}.into_iter().map(MarketId).collect()"),
             NewtypeKind::ClientOrderId => {

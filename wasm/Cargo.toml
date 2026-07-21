@@ -1,9 +1,9 @@
 [package]
 name = "bullet-rust-sdk-wasm"
 version = "0.0.30"
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 description = "WebAssembly bindings for the Bullet trading SDK"
 publish = false # ships to npm as @bulletxyz/sdk-wasm, not crates.io
 
@@ -26,7 +26,7 @@ hex                  = "0.4"
 web-time             = "1.1"
 console_error_panic_hook = "0.1"
 futures-util         = "0.3"
-bon.workspace        = true
+bon                  = "3.9.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }

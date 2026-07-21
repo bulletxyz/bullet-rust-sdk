@@ -46,7 +46,9 @@ impl MultisigConfig {
         }
         pubkeys.sort_unstable();
         if pubkeys.windows(2).any(|pair| pair[0] == pair[1]) {
-            return Err(SDKError::InvalidMultisig("duplicate public key".to_string()));
+            return Err(SDKError::InvalidMultisig(
+                "duplicate public key".to_string(),
+            ));
         }
         for pubkey in &pubkeys {
             // Reject keys that aren't valid Ed25519 points, or that are weak
@@ -71,7 +73,10 @@ impl MultisigConfig {
                 pubkeys.len()
             )));
         }
-        Ok(Self { min_signers, pubkeys })
+        Ok(Self {
+            min_signers,
+            pubkeys,
+        })
     }
 
     /// The signature threshold (the M in M-of-N).
@@ -125,7 +130,10 @@ impl UnsignedTransaction {
         let bytes = self.to_message_bytes()?;
         let mut message: serde_json::Map<String, serde_json::Value> =
             serde_json::from_slice(&bytes)?;
-        message.insert("multisig_id".to_string(), serde_json::Value::String(config.multisig_id()));
+        message.insert(
+            "multisig_id".to_string(),
+            serde_json::Value::String(config.multisig_id()),
+        );
         message.insert("version".to_string(), serde_json::Value::from(1u8));
         serde_json::to_vec(&message).map_err(Into::into)
     }
@@ -260,12 +268,14 @@ impl SolanaLedgerMultisigTransaction {
         // `verify_strict` matches the rollup's verification (rejects weak keys
         // and non-canonical signatures), so a signature accepted here is
         // accepted on-chain.
-        verifying_key.verify_strict(&self.signed_message, &signature).map_err(|_| {
-            SDKError::InvalidMultisig(format!(
-                "signature from {} does not verify against the signable bytes",
-                Address(pubkey)
-            ))
-        })?;
+        verifying_key
+            .verify_strict(&self.signed_message, &signature)
+            .map_err(|_| {
+                SDKError::InvalidMultisig(format!(
+                    "signature from {} does not verify against the signable bytes",
+                    Address(pubkey)
+                ))
+            })?;
 
         self.signatures.insert(index, signature.to_bytes());
         Ok(())
@@ -375,7 +385,11 @@ mod tests {
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
         };
-        UnsignedTransaction { inner, chain_hash: [42u8; 32], chain_name: "TestChain".to_string() }
+        UnsignedTransaction {
+            inner,
+            chain_hash: [42u8; 32],
+            chain_name: "TestChain".to_string(),
+        }
     }
 
     #[test]
@@ -398,14 +412,23 @@ mod tests {
     fn multisig_message_bytes_field_order_matches_sovereign_js() {
         // Signers must all produce byte-identical messages; the JS SDK emits
         // keys in this insertion order.
-        let bytes = test_unsigned_tx().to_multisig_message_bytes(&test_config()).unwrap();
+        let bytes = test_unsigned_tx()
+            .to_multisig_message_bytes(&test_config())
+            .unwrap();
         let message: serde_json::Map<String, serde_json::Value> =
             serde_json::from_slice(&bytes).unwrap();
 
         let keys: Vec<&str> = message.keys().map(String::as_str).collect();
         assert_eq!(
             keys,
-            ["runtime_call", "uniqueness", "details", "chain_name", "multisig_id", "version"]
+            [
+                "runtime_call",
+                "uniqueness",
+                "details",
+                "chain_name",
+                "multisig_id",
+                "version"
+            ]
         );
     }
 
@@ -461,8 +484,10 @@ mod tests {
     fn test_signers() -> (Vec<Keypair>, MultisigConfig) {
         let mut keypairs: Vec<Keypair> = (0..3).map(|_| Keypair::generate()).collect();
         keypairs.sort_by_key(|kp| kp.public_key());
-        let pubkeys: Vec<[u8; 32]> =
-            keypairs.iter().map(|kp| kp.public_key().try_into().unwrap()).collect();
+        let pubkeys: Vec<[u8; 32]> = keypairs
+            .iter()
+            .map(|kp| kp.public_key().try_into().unwrap())
+            .collect();
         (keypairs, MultisigConfig::new(2, pubkeys).unwrap())
     }
 
@@ -594,7 +619,9 @@ mod tests {
                 addresses: vec![bullet_exchange_interface::address::Address([0u8; 32]); 3000],
             }));
 
-        let err = unsigned.to_ledger_multisig_signable_bytes(&test_config()).unwrap_err();
+        let err = unsigned
+            .to_ledger_multisig_signable_bytes(&test_config())
+            .unwrap_err();
         assert!(err.to_string().contains("too large"), "{err}");
     }
 
@@ -614,7 +641,10 @@ mod tests {
     fn multisig_id_is_base58_of_credential_id() {
         let config = MultisigConfig::new(2, test_keys()).unwrap();
 
-        assert_eq!(config.multisig_id(), "HMv6kdvx7sVBr59PJXfpeHYYoMktAhYP5iX41V4KakFC");
+        assert_eq!(
+            config.multisig_id(),
+            "HMv6kdvx7sVBr59PJXfpeHYYoMktAhYP5iX41V4KakFC"
+        );
     }
 
     #[test]

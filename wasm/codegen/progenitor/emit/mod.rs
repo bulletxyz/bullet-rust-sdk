@@ -43,8 +43,9 @@ pub fn emit_all(model: &CodeModel) -> String {
     // Unit-variant enums become wasm-bindgen C-style enums; data-carrying enums
     // (e.g. `oneOf` types like `SimulateOutcome` or `Filter`) can't — they're
     // wrapped as opaque `Wasm{name}` newtypes exposing `toJSON()` instead.
-    let (unit_enums, data_enums): (Vec<&&EnumDetails>, Vec<&&EnumDetails>) =
-        enums.iter().partition(|e| e.variants.iter().all(|v| v.fields.is_empty()));
+    let (unit_enums, data_enums): (Vec<&&EnumDetails>, Vec<&&EnumDetails>) = enums
+        .iter()
+        .partition(|e| e.variants.iter().all(|v| v.fields.is_empty()));
 
     // Set of names that map to JS strings. Only *unit* enums qualify — a
     // data-carrying enum field/return must route through its `Wasm{name}`
@@ -57,8 +58,10 @@ pub fn emit_all(model: &CodeModel) -> String {
         .chain(data_enums.iter().map(|e| types::emit_enum_json(e)))
         .collect();
 
-    let struct_tokens: Vec<TokenStream> =
-        structs.iter().map(|s| types::emit_struct(s, &enum_names)).collect();
+    let struct_tokens: Vec<TokenStream> = structs
+        .iter()
+        .map(|s| types::emit_struct(s, &enum_names))
+        .collect();
 
     let client_tokens = if client_methods.is_empty() {
         quote! {}

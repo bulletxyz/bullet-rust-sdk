@@ -60,7 +60,9 @@ impl WasmMultisigConfig {
             .iter()
             .map(|key| to_fixed_bytes::<32>(&key.to_vec(), "public key"))
             .collect::<Result<_, _>>()?;
-        Ok(WasmMultisigConfig { inner: MultisigConfig::new(min_signers, pubkeys)? })
+        Ok(WasmMultisigConfig {
+            inner: MultisigConfig::new(min_signers, pubkeys)?,
+        })
     }
 
     /// The signature threshold (the M in M-of-N).
@@ -73,7 +75,11 @@ impl WasmMultisigConfig {
     /// The signer public keys in canonical (bytewise sorted) order.
     /// @returns {Uint8Array[]}
     pub fn pubkeys(&self) -> Vec<js_sys::Uint8Array> {
-        self.inner.pubkeys().iter().map(|key| js_sys::Uint8Array::from(key.as_slice())).collect()
+        self.inner
+            .pubkeys()
+            .iter()
+            .map(|key| js_sys::Uint8Array::from(key.as_slice()))
+            .collect()
     }
 
     /// The 32-byte credential id of this multisig:
@@ -126,7 +132,9 @@ impl WasmUnsignedTransaction {
         &self,
         config: &WasmMultisigConfig,
     ) -> WasmResult<Vec<u8>> {
-        Ok(self.inner.to_ledger_multisig_signable_bytes(&config.inner)?)
+        Ok(self
+            .inner
+            .to_ledger_multisig_signable_bytes(&config.inner)?)
     }
 }
 
@@ -242,7 +250,10 @@ impl WasmTradingApi {
         &self,
         tx: &WasmSolanaLedgerMultisigTransaction,
     ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
-        let resp = self.inner.send_ledger_multisig_transaction(&tx.inner).await?;
+        let resp = self
+            .inner
+            .send_ledger_multisig_transaction(&tx.inner)
+            .await?;
         Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
 }

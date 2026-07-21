@@ -217,8 +217,10 @@ impl Client {
     /// and then increments, keeping each value unique and monotonic within this
     /// client even under sub-millisecond bursts.
     pub(crate) fn next_window_nonce(&self) -> u64 {
-        let now =
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
         self.window_nonce.fetch_max(now, Ordering::Relaxed);
         self.window_nonce.fetch_add(1, Ordering::Relaxed)
     }
@@ -258,7 +260,11 @@ impl Client {
         })?;
         let chain_id = schema_file.schema.chain_data().chain_id;
         let chain_name = schema_file.schema.chain_data().chain_name.clone();
-        Ok(ChainData { chain_hash, chain_id, chain_name })
+        Ok(ChainData {
+            chain_hash,
+            chain_id,
+            chain_name,
+        })
     }
 
     pub async fn update_schema(&self) -> SDKResult<()> {
@@ -266,8 +272,10 @@ impl Client {
 
         // The expect is fine here as we just read and write the
         // object. We never hold a lock in code that can panic.
-        *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.") =
-            chain_data.chain_hash;
+        *self
+            .chain_hash
+            .lock()
+            .expect("Taking the chain-hash lock can never fail.") = chain_data.chain_hash;
         Ok(())
     }
 
@@ -383,7 +391,10 @@ impl Client {
     pub fn chain_hash(&self) -> [u8; 32] {
         // The expect is fine here as we just read and write the
         // object. We never hold a lock in code that can panic.
-        *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.")
+        *self
+            .chain_hash
+            .lock()
+            .expect("Taking the chain-hash lock can never fail.")
     }
 
     /// Get the chain name for this network.
@@ -492,7 +503,10 @@ mod tests {
     fn network_from_resolves_named_networks_and_custom_urls() {
         assert!(matches!(Network::from("mainnet"), Network::Mainnet));
         assert!(matches!(Network::from("testnet"), Network::Testnet));
-        assert!(matches!(Network::from("https://custom.example.com"), Network::Custom(_)));
+        assert!(matches!(
+            Network::from("https://custom.example.com"),
+            Network::Custom(_)
+        ));
     }
 
     #[test]
@@ -506,9 +520,17 @@ mod tests {
     fn selective_schema_filter_keeps_only_user_call_messages() {
         let selected = [UserActionDiscriminants::PlaceOrders];
 
-        assert!(Client::filter_variants("CallMessage", "User", Some(&selected)));
+        assert!(Client::filter_variants(
+            "CallMessage",
+            "User",
+            Some(&selected)
+        ));
         for variant in ["Vault", "Keeper", "Public", "Admin"] {
-            assert!(!Client::filter_variants("CallMessage", variant, Some(&selected)));
+            assert!(!Client::filter_variants(
+                "CallMessage",
+                variant,
+                Some(&selected)
+            ));
         }
     }
 
@@ -516,18 +538,33 @@ mod tests {
     fn selective_schema_filter_keeps_only_selected_user_actions() {
         let selected = [UserActionDiscriminants::PlaceOrders];
 
-        assert!(Client::filter_variants("UserAction", "PlaceOrders", Some(&selected)));
-        assert!(!Client::filter_variants("UserAction", "CancelOrders", Some(&selected)));
+        assert!(Client::filter_variants(
+            "UserAction",
+            "PlaceOrders",
+            Some(&selected)
+        ));
+        assert!(!Client::filter_variants(
+            "UserAction",
+            "CancelOrders",
+            Some(&selected)
+        ));
     }
 
     #[test]
     fn selective_mode_rejects_unvalidated_call_messages() {
         let selected = [UserActionDiscriminants::PlaceOrders];
         let public_call = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
-        let unselected_user_call =
-            CallMessage::User(UserAction::CancelAllOrders { sub_account_index: None });
+        let unselected_user_call = CallMessage::User(UserAction::CancelAllOrders {
+            sub_account_index: None,
+        });
 
-        assert!(!Client::call_message_was_validated(&public_call, Some(&selected)));
-        assert!(!Client::call_message_was_validated(&unselected_user_call, Some(&selected),));
+        assert!(!Client::call_message_was_validated(
+            &public_call,
+            Some(&selected)
+        ));
+        assert!(!Client::call_message_was_validated(
+            &unselected_user_call,
+            Some(&selected),
+        ));
     }
 }

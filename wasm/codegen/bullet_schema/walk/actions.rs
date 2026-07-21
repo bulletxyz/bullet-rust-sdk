@@ -37,8 +37,10 @@ pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
         .filter_map(|variant| extract_action_group_variant(variant, types))
         .collect();
 
-    let extracted_names: Vec<_> =
-        groups.iter().map(|group| group.call_message_variant.as_str()).collect();
+    let extracted_names: Vec<_> = groups
+        .iter()
+        .map(|group| group.call_message_variant.as_str())
+        .collect();
     let missing_names: Vec<_> = action_names
         .iter()
         .filter(|name| !extracted_names.contains(&name.as_str()))
@@ -57,9 +59,16 @@ fn extract_action_group_variant(
     variant: &sov_universal_wallet::ty::EnumVariant<sov_universal_wallet::schema::IndexLinking>,
     types: &Types,
 ) -> Option<RawActionGroup> {
-    let tuple_index = match variant.value.as_ref().expect("CallMessage variant must have value") {
+    let tuple_index = match variant
+        .value
+        .as_ref()
+        .expect("CallMessage variant must have value")
+    {
         Link::ByIndex(i) => *i,
-        _ => panic!("Expected ByIndex link for CallMessage variant {}", variant.name),
+        _ => panic!(
+            "Expected ByIndex link for CallMessage variant {}",
+            variant.name
+        ),
     };
 
     // Unwrap the Tuple wrapper to get the action enum index. Skip variants that
@@ -80,7 +89,11 @@ fn extract_action_group_variant(
         _ => panic!("Expected Enum at index {action_enum_index}"),
     };
 
-    let variants = action_enum.variants.iter().map(|av| extract_variant(av, types)).collect();
+    let variants = action_enum
+        .variants
+        .iter()
+        .map(|av| extract_variant(av, types))
+        .collect();
 
     Some(RawActionGroup {
         call_message_variant: variant.name.clone(),
@@ -94,13 +107,18 @@ fn is_exchange_call_message(
     action_names: &[String],
 ) -> bool {
     enum_ty.type_name == "CallMessage"
-        && action_names
-            .iter()
-            .all(|name| enum_ty.variants.iter().any(|variant| variant.name == name.as_str()))
+        && action_names.iter().all(|name| {
+            enum_ty
+                .variants
+                .iter()
+                .any(|variant| variant.name == name.as_str())
+        })
 }
 
 fn call_message_action_names() -> Vec<String> {
-    CallMessageDiscriminants::iter().map(|variant| variant.to_string()).collect()
+    CallMessageDiscriminants::iter()
+        .map(|variant| variant.to_string())
+        .collect()
 }
 
 fn extract_variant(
@@ -111,14 +129,22 @@ fn extract_variant(
 ) -> RawVariantInfo {
     let fields = match enum_variant.value.as_ref() {
         Some(Link::ByIndex(i)) => match &types[*i] {
-            Ty::Struct(s) => {
-                s.fields.iter().map(|f| field_info_from_link(&f.display_name, &f.value)).collect()
-            }
-            _ => panic!("Expected Struct at index {i} for variant {}", enum_variant.name),
+            Ty::Struct(s) => s
+                .fields
+                .iter()
+                .map(|f| field_info_from_link(&f.display_name, &f.value))
+                .collect(),
+            _ => panic!(
+                "Expected Struct at index {i} for variant {}",
+                enum_variant.name
+            ),
         },
         Some(_) => panic!("Expected ByIndex for action variant {}", enum_variant.name),
         None => vec![],
     };
 
-    RawVariantInfo { variant_name: enum_variant.name.clone(), fields }
+    RawVariantInfo {
+        variant_name: enum_variant.name.clone(),
+        fields,
+    }
 }

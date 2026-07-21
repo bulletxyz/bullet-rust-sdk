@@ -109,7 +109,11 @@ impl UnsignedTransaction {
         let inner = RawUnsignedTransaction::try_from_slice(payload)
             .map_err(|e| SDKError::SerializationError(e.to_string()))?;
 
-        Ok(UnsignedTransaction { inner, chain_hash, chain_name: client.chain_name() })
+        Ok(UnsignedTransaction {
+            inner,
+            chain_hash,
+            chain_name: client.chain_name(),
+        })
     }
 
     /// Render the unsigned transaction payload as a human-readable message.
@@ -122,7 +126,9 @@ impl UnsignedTransaction {
             .map_err(|e| SDKError::SerializationError(e.to_string()))?;
         let bytes =
             borsh::to_vec(&self.inner).map_err(|e| SDKError::SerializationError(e.to_string()))?;
-        schema.display(0, &bytes).map_err(|e| SDKError::SerializationError(e.to_string()))
+        schema
+            .display(0, &bytes)
+            .map_err(|e| SDKError::SerializationError(e.to_string()))
     }
 
     /// Build the bytes a Ledger hardware wallet must sign.
@@ -164,7 +170,10 @@ impl UnsignedTransaction {
         // string today because it is the interface's only u128 transaction
         // detail. Other integer fields must remain JSON numbers.
         stringify_offchain_max_fee(&mut message, self.inner.details.max_fee.0)?;
-        message.insert("chain_name".to_string(), Value::String(self.chain_name.clone()));
+        message.insert(
+            "chain_name".to_string(),
+            Value::String(self.chain_name.clone()),
+        );
         serde_json::to_vec(&Value::Object(message)).map_err(Into::into)
     }
 
@@ -249,7 +258,11 @@ impl UnsignedTransaction {
         };
 
         Ok(UnsignedTransaction {
-            inner: RawUnsignedTransaction { runtime_call, uniqueness, details },
+            inner: RawUnsignedTransaction {
+                runtime_call,
+                uniqueness,
+                details,
+            },
             chain_hash: client.chain_hash(),
             chain_name: client.chain_name(),
         })
@@ -365,7 +378,10 @@ impl SolanaLedgerTransaction {
         pubkey: [u8; 32],
         signature: [u8; 64],
     ) -> SDKResult<Self> {
-        Ok(Self { signed_message: tx.to_ledger_signable_bytes(&pubkey)?, signature })
+        Ok(Self {
+            signed_message: tx.to_ledger_signable_bytes(&pubkey)?,
+            signature,
+        })
     }
 
     /// Serialize to the raw binary wire format.
@@ -450,7 +466,9 @@ impl Transaction {
         signer: Option<&Keypair>,
         client: &Client,
     ) -> SDKResult<SignedTransaction> {
-        let signer = signer.or_else(|| client.keypair()).ok_or(SDKError::MissingKeypair)?;
+        let signer = signer
+            .or_else(|| client.keypair())
+            .ok_or(SDKError::MissingKeypair)?;
 
         let max_fee = max_fee.unwrap_or_else(|| client.max_fee().0);
         let priority_fee_bips =
@@ -488,8 +506,18 @@ impl Transaction {
         signature: [u8; 64],
         pub_key: [u8; 32],
     ) -> SignedTransaction {
-        let RawUnsignedTransaction { runtime_call, uniqueness, details } = tx.inner;
-        SignedTransaction::V0(Version0 { signature, pub_key, runtime_call, uniqueness, details })
+        let RawUnsignedTransaction {
+            runtime_call,
+            uniqueness,
+            details,
+        } = tx.inner;
+        SignedTransaction::V0(Version0 {
+            signature,
+            pub_key,
+            runtime_call,
+            uniqueness,
+            details,
+        })
     }
 
     /// Borsh-serialize a signed transaction to bytes.
@@ -579,7 +607,8 @@ impl Client {
         &self,
         call_message: CallMessage,
     ) -> SDKResult<SubmitTxResponse> {
-        self.send_runtime_call(RuntimeCall::Exchange(call_message)).await
+        self.send_runtime_call(RuntimeCall::Exchange(call_message))
+            .await
     }
 
     /// Build, sign, and submit a runtime call in one step, retrying once if
@@ -643,11 +672,14 @@ fn stringify_offchain_max_fee(
     message: &mut serde_json::Map<String, Value>,
     max_fee: u128,
 ) -> SDKResult<()> {
-    let details = message.get_mut("details").and_then(Value::as_object_mut).ok_or_else(|| {
-        SDKError::SerializationError(
-            "unsigned transaction JSON missing object field details".to_string(),
-        )
-    })?;
+    let details = message
+        .get_mut("details")
+        .and_then(Value::as_object_mut)
+        .ok_or_else(|| {
+            SDKError::SerializationError(
+                "unsigned transaction JSON missing object field details".to_string(),
+            )
+        })?;
     let max_fee_value = details.get_mut("max_fee").ok_or_else(|| {
         SDKError::SerializationError(
             "unsigned transaction JSON missing field details.max_fee".to_string(),
@@ -694,7 +726,11 @@ mod tests {
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
         };
-        UnsignedTransaction { inner, chain_hash: [42u8; 32], chain_name: "TestChain".to_string() }
+        UnsignedTransaction {
+            inner,
+            chain_hash: [42u8; 32],
+            chain_name: "TestChain".to_string(),
+        }
     }
 
     fn schema_response(chain_byte: u8) -> serde_json::Value {
@@ -742,7 +778,11 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = Client::builder().network(server.uri()).build().await.unwrap();
+        let client = Client::builder()
+            .network(server.uri())
+            .build()
+            .await
+            .unwrap();
 
         (server, client)
     }
@@ -1127,8 +1167,10 @@ mod tests {
 
         assert!(matches!(err, SDKError::TransactionOutdated), "{err:?}");
         let requests = server.received_requests().await.unwrap();
-        let schema_requests =
-            requests.iter().filter(|request| request.url.path() == "/rollup/schema").count();
+        let schema_requests = requests
+            .iter()
+            .filter(|request| request.url.path() == "/rollup/schema")
+            .count();
         assert_eq!(schema_requests, 2);
     }
 
@@ -1146,7 +1188,9 @@ mod tests {
 
         let keypair = Keypair::generate();
         let pub_key: [u8; 32] = keypair.public_key().try_into().unwrap();
-        let signable = test_unsigned_tx().to_ledger_signable_bytes(&pub_key).unwrap();
+        let signable = test_unsigned_tx()
+            .to_ledger_signable_bytes(&pub_key)
+            .unwrap();
         let signature: [u8; 64] = keypair.sign(&signable).try_into().unwrap();
         let tx =
             SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature).unwrap();
@@ -1155,8 +1199,10 @@ mod tests {
 
         assert!(matches!(err, SDKError::TransactionOutdated), "{err:?}");
         let requests = server.received_requests().await.unwrap();
-        let schema_requests =
-            requests.iter().filter(|request| request.url.path() == "/rollup/schema").count();
+        let schema_requests = requests
+            .iter()
+            .filter(|request| request.url.path() == "/rollup/schema")
+            .count();
         assert_eq!(schema_requests, 2);
     }
 
@@ -1167,7 +1213,9 @@ mod tests {
         let keypair = Keypair::generate();
 
         let signed = Transaction::builder()
-            .call_message(CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] }))
+            .call_message(CallMessage::Public(PublicAction::ApplyFunding {
+                addresses: vec![],
+            }))
             .max_fee(10_000_000)
             .signer(&keypair)
             .client(&client)
@@ -1196,8 +1244,10 @@ mod tests {
 
         let mut keypairs: Vec<Keypair> = (0..3).map(|_| Keypair::generate()).collect();
         keypairs.sort_by_key(|kp| kp.public_key());
-        let pubkeys: Vec<[u8; 32]> =
-            keypairs.iter().map(|kp| kp.public_key().try_into().unwrap()).collect();
+        let pubkeys: Vec<[u8; 32]> = keypairs
+            .iter()
+            .map(|kp| kp.public_key().try_into().unwrap())
+            .collect();
         let config = crate::multisig::MultisigConfig::new(2, pubkeys).unwrap();
 
         let mut tx =
@@ -1257,7 +1307,11 @@ mod tests {
             panic!("expected V0 signed transaction");
         };
 
-        assert!(verify_signature(version_0.pub_key, &signable, version_0.signature));
+        assert!(verify_signature(
+            version_0.pub_key,
+            &signable,
+            version_0.signature
+        ));
     }
 
     #[test]
@@ -1272,7 +1326,11 @@ mod tests {
 
         let tx = SolanaOffchainTransaction::from_parts(unsigned, signature, pub_key).unwrap();
 
-        assert!(verify_signature(tx.pubkey, &tx.signed_message, tx.signature));
+        assert!(verify_signature(
+            tx.pubkey,
+            &tx.signed_message,
+            tx.signature
+        ));
         assert!(!verify_signature(tx.pubkey, &borsh_bytes, tx.signature));
     }
 
@@ -1291,8 +1349,10 @@ mod tests {
 
         assert!(matches!(err, SDKError::TransactionOutdated), "{err:?}");
         let requests = server.received_requests().await.unwrap();
-        let schema_requests =
-            requests.iter().filter(|request| request.url.path() == "/rollup/schema").count();
+        let schema_requests = requests
+            .iter()
+            .filter(|request| request.url.path() == "/rollup/schema")
+            .count();
         assert_eq!(schema_requests, 2);
     }
 
@@ -1367,7 +1427,11 @@ mod tests {
 
         let first = window_of(&client);
         let second = window_of(&client);
-        assert_eq!(second, first + 1, "window nonce must monotonically increment");
+        assert_eq!(
+            second,
+            first + 1,
+            "window nonce must monotonically increment"
+        );
     }
 
     #[test]
@@ -1451,8 +1515,11 @@ mod tests {
                 .map(|e| Network::from(e.as_str()))
                 .unwrap_or(Network::Mainnet);
 
-            let client =
-                Client::builder().network(network).build().await.expect("could not connect");
+            let client = Client::builder()
+                .network(network)
+                .build()
+                .await
+                .expect("could not connect");
             let keypair = Keypair::generate();
 
             let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
