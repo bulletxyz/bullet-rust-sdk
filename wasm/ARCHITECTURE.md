@@ -24,16 +24,6 @@ wasm/
         └── topics.rs        # WasmTopic, WasmOrderbookDepth, WasmKlineInterval
 ```
 
-## Building
-
-```bash
-just build-wasm
-# or directly:
-wasm-pack build wasm --target web
-```
-
-Output is emitted to `wasm/pkg/`.
-
 ## Codegen Architecture
 
 The WASM crate uses build-time codegen to generate wasm-bindgen wrappers for:

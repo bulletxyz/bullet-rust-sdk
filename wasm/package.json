@@ -1,6 +1,6 @@
 {
   "name": "@bulletxyz/sdk-wasm",
-  "version": "0.0.32",
+  "version": "0.0.33",
   "description": "WebAssembly bindings for the Bullet trading SDK — works in Node.js, browsers, and Deno",
   "author": "Bullet.xyz",
   "license": "MIT",
@@ -20,7 +20,7 @@
     "dex"
   ],
   "type": "module",
-  "packageManager": "pnpm@11.15.0",
+  "packageManager": "pnpm@11.9.0",
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "build": "cd .. && just build-wasm",
@@ -29,10 +29,10 @@
   "devDependencies": {
     "@jest/globals": "30.4.1",
     "@types/jest": "30.0.0",
-    "@types/node": "25.9.5",
+    "@types/node": "25.9.4",
     "jest": "30.4.2",
     "ts-jest": "29.4.11",
-    "typescript": "7.0.2"
+    "typescript": "6.0.3"
   },
   "jest": {
     "testEnvironment": "node",

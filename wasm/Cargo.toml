@@ -1,6 +1,6 @@
 [package]
 name = "bullet-rust-sdk-wasm"
-version = "0.0.32"
+version = "0.0.33"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/bulletxyz/bullet-rust-sdk"

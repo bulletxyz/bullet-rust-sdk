@@ -25,9 +25,10 @@ bullet-rust-sdk/
 
 ## Quick Start (Rust)
 
-```sh
-cargo add bullet-rust-sdk
-cargo add tokio --features full
+```toml
+[dependencies]
+bullet-rust-sdk = "*"
+tokio = { version = "1", features = ["full"] }
 ```
 
 ### Basic Usage
@@ -86,35 +87,14 @@ const response = await Transaction.builder()
     .send(client);
 ```
 
-## Development
-
-Use `just` for all common tasks:
-
-```bash
-just              # List available recipes
-just check        # Check compilation
-just test         # Run Rust unit tests
-just test-wasm    # Run WASM Jest tests
-just build-wasm   # Build WASM for web and Node.js
-just lint         # Run clippy
-just fmt          # Format code
-```
-
-### Integration Tests
-
-```bash
-# Against mainnet
-just test-integration
-
-# Against custom endpoint
-just test-integration http://localhost:3000
-```
-
 ## Architecture
 
 ### REST Client Generation
 
-The REST client is generated at build time from the OpenAPI spec using [Progenitor](https://github.com/oxidecomputer/progenitor). The spec is fetched from mainnet during build, with a cached fallback in `rust/openapi.json`.
+The REST client is generated at build time from the committed
+`rust/openapi.json` using
+[Progenitor](https://github.com/oxidecomputer/progenitor). Normal builds do not
+access the network; refreshing the specification is an explicit workflow.
 
 ### WASM CallMessage Codegen
 

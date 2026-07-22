@@ -7,7 +7,7 @@
 //!
 //! 1. If it's a primitive or common pattern, add it to the appropriate match arm.
 //! 2. If it's a `Named` type (like `ByteStream`), match on the name string.
-//! 3. Run `cargo check` on the wasm crate to verify it compiles.
+//! 3. Run `just build //libs/bullet-rust-sdk/wasm:lib` to verify it compiles.
 
 use std::collections::HashSet;
 

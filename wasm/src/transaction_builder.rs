@@ -24,6 +24,13 @@
 //! await client.sendTransaction(signed);
 //! ```
 
+// The build-time codegen (`build.rs`) emits factory methods for *every*
+// call-message variant, including ones deprecated in `bullet-exchange-interface`
+// (e.g. `UserAction::WithdrawIso`, superseded by `Transfer`). Those variants must
+// keep their factories for wire compatibility, so allow deprecated uses across
+// this module rather than warning on generated code.
+#![allow(deprecated)]
+
 use std::fmt;
 use std::str::FromStr;
 

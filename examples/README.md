@@ -2,14 +2,6 @@
 
 Demonstrates using `@bulletxyz/sdk-wasm` across Node.js, Deno, and the browser.
 
-## Prerequisites
-
-Build the WASM packages first (from the repo root):
-
-```bash
-just build-wasm
-```
-
 ## Structure
 
 ```

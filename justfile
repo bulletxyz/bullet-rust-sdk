@@ -8,15 +8,21 @@ default:
 
 # Check the workspace compiles without errors
 check:
-    cargo check
+    just --justfile "{{justfile_directory()}}/../../Justfile" build \
+      //libs/bullet-rust-sdk/rust:rust \
+      //libs/bullet-rust-sdk/wasm:lib
 
 # Build the workspace in debug mode
 build:
-    cargo build
+    just --justfile "{{justfile_directory()}}/../../Justfile" build \
+      //libs/bullet-rust-sdk/rust:rust \
+      //libs/bullet-rust-sdk/wasm:lib
 
 # Build the workspace in release mode
 build-release:
-    cargo build --release
+    just --justfile "{{justfile_directory()}}/../../Justfile" build -c opt \
+      //libs/bullet-rust-sdk/rust:rust \
+      //libs/bullet-rust-sdk/wasm:lib
 
 # Build the WASM package (web target + Node.js wrapper)
 build-wasm:
@@ -65,15 +71,20 @@ clean-wasm:
 
 # Run unit tests
 test:
-    cargo nextest run
+    just --justfile "{{justfile_directory()}}/../../Justfile" \
+      test //libs/bullet-rust-sdk/rust:lib_test
 
 # Run doc tests
 test-doc:
-    cargo test --doc
+    just --justfile "{{justfile_directory()}}/../../Justfile" \
+      test //libs/bullet-rust-sdk/rust:lib_doc_test
 
 # Run integration tests (requires a running API)
 test-integration endpoint="https://tradingapi.bullet.xyz":
-    BULLET_API_ENDPOINT={{ endpoint }} cargo nextest run --features integration
+    BULLET_API_ENDPOINT={{ endpoint }} \
+      just --justfile "{{justfile_directory()}}/../../Justfile" \
+      test //libs/bullet-rust-sdk/rust:integration_tests \
+      --test_env=BULLET_API_ENDPOINT
 
 # Run WASM Jest tests (requires build-wasm first)
 test-wasm:
@@ -87,25 +98,28 @@ test-all: test test-doc test-wasm
 
 # Run clippy lints
 lint:
-    cargo clippy --all-targets -- -D warnings
+    just --justfile "{{justfile_directory()}}/../../Justfile" lint
 
 # Format all source files
 fmt:
-    cargo fmt --all
+    just --justfile "{{justfile_directory()}}/../../Justfile" fmt
 
 # Check formatting without modifying files
 fmt-check:
-    cargo fmt --all -- --check
+    just --justfile "{{justfile_directory()}}/../../Justfile" \
+      test //:rustfmt_check
 
 # ── Examples ──────────────────────────────────────────────────────────────────
 
 # Run the REST example (set API_ENDPOINT env var to override)
 example-rest:
-    cargo run -p bullet-rust-sdk --example rest
+    just --justfile "{{justfile_directory()}}/../../Justfile" \
+      run //libs/bullet-rust-sdk/rust:rest-example
 
 # Run the WebSocket example (set API_ENDPOINT env var to override)
 example-ws:
-    cargo run -p bullet-rust-sdk --example websocket
+    just --justfile "{{justfile_directory()}}/../../Justfile" \
+      run //libs/bullet-rust-sdk/rust:websocket-example
 
 # Run the Node.js WASM example
 example-node: build-wasm
@@ -188,6 +202,8 @@ ci:
 #
 # `--indent 4` matches the trading-api's (utoipa) native 4-space formatting, so
 # a refresh produces a content-only diff instead of reformatting the whole file.
+#
+# Refresh the committed OpenAPI spec from the selected trading API endpoint.
 refresh-spec endpoint="https://tradingapi.bullet.xyz":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -196,8 +212,7 @@ refresh-spec endpoint="https://tradingapi.bullet.xyz":
     curl -sSf "{{ endpoint }}/docs/rest/openapi.json" -o "$tmp"
     jq --indent 4 -- . "$tmp" > rust/openapi.json
 
-# Verify rust/openapi.json is canonically formatted (jq --indent 4 idempotent).
-# Guards against hand-edits or a different formatter producing whole-file diffs.
+# Verify rust/openapi.json remains canonically formatted and unchanged by jq.
 check-spec:
     @jq --indent 4 -- . rust/openapi.json | diff -u rust/openapi.json - \
         || { echo "ERROR: rust/openapi.json is not canonical. Run: just refresh-spec"; exit 1; }

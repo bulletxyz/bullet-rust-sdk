@@ -6,10 +6,10 @@
 //!
 //! ```bash
 //! # Start the trading-api server first, then:
-//! cargo run -p trading-sdk --example websocket
+//! just --justfile libs/bullet-rust-sdk/justfile example-ws
 //!
 //! # Or with a custom endpoint:
-//! API_ENDPOINT=http://localhost:3000 cargo run -p trading-sdk --example websocket
+//! API_ENDPOINT=http://localhost:3000 just --justfile libs/bullet-rust-sdk/justfile example-ws
 //! ```
 
 #[allow(unused_imports)]
@@ -21,7 +21,9 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
 
     let api_endpoint =
         std::env::var("API_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
