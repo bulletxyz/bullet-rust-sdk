@@ -289,10 +289,11 @@ checksum = "8d2a80b82b28f5bc8456439016bcc77602b3d227dff1bf9a85a35e274521bbe6"
 
 [[package]]
 name = "bullet-exchange-interface"
-version = "0.12.1"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40abdcb592b5a568faaf242916fc25d86266ad6ec4ab7e6182d5a72074348f49"
+checksum = "78001ab34382808d0ec0b927018cd29a9b4bfc0bf1d62b98cb070c6b811f8a51"
 dependencies = [
+ "bech32",
  "borsh",
  "bullet-bs58",
  "hex",
@@ -306,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-rust-sdk"
-version = "0.0.32"
+version = "0.0.33"
 dependencies = [
  "base64",
  "bon",
@@ -346,7 +347,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-rust-sdk-wasm"
-version = "0.0.32"
+version = "0.0.33"
 dependencies = [
  "bon",
  "bullet-exchange-interface",
