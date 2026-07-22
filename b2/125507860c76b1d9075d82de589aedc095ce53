@@ -1,0 +1,27 @@
+wasm/package.json
+  s_4cd859069db00d::t_b8819206010009 3
+Cargo.toml
+  s_4cd859069db00d::t_04936f6baeb548 13
+rust/Cargo.toml
+  s_4cd859069db00d::t_dcb716b98aeefc 3
+wasm/Cargo.toml
+  s_4cd859069db00d::t_84867df57ef0d7 3
+Cargo.lock
+  s_4cd859069db00d::t_779dbca05cc43e 309,349
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "b2125507860c76b1d9075d82de589aedc095ce53",
+  "prompts": {},
+  "sessions": {
+    "s_4cd859069db00d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "227407d1-b262-4724-94ad-f13b024d5a6b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Tristan <34117851+0xtristan@users.noreply.github.com>"
+    }
+  }
+}
