@@ -29,7 +29,7 @@ futures-util         = "0.3"
 bon                  = "3.9.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.4", features = ["js"] }
 
 [build-dependencies]
 bullet-exchange-interface = { workspace = true, features = ["schema"] }
