@@ -7,12 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.33](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.32...v0.0.33) - 2026-07-22
-
-### Bug Fixes
-
-- fix encoding of token_id
-
 ## [0.0.28](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.27...v0.0.28) - 2026-06-24
 
 ### Bug Fixes
