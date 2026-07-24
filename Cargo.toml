@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 
 [workspace.dependencies]
-bullet-exchange-interface = { version = "0.13" }
+bullet-exchange-interface = { version = "0.14" }
 bullet-rust-sdk = { path = "rust", version = "0.0.33", default-features = false }
 
 [profile.release]

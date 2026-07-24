@@ -18,7 +18,7 @@ all-features = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bullet-exchange-interface = { version = "0.13", features = ["schema"] }
+bullet-exchange-interface = { version = "0.14", features = ["schema"] }
 bullet-ws-interface = "0.2"
 sov-universal-wallet = { version = "0.4", features = ["serde"] }
 
