@@ -20,7 +20,7 @@
     "dex"
   ],
   "type": "module",
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@11.15.1",
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "build": "cd .. && just build-wasm",
