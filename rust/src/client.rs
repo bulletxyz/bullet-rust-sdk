@@ -154,9 +154,10 @@ impl Client {
         ///
         /// By default (`None`), the client validates every exchange `CallMessage`
         /// branch (`User`, `Vault`, `Keeper`, `Public`, and `Admin`) against the remote
-        /// schema and returns `SDKError::SchemaOutdated` if any is not backward compatible. If
-        /// you only use a subset of user actions (e.g. `PlaceOrders`), you can pass them
-        /// here to intentionally prune validation down to those `UserAction` variants.
+        /// schema and returns `SDKError::SchemaOutdated` if no selected variant is shared, a
+        /// shared branch is incompatible, or one-sided variants reuse a discriminant. If you only
+        /// use a subset of user actions (e.g. `PlaceOrders`), you can pass them here to
+        /// intentionally prune validation down to those `UserAction` variants.
         ///
         /// **Warning:** When this is set, non-`User` call messages and unlisted
         /// `UserAction` variants are rejected before signing because their schema branch
@@ -229,7 +230,7 @@ impl Client {
         generated_client: &GeneratedClient,
         user_actions: &Option<Vec<UserActionDiscriminants>>,
     ) -> SDKResult<ChainData> {
-        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim};
+        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim_matching_variants};
         use bullet_exchange_interface::transaction::Transaction;
 
         let schema_obj = generated_client.schema().await?;
@@ -245,8 +246,7 @@ impl Client {
         let filter = |name: &str, variant: &str| {
             Self::filter_variants(name, variant, user_actions.as_deref())
         };
-        let left = trim(&our_schema, &filter);
-        let right = trim(&schema_file.schema, &filter);
+        let (left, right) = trim_matching_variants(&our_schema, &schema_file.schema, &filter);
         if left != right {
             return Err(SDKError::SchemaOutdated);
         }
@@ -282,8 +282,8 @@ impl Client {
     /// Decides whether a given enum variant should be included in the schema
     /// comparison between our compiled types and the remote API.
     ///
-    /// Called by [`trim`] for every `(enum_name, variant_name)` pair in the
-    /// schema tree. Returning `true` keeps the variant; `false` prunes it
+    /// Called by `trim_matching_variants` for every `(enum_name, variant_name)`
+    /// pair in the schema tree. Returning `true` keeps the variant; `false` prunes it
     /// from both sides before diffing so that changes to pruned variants
     /// don't trigger [`SDKError::SchemaOutdated`].
     ///
@@ -300,8 +300,9 @@ impl Client {
     /// - `Some(&[PlaceOrders, CancelOrders])` — only include those two; schema changes to other
     ///   actions (e.g. `Withdraw`) are ignored.
     ///
-    /// Unknown enum names default to `true` so any new enums in the schema
-    /// are kept, ensuring the diff still catches unexpected additions.
+    /// Unknown enum names default to `true`; [`trim_matching_variants`] requires at least one
+    /// selected variant in common, then ignores safe one-sided variants while retaining
+    /// one-sided discriminant collisions for the comparison.
     fn filter_variants(
         name: &str,
         variant: &str,

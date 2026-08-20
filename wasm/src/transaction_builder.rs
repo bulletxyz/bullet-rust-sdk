@@ -43,8 +43,8 @@ use bullet_exchange_interface::transaction::{
 };
 use bullet_exchange_interface::types::{
     AdminType, AssetId, ClientOrderId, FeeTier, MarginDiscount, MarketId, MarketTradingStatus,
-    OrderId, OrderType, Side, SpotCollateralTransferDirection, TokenId, TradingMode,
-    TriggerDirection, TriggerOrderId, TriggerPriceCondition, TwapId,
+    OrderId, OrderType, Side, SpotCollateralTransferDirection, TokenId, TradingCreditsUpdateType,
+    TradingMode, TriggerDirection, TriggerOrderId, TriggerPriceCondition, TwapId,
 };
 use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{

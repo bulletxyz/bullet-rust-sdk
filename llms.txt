@@ -395,7 +395,7 @@ match client.order_book(/*limit*/ Some(10), /*symbol*/ "BTC-USD").await {
 
 ## Schema Validation
 
-The client validates that the local SDK schema matches the remote exchange schema on `Client::builder().build()`. If the exchange has been updated and the SDK is out of date, you'll get `SDKError::SchemaOutdated`.
+The client compares the local and remote exchange schemas on `Client::builder().build()`. Each selected enum must have at least one variant in common. Once it does, variants that exist on only one side are ignored so older clients and older rollups can both remain usable, unless different one-sided variants reuse the same discriminant. Missing common variants, shared incompatibilities, and one-sided discriminant collisions return `SDKError::SchemaOutdated`.
 
 To restrict validation to only the actions you use (avoiding false failures from unrelated schema changes):
 

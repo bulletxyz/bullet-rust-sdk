@@ -3316,7 +3316,8 @@
                     "rateLimits",
                     "assets",
                     "symbols",
-                    "globalConfig"
+                    "globalConfig",
+                    "globalVaultConfig"
                 ],
                 "properties": {
                     "assets": {
@@ -3343,6 +3344,9 @@
                     },
                     "globalConfig": {
                         "$ref": "#/components/schemas/GlobalConfigResponse"
+                    },
+                    "globalVaultConfig": {
+                        "$ref": "#/components/schemas/GlobalVaultConfigResponse"
                     },
                     "rateLimits": {
                         "type": "array",
@@ -3450,6 +3454,30 @@
                         "type": "integer",
                         "format": "uint64",
                         "minimum": 0
+                    }
+                }
+            },
+            "GlobalVaultConfigResponse": {
+                "type": "object",
+                "description": "Exchange-wide vault policy surfaced from the rollup's active exchange-info version.",
+                "required": [
+                    "leaderMinimumHoldingPercentage",
+                    "creationFeeUsdc",
+                    "minDepositValue"
+                ],
+                "properties": {
+                    "creationFeeUsdc": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "leaderMinimumHoldingPercentage": {
+                        "type": "integer",
+                        "format": "uint8",
+                        "minimum": 0
+                    },
+                    "minDepositValue": {
+                        "type": "string",
+                        "format": "decimal"
                     }
                 }
             },

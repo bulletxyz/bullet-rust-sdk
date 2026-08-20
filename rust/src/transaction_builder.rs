@@ -754,6 +754,11 @@ mod tests {
                 "minNotionalTwapValuePerOrder": "0",
                 "twapExecutionIntervalSeconds": 0,
             },
+            "globalVaultConfig": {
+                "leaderMinimumHoldingPercentage": 0,
+                "creationFeeUsdc": "0",
+                "minDepositValue": "0",
+            },
         })
     }
 

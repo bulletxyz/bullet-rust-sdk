@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.34](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.33...v0.0.34) - 2026-08-12
+### Bug Fixes
 
+- allow clients and rollups with one-sided schema variants to connect when shared variants remain compatible and one-sided discriminants do not conflict
+
+## [0.0.35](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.34...v0.0.35) - 2026-08-12
 ## [0.0.28](https://github.com/bulletxyz/bullet-rust-sdk/compare/v0.0.27...v0.0.28) - 2026-06-24
 
 ### Bug Fixes
