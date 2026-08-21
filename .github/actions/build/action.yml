@@ -21,12 +21,12 @@ runs:
         registry-url: ${{ inputs.setup-npm-registry == 'true' && 'https://registry.npmjs.org' || '' }}
 
     - name: Setup Rust
-      uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+      uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
       with:
         targets: wasm32-unknown-unknown
 
     - name: Rust cache
-      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
     - name: Install wasm-pack
       # Don't use `cargo binstall` here — rust-cache (above) restores
