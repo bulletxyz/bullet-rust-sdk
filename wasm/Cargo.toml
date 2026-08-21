@@ -37,6 +37,6 @@ sov-universal-wallet = { version = "0.4", features = ["serde"] }
 heck = "0.5"
 quote = "1"
 proc-macro2 = "1"
-syn = "2"
+syn = "3"
 prettyplease = "0.2"
 strum = "0.28"
