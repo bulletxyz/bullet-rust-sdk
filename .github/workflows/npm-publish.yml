@@ -82,7 +82,10 @@ jobs:
           test "$(jq -r '.packages[] | select(.name == "bullet-rust-sdk-wasm") | .version' <<< "$METADATA")" = "$VERSION"
           test "$(node -p "require('./wasm/package.json').version")" = "$VERSION"
           test "$(jq -r --arg version "$INTERFACE_VERSION" '[.packages[] | select(.name == "bullet-exchange-interface" and .version == $version and (.source | startswith("registry+")))] | length' <<< "$METADATA")" = 1
-          (cd wasm && corepack pnpm test --runInBand)
+          # The progenitor and decimals suites call the live API and are not a
+          # deterministic package-publication gate.
+          (cd wasm && corepack pnpm test --runInBand \
+            --testPathIgnorePatterns='tests/(progenitor|decimals)\.test\.ts')
 
       - name: Pack once
         id: pack
