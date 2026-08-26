@@ -124,6 +124,7 @@ fn resolve_fields(
             name: f.name.clone(),
             param_type: m.param_type,
             conversion: m.conversion,
+            jsdoc_type: m.jsdoc_type,
             is_optional: m.is_optional,
         })
         .collect()

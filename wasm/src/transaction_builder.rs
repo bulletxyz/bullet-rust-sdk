@@ -136,11 +136,134 @@ pub struct WasmCallMessage {
     pub(crate) inner: RuntimeCall,
 }
 
+/// A typed degen trade action.
+///
+/// Construct with the static `open` or `close` factory, then pass it to
+/// `User.degenTrade(...)`.
+#[wasm_bindgen(js_name = DegenAction)]
+pub struct WasmDegenAction {
+    pub(crate) inner: DegenAction,
+}
+
+#[wasm_bindgen(js_class = DegenAction)]
+impl WasmDegenAction {
+    /// Open an isolated degen position all-or-nothing at top-of-book.
+    /// @param {string} size - Non-zero, lot-size-aligned position size.
+    /// @param {Side} side - `Bid` opens a long; `Ask` opens a short.
+    /// @param {string} amountToTransfer - Cross-margin funds to transfer, capped at 10 USDC.
+    /// @returns {DegenAction}
+    /// @example
+    /// ```js
+    /// const action = DegenAction.open("5", Side.Bid, "10");
+    /// const message = User.degenTrade(7, action);
+    /// ```
+    pub fn open(
+        size: &str,
+        side: WasmSide,
+        amount_to_transfer: &str,
+    ) -> WasmResult<WasmDegenAction> {
+        let size = parse_dec(size)?;
+        if size.is_zero() {
+            return Err("degen open size must be non-zero".into());
+        }
+
+        Ok(WasmDegenAction {
+            inner: DegenAction::Open {
+                size,
+                side: side.into_domain(),
+                amount_to_transfer: parse_dec(amount_to_transfer)?,
+            },
+        })
+    }
+
+    /// Close the degen position IOC at top-of-book.
+    /// @returns {DegenAction}
+    pub fn close() -> WasmDegenAction {
+        WasmDegenAction {
+            inner: DegenAction::Close,
+        }
+    }
+}
+
 // ── Generated namespace structs (User, Public, Admin, Keeper, Vault) ─────────
 //
 // Each struct is a JS namespace with static factory methods that return
 // `WasmCallMessage` instances. Generated from the Transaction schema by build.rs.
 include!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
+
+#[cfg(test)]
+mod call_message_factory_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn generated_wrapper_array_docs_preserve_element_types() {
+        let generated = include_str!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
+
+        assert!(generated.contains("///@param {Array<NewOrderArgs>} orders"));
+        assert!(
+            generated.contains("///@param {Array<BackstopLiquidatePerpPositionArgs>} [positions]")
+        );
+        assert!(!generated.contains("///@param {Array<any>}"));
+    }
+
+    #[test]
+    fn degen_trade_open_serializes_exact_runtime_call() {
+        let action = WasmDegenAction::open("2.5", WasmSide::Ask, "9.75")
+            .unwrap_or_else(|_| panic!("valid degen open action"));
+        let call = User::degen_trade(7, action, None)
+            .unwrap_or_else(|_| panic!("valid degen open message"));
+
+        assert_eq!(
+            serde_json::to_value(&call.inner).expect("serialize runtime call"),
+            json!({
+                "exchange": {
+                    "user": {
+                        "degen_trade": {
+                            "market_id": 7,
+                            "action": {
+                                "open": {
+                                    "size": "2.5",
+                                    "side": "ask",
+                                    "amount_to_transfer": "9.75",
+                                },
+                            },
+                            "sub_account_index": null,
+                        },
+                    },
+                },
+            })
+        );
+    }
+
+    #[test]
+    fn degen_trade_open_rejects_zero_size() {
+        assert!(WasmDegenAction::open("0", WasmSide::Bid, "10").is_err());
+        assert!(WasmDegenAction::open("0.0", WasmSide::Ask, "10").is_err());
+    }
+
+    #[test]
+    fn degen_trade_close_serializes_exact_runtime_call() {
+        let action = WasmDegenAction::close();
+        let call = User::degen_trade(7, action, Some(2))
+            .unwrap_or_else(|_| panic!("valid degen close message"));
+
+        assert_eq!(
+            serde_json::to_value(&call.inner).expect("serialize runtime call"),
+            json!({
+                "exchange": {
+                    "user": {
+                        "degen_trade": {
+                            "market_id": 7,
+                            "action": "close",
+                            "sub_account_index": 2,
+                        },
+                    },
+                },
+            })
+        );
+    }
+}
 
 // ── Warp namespace ───────────────────────────────────────────────────────────
 

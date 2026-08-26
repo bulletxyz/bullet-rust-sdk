@@ -5,7 +5,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use super::super::{ActionGroup, VariantInfo};
-use super::field_assignments;
+use super::{emitted_params, field_assignments};
 
 fn namespace_doc(name: &str) -> &'static str {
     match name {
@@ -47,23 +47,12 @@ fn emit_factory(group: &ActionGroup, variant: &VariantInfo) -> TokenStream {
     let cm_variant = format_ident!("{}", group.call_message_variant);
     let variant_name = format_ident!("{}", variant.variant_name);
 
-    // Sort: required first, optional last.
-    let mut field_order: Vec<usize> = (0..variant.fields.len()).collect();
-    field_order.sort_by_key(|&i| variant.fields[i].is_optional as u8);
-
-    let params: Vec<TokenStream> = field_order
-        .iter()
-        .map(|&i| {
-            let name = format_ident!("{}", variant.fields[i].name);
-            let ty: TokenStream = variant.fields[i]
-                .param_type
-                .parse()
-                .expect("param type should parse");
-            quote! { #name: #ty }
-        })
-        .collect();
-
+    let params = emitted_params(&variant.fields);
+    let param_docs = params.jsdoc;
+    let param_tokens = params.tokens;
     let assignments = field_assignments(&variant.fields);
+    let summary = format!("Create the `{}` call message.", variant.variant_name);
+    let returns_doc = "@returns {CallMessage}";
 
     let body = if assignments.is_empty() {
         quote! {
@@ -82,9 +71,12 @@ fn emit_factory(group: &ActionGroup, variant: &VariantInfo) -> TokenStream {
     };
 
     quote! {
+        #[doc = #summary]
+        #(#[doc = #param_docs])*
+        #[doc = #returns_doc]
         #[wasm_bindgen(js_name = #js_name)]
         #[allow(clippy::too_many_arguments)]
-        pub fn #rust_fn_name(#(#params),*) -> WasmResult<WasmCallMessage> {
+        pub fn #rust_fn_name(#(#param_tokens),*) -> WasmResult<WasmCallMessage> {
             #body
         }
     }

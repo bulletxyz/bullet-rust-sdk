@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use super::super::SchemaStruct;
-use super::field_assignments;
+use super::{emitted_params, field_assignments};
 
 pub fn emit_struct(s: &SchemaStruct) -> TokenStream {
     let type_name = format_ident!("{}", s.type_name);
@@ -23,23 +23,12 @@ pub fn emit_struct(s: &SchemaStruct) -> TokenStream {
         _ => quote! { #type_name },
     };
 
-    // Sort: required params first, optional last.
-    let mut field_order: Vec<usize> = (0..s.fields.len()).collect();
-    field_order.sort_by_key(|&i| s.fields[i].is_optional as u8);
-
-    let params: Vec<TokenStream> = field_order
-        .iter()
-        .map(|&i| {
-            let name = format_ident!("{}", s.fields[i].name);
-            let ty: TokenStream = s.fields[i]
-                .param_type
-                .parse()
-                .expect("param type should parse");
-            quote! { #name: #ty }
-        })
-        .collect();
-
+    let params = emitted_params(&s.fields);
+    let param_docs = params.jsdoc;
+    let param_tokens = params.tokens;
     let assignments = field_assignments(&s.fields);
+    let summary = format!("Create a `{}`.", s.type_name);
+    let returns_doc = format!("@returns {{{}}}", s.type_name);
 
     quote! {
         #[doc = concat!("Wrapper for `", stringify!(#type_name), "`.")]
@@ -50,9 +39,12 @@ pub fn emit_struct(s: &SchemaStruct) -> TokenStream {
 
         #[wasm_bindgen(js_class = #js_name)]
         impl #wrapper_name {
+            #[doc = #summary]
+            #(#[doc = #param_docs])*
+            #[doc = #returns_doc]
             #[wasm_bindgen(constructor)]
             #[allow(clippy::too_many_arguments)]
-            pub fn new(#(#params),*) -> WasmResult<#wrapper_name> {
+            pub fn new(#(#param_tokens),*) -> WasmResult<#wrapper_name> {
                 Ok(#wrapper_name {
                     inner: #type_name {
                         #(#assignments),*

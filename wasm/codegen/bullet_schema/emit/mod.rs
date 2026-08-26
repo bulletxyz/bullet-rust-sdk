@@ -9,6 +9,11 @@ use quote::quote;
 
 use super::{MappedField, SchemaInfo};
 
+pub struct EmittedParams {
+    pub tokens: Vec<TokenStream>,
+    pub jsdoc: Vec<String>,
+}
+
 /// Emit the complete generated source file.
 pub fn emit_all(info: &SchemaInfo) -> String {
     let helper = extract_array_helper();
@@ -55,6 +60,83 @@ pub fn field_assignments(fields: &[MappedField]) -> Vec<TokenStream> {
             }
         })
         .collect()
+}
+
+/// Emit function parameters and matching JSDoc from the same ordered fields.
+/// wasm-bindgen requires optional parameters to trail required parameters.
+pub fn emitted_params(fields: &[MappedField]) -> EmittedParams {
+    let mut field_order: Vec<usize> = (0..fields.len()).collect();
+    field_order.sort_by_key(|&i| fields[i].is_optional as u8);
+
+    let tokens = field_order
+        .iter()
+        .map(|&i| {
+            let name = quote::format_ident!("{}", fields[i].name);
+            let ty: TokenStream = fields[i]
+                .param_type
+                .parse()
+                .expect("param type should parse");
+            quote! { #name: #ty }
+        })
+        .collect();
+    let jsdoc = field_order
+        .iter()
+        .map(|&i| {
+            let field = &fields[i];
+            let name = if field.is_optional {
+                format!("[{}]", field.name)
+            } else {
+                field.name.clone()
+            };
+            format!(
+                "@param {{{}}} {name} - Value for `{}`.",
+                jsdoc_type(field),
+                field.name
+            )
+        })
+        .collect();
+
+    EmittedParams { tokens, jsdoc }
+}
+
+fn jsdoc_type(field: &MappedField) -> String {
+    field
+        .jsdoc_type
+        .clone()
+        .unwrap_or_else(|| jsdoc_type_from_rust(&field.param_type))
+}
+
+fn jsdoc_type_from_rust(rust_type: &str) -> String {
+    if let Some(inner) = rust_type
+        .strip_prefix("Option<")
+        .and_then(|ty| ty.strip_suffix('>'))
+    {
+        return jsdoc_type_from_rust(inner);
+    }
+    if let Some(inner) = rust_type
+        .strip_prefix("Vec<")
+        .and_then(|ty| ty.strip_suffix('>'))
+    {
+        return match inner {
+            "u8" => "Uint8Array".into(),
+            "u16" => "Uint16Array".into(),
+            "u32" => "Uint32Array".into(),
+            "u64" => "BigUint64Array".into(),
+            "i16" => "Int16Array".into(),
+            "i64" => "BigInt64Array".into(),
+            other => format!("Array<{}>", jsdoc_type_from_rust(other)),
+        };
+    }
+
+    match rust_type {
+        "&str" | "String" => "string".into(),
+        "bool" => "boolean".into(),
+        "u8" | "u16" | "u32" | "i16" => "number".into(),
+        "u64" | "i64" | "u128" => "bigint".into(),
+        "js_sys::Array" => "Array<any>".into(),
+        ty if ty.starts_with("Wasm") => ty.trim_start_matches("Wasm").into(),
+        ty => ty.into(),
+    }
 }
 
 fn extract_array_helper() -> TokenStream {

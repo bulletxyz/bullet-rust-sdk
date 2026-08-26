@@ -26,6 +26,8 @@ import {
   BackstopLiquidatePerpPositionArgs,
   // Enums
   Side, OrderType, TriggerDirection, TriggerPriceCondition,
+  // Data-carrying enums
+  DegenAction,
 } from "../pkg/node";
 
 jest.setTimeout(30_000);
@@ -125,6 +127,21 @@ describe('enum types', () => {
     expect(TriggerPriceCondition.Mark).toBeDefined();
     expect(TriggerPriceCondition.Oracle).toBeDefined();
     expect(TriggerPriceCondition.LastTrade).toBeDefined();
+  });
+});
+
+describe('DegenAction', () => {
+  test('DegenAction factories produce typed degen trade messages', () => {
+    const open = DegenAction.open('5', Side.Bid, '10');
+    expect(User.degenTrade(7, open)).toBeDefined();
+
+    const close = DegenAction.close();
+    expect(User.degenTrade(7, close, 2)).toBeDefined();
+  });
+
+  test('DegenAction.open validates decimal inputs', () => {
+    expect(() => DegenAction.open('invalid', Side.Bid, '10')).toThrow();
+    expect(() => DegenAction.open('5', Side.Bid, 'invalid')).toThrow();
   });
 });
 

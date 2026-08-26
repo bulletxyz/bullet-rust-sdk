@@ -16,10 +16,12 @@ pub fn map_option(inner: ParamMapping) -> ParamMapping {
     };
 
     let conversion = build_option_conversion(&inner);
+    let jsdoc_type = inner.jsdoc_type;
 
     ParamMapping {
         param_type,
         conversion,
+        jsdoc_type,
         is_optional: true,
     }
 }
@@ -107,6 +109,7 @@ mod tests {
         let mapping = map_option(ParamMapping {
             param_type: "i64".into(),
             conversion: "UnixTimestampMicros::from_micros({v})".into(),
+            jsdoc_type: None,
             is_optional: false,
         });
 

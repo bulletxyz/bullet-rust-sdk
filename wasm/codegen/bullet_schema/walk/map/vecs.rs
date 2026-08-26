@@ -33,6 +33,7 @@ pub fn map_vec(
             ParamMapping {
                 param_type: format!("Vec<{}>", inner.param_type),
                 conversion: "{v}".into(),
+                jsdoc_type: None,
                 is_optional: false,
             }
         }
@@ -71,6 +72,7 @@ fn map_vec_by_index(
                     conversion: format!(
                         "extract_array::<{wrapper_name}>({{v}})?.into_iter().map(|w| w.inner).collect()"
                     ),
+                    jsdoc_type: Some(format!("Array<{}>", s.type_name)),
                     is_optional: false,
                 }
             } else {
@@ -138,6 +140,7 @@ fn map_admin_cancel_vec(
     Some(ParamMapping {
         param_type: "&str".into(),
         conversion,
+        jsdoc_type: None,
         is_optional: false,
     })
 }
@@ -186,6 +189,7 @@ fn json_fallback() -> ParamMapping {
     ParamMapping {
         param_type: "&str".into(),
         conversion: "from_json({v})?".into(),
+        jsdoc_type: None,
         is_optional: false,
     }
 }

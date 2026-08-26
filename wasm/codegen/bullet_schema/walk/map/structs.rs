@@ -17,6 +17,7 @@ pub fn map_struct(type_name: &str, idx: usize, wrapper_indices: &HashSet<usize>)
         ParamMapping {
             param_type: wrapper_name,
             conversion: "{v}.inner".into(),
+            jsdoc_type: None,
             is_optional: false,
         }
     } else {
@@ -25,6 +26,7 @@ pub fn map_struct(type_name: &str, idx: usize, wrapper_indices: &HashSet<usize>)
         ParamMapping {
             param_type: "&str".into(),
             conversion: "from_json({v})?".into(),
+            jsdoc_type: None,
             is_optional: false,
         }
     }

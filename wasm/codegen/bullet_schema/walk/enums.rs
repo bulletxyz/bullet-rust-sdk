@@ -11,9 +11,12 @@ use super::super::{SchemaEnum, Types};
 /// Called after struct discovery so `visited` contains all reachable indices.
 /// Any `Ty::Enum` where every variant has `value: None` is a simple enum.
 pub fn discover_enums(visited: &HashSet<usize>, types: &Types) -> Vec<SchemaEnum> {
-    visited
-        .iter()
-        .filter_map(|&idx| {
+    let mut indices: Vec<_> = visited.iter().copied().collect();
+    indices.sort_unstable();
+
+    indices
+        .into_iter()
+        .filter_map(|idx| {
             if let Ty::Enum(e) = &types[idx] {
                 let all_unit = e.variants.iter().all(|v| v.value.is_none());
                 if all_unit {

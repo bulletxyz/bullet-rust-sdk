@@ -378,6 +378,7 @@ impl NewtypeKind {
         ParamMapping {
             param_type: param_type.into(),
             conversion: conversion.into(),
+            jsdoc_type: None,
             is_optional: false,
         }
     }
@@ -407,6 +408,7 @@ impl NewtypeKind {
         Some(ParamMapping {
             param_type: param_type.into(),
             conversion: conversion.into(),
+            jsdoc_type: None,
             is_optional: false,
         })
     }

@@ -10,13 +10,23 @@ pub fn map_enum(
     idx: usize,
     enum_indices: &HashSet<usize>,
 ) -> ParamMapping {
-    if all_unit && enum_indices.contains(&idx) {
+    if type_name == "DegenAction" {
+        // DegenAction has a focused handwritten wrapper with typed open/close
+        // factories. Other data-carrying enums retain the JSON fallback.
+        ParamMapping {
+            param_type: "WasmDegenAction".into(),
+            conversion: "{v}.inner".into(),
+            jsdoc_type: None,
+            is_optional: false,
+        }
+    } else if all_unit && enum_indices.contains(&idx) {
         // Simple enum with a generated WasmX wrapper — accept the wrapper
         // and call .into_domain() to convert to the Rust domain type.
         let wrapper_name = format!("Wasm{type_name}");
         ParamMapping {
             param_type: wrapper_name,
             conversion: "{v}.into_domain()".into(),
+            jsdoc_type: None,
             is_optional: false,
         }
     } else if all_unit {
@@ -25,6 +35,7 @@ pub fn map_enum(
         ParamMapping {
             param_type: "&str".into(),
             conversion: r#"from_json(&format!("\"{}\"", {v}))?"#.into(),
+            jsdoc_type: None,
             is_optional: false,
         }
     } else {
@@ -32,6 +43,7 @@ pub fn map_enum(
         ParamMapping {
             param_type: "&str".into(),
             conversion: "from_json({v})?".into(),
+            jsdoc_type: None,
             is_optional: false,
         }
     }

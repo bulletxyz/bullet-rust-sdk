@@ -35,6 +35,29 @@ const response = await Transaction.builder()
     .send(client);
 ```
 
+### Degen trading
+
+Use the typed `DegenAction` factories to open or close a degen position. The
+action is passed directly into the generated call message without JSON
+serialization.
+
+`open` executes all-or-nothing at top-of-book: `Side.Bid` opens a long and
+`Side.Ask` opens a short. The size must be non-zero and aligned to the market's
+lot size. `amountToTransfer` funds the isolated balance from cross margin and is
+capped by the protocol at 10 USDC. `close` executes IOC and returns the remaining
+isolated balance to cross margin once the position is flat.
+
+```typescript
+import { DegenAction, Side, User } from '@bulletxyz/sdk-wasm';
+
+const open = User.degenTrade(
+    7,
+    DegenAction.open('5', Side.Bid, '10'),
+);
+
+const close = User.degenTrade(7, DegenAction.close(), 2);
+```
+
 ## API Reference
 
 ### Client

@@ -22,6 +22,8 @@ pub struct ParamMapping {
     /// The expression to convert the parameter into the domain type.
     /// Uses `{v}` as a placeholder for the parameter variable name.
     pub conversion: String,
+    /// JS-facing type override when `param_type` cannot preserve element types.
+    pub jsdoc_type: Option<String>,
     /// Whether this parameter is optional (affects ordering — must be trailing).
     pub is_optional: bool,
 }
@@ -139,6 +141,7 @@ pub fn map_by_index(
                 ParamMapping {
                     param_type: "&str".into(),
                     conversion: "from_json({v})?".into(),
+                    jsdoc_type: None,
                     is_optional: false,
                 }
             }
@@ -147,6 +150,7 @@ pub fn map_by_index(
         Ty::Map { .. } | Ty::Array { .. } => ParamMapping {
             param_type: "&str".into(),
             conversion: "from_json({v})?".into(),
+            jsdoc_type: None,
             is_optional: false,
         },
 

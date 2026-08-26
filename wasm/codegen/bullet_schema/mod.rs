@@ -115,6 +115,8 @@ pub struct MappedField {
     /// The expression to convert the parameter into the domain type.
     /// Uses `{v}` as a placeholder for the parameter variable name.
     pub conversion: String,
+    /// JS-facing type override when the Rust boundary type loses detail.
+    pub jsdoc_type: Option<String>,
     /// Whether this parameter is optional (must be trailing in wasm-bindgen).
     pub is_optional: bool,
 }

@@ -27,7 +27,7 @@ build-release:
 # Build the WASM package (web target + Node.js wrapper)
 build-wasm:
     rm -rf wasm/pkg
-    wasm-pack build wasm --target web --out-dir pkg
+    wasm-pack build wasm --target web --out-dir pkg -- --locked
     # Remove wasm-pack generated package.json and .gitignore that interfere with npm install --install-links
     rm -f wasm/pkg/.gitignore wasm/pkg/package.json
     # Copy JS error class used by Rust wasm-bindgen imports and package exports
