@@ -82,7 +82,7 @@ jobs:
           test "$(jq -r '.packages[] | select(.name == "bullet-rust-sdk-wasm") | .version' <<< "$METADATA")" = "$VERSION"
           test "$(node -p "require('./wasm/package.json').version")" = "$VERSION"
           test "$(jq -r --arg version "$INTERFACE_VERSION" '[.packages[] | select(.name == "bullet-exchange-interface" and .version == $version and (.source | startswith("registry+")))] | length' <<< "$METADATA")" = 1
-          corepack pnpm --dir wasm test --runInBand
+          (cd wasm && corepack pnpm test --runInBand)
 
       - name: Pack once
         id: pack
