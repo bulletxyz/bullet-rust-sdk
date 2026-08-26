@@ -198,7 +198,50 @@ def read_url(url: str, *, limit: int) -> bytes | None:
     return raw
 
 
+def crate_index_url(crate: str) -> str:
+    normalized = crate.lower()
+    if len(normalized) == 1:
+        path = f"1/{normalized}"
+    elif len(normalized) == 2:
+        path = f"2/{normalized}"
+    elif len(normalized) == 3:
+        path = f"3/{normalized[0]}/{normalized}"
+    else:
+        path = f"{normalized[:2]}/{normalized[2:4]}/{normalized}"
+    return f"https://index.crates.io/{path}"
+
+
+def crate_version_exists(crate: str, version: str) -> bool:
+    raw = read_url(crate_index_url(crate), limit=10 * 1024 * 1024)
+    if raw is None:
+        return False
+    try:
+        lines = raw.decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        raise PublishError(f"Sparse index entry for {crate} is not UTF-8.") from error
+
+    matches = 0
+    for line_number, line in enumerate(lines, start=1):
+        try:
+            entry = require_mapping(
+                json.loads(line), f"Sparse index entry for {crate} line {line_number}"
+            )
+        except json.JSONDecodeError as error:
+            raise PublishError(
+                f"Sparse index entry for {crate} line {line_number} is malformed."
+            ) from error
+        if entry.get("vers") == version:
+            matches += 1
+    if matches > 1:
+        raise PublishError(
+            f"Sparse index contains duplicate {crate} {version} entries."
+        )
+    return matches == 1
+
+
 def crate_revision(crate: str, version: str) -> str | None:
+    if not crate_version_exists(crate, version):
+        return None
     encoded_crate = urllib.parse.quote(crate, safe="")
     encoded_file = urllib.parse.quote(f"{crate}-{version}.crate", safe="")
     raw = read_url(
@@ -206,7 +249,9 @@ def crate_revision(crate: str, version: str) -> str | None:
         limit=100 * 1024 * 1024,
     )
     if raw is None:
-        return None
+        raise PublishError(
+            f"Sparse index contains {crate} {version}, but its crate archive is absent."
+        )
     import io
 
     try:
@@ -226,7 +271,8 @@ def crate_revision(crate: str, version: str) -> str | None:
         raise PublishError(f"Published crate archive is malformed: {error}") from error
     git = require_mapping(metadata.get("git"), "Cargo VCS git metadata")
     revision = require_string(git.get("sha1"), "Cargo VCS revision").lower()
-    if SHA_RE.fullmatch(revision) is None or not isinstance(git.get("dirty"), bool):
+    dirty = git.get("dirty", False)
+    if SHA_RE.fullmatch(revision) is None or not isinstance(dirty, bool):
         raise PublishError("Published crate does not have full-SHA Cargo VCS metadata.")
     return revision
 
