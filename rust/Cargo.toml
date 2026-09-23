@@ -19,10 +19,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bullet-exchange-interface = { version = "=0.14.4", features = ["schema"] }
-bullet-ws-interface = "0.2"
+bullet-ws-interface = "0.3"
 
 
-progenitor-client = "0.14"
+progenitor-client = "0.15"
 reqwest = { version = "0.13", features = ["blocking"] }
 rust_decimal = { version = "1", features = ["serde-with-str"] }
 serde = "1"
@@ -34,11 +34,11 @@ url = "2"
 
 # Signing
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
-rand = "0.8"
+rand = "0.10"
 borsh = "1"
 hex = "0.4"
 base64 = "0.23"
-sha2 = "0.10"
+sha2 = "0.11"
 
 # WebSocket (works on both native and WASM)
 reqwest-websocket = { version = "0.6", features = ["json"] }
@@ -57,16 +57,16 @@ tokio = { version = "1", features = ["sync", "rt", "macros", "time"] }
 futures-timer = { version = "3", features = ["wasm-bindgen"] }
 wasm-bindgen-futures = "0.4"
 # Declared to switch on its "js" feature for transitive users; never imported here.
-getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.4", features = ["js"] }
 
 [build-dependencies]
-progenitor = "0.14"
+progenitor = "0.15"
 serde_json = "1.0"
 reqwest = { version = "0.13", features = ["blocking"] }
 openapiv3 = "2"
-schemars = "0.8"
+schemars = "0.9"
 syn = "2.0"
-prettyplease = "0.2"
+prettyplease = "0.3"
 
 [dev-dependencies]
 tokio = { version = "=1.53.1", features = ["rt", "macros", "io-std", "io-util"] }
