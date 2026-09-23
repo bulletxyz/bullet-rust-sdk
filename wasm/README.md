@@ -330,6 +330,12 @@ Public.applyFunding(addresses)
 // Vault actions (User.createVault, plus Vault leader ops)
 User.createVault(args)
 Vault.delegateVaultUserV1(vault, delegate, 'bot', 0)
+Vault.updateVaultConfigV1(vault, new UpdateVaultConfigArgsV1(depositLimit, lockupHours, profitSharePct, withdrawalFeeBps)) // fee can only be lowered
+// Set or replace the whole per-user deposit policy; strategic caps are the complete override list.
+Vault.setDepositPolicy(vault, new VaultDepositPolicyArgs(defaultUserDepositCap, [
+  new StrategicDepositorCap(user, cap),
+]))
+Vault.setDepositPolicy(vault, undefined) // clear it; per-user cumulative totals are kept
 
 // Order types
 const order = new NewOrderArgs(price, size, Side.Bid, OrderType.Limit, reduceOnly);

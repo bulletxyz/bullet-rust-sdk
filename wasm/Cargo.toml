@@ -1,6 +1,6 @@
 [package]
 name = "bullet-rust-sdk-wasm"
-version = "0.0.37"
+version = "0.0.38"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/bulletxyz/bullet-rust-sdk"
@@ -26,9 +26,9 @@ hex                  = "0.4"
 web-time             = "1.1"
 console_error_panic_hook = "0.1"
 futures-util         = "0.3"
-bon                  = "3.9.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+# Declared to switch on its "js" feature for transitive users; never imported here.
 getrandom = { version = "0.2", features = ["js"] }
 
 [build-dependencies]
@@ -40,3 +40,20 @@ proc-macro2 = "1"
 syn = "2"
 prettyplease = "0.2"
 strum = "0.28"
+
+# Reached from build.rs and codegen/, which cargo shear does not scan, emitted into
+# generated code inside a quote!, produced by the #[wasm_bindgen] expansion for async
+# methods, or declared purely to enable a feature.
+[package.metadata.cargo-shear]
+ignored = [
+    "futures-util",
+    "getrandom",
+    "heck",
+    "prettyplease",
+    "proc-macro2",
+    "quote",
+    "sov-universal-wallet",
+    "strum",
+    "syn",
+    "wasm-bindgen-futures",
+]

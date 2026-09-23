@@ -24,8 +24,8 @@ import {
   deriveVaultAddress,
 } from "@bulletxyz/sdk-wasm";
 
-// Vault settings. `whitelist` and `withdrawalFeeBps` are fixed at creation —
-// updateVaultConfig can't change them later.
+// Vault settings. `whitelist` is fixed at creation. `withdrawalFeeBps` can be
+// lowered later with Vault.updateVaultConfigV1, but never raised.
 const VAULT = {
   name: "My Vault", // also determines the vault address
   description: "",

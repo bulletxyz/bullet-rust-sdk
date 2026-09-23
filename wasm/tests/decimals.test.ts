@@ -9,12 +9,9 @@
  * 5. Decimal ↔ string/number conversions preserve precision
  */
 
-import { jest } from '@jest/globals';
 
 import { Decimal } from "../pkg/node";
 import { connectReadOnlyClient } from './helpers';
-
-jest.setTimeout(30_000);
 
 // ── Decimal construction ────────────────────────────────────────────────────
 

@@ -585,7 +585,7 @@ impl Client {
     /// Stale-chain-hash errors are mapped to [`SDKError::TransactionOutdated`]
     /// so the caller knows to rebuild and re-sign — for the offchain envelope
     /// that's the spec's `400` chain-hash mismatch (the chain hash is a
-    /// validated field), as well as a `401` invalid-signature.
+    /// validated field), as well as any `401` signature failure.
     pub(crate) async fn submit_offchain(&self, body: String) -> SDKResult<SubmitTxResponse> {
         let request = SubmitSolanaOffchainTxRequest { body };
         match self.client().submit_solana_offchain_tx(&request).await {
@@ -598,7 +598,7 @@ impl Client {
     }
 
     /// Build, sign, and submit a call message, retrying once if the chain hash
-    /// changed since startup (401 invalid signature → schema refresh → re-sign).
+    /// changed since startup (401 signature failure → schema refresh → re-sign).
     ///
     /// Unlike calling `send_transaction` directly, this never returns
     /// `TransactionOutdated` — the retry is handled internally, and if the
@@ -652,10 +652,11 @@ impl Client {
 
     async fn submit_tx_api_error(&self, error: ApiErrorResponse) -> SDKResult<SDKError> {
         // A stale chain hash surfaces differently per submission path: the borsh
-        // path bakes it into the signed bytes (→ 401 invalid signature), while
-        // the Solana offchain envelope carries it as a validated field (→ 400
+        // path bakes it into the signed bytes, so verification fails with a 401 —
+        // the message text varies, so key on the status alone. The Solana
+        // offchain envelope carries the hash as a validated field (→ 400
         // chain-hash mismatch). Both mean "rebuild and re-sign".
-        let stale_chain_hash = (error.status == 401 && error.message.contains("Invalid signature"))
+        let stale_chain_hash = error.status == 401
             || (error.status == 400 && {
                 let message = error.message.to_lowercase();
                 message.contains("chain_hash mismatch") || message.contains("chain hash mismatch")
@@ -1169,6 +1170,32 @@ mod tests {
             SolanaLedgerTransaction::from_parts(test_unsigned_tx(), pub_key, signature).unwrap();
 
         let err = client.send_ledger_transaction(&tx).await.unwrap_err();
+
+        assert!(matches!(err, SDKError::TransactionOutdated), "{err:?}");
+        let requests = server.received_requests().await.unwrap();
+        let schema_requests = requests
+            .iter()
+            .filter(|request| request.url.path() == "/rollup/schema")
+            .count();
+        assert_eq!(schema_requests, 2);
+    }
+
+    #[tokio::test]
+    async fn send_offchain_transaction_maps_trading_api_validator_401_to_outdated() {
+        // A stale signature is rejected with a 401 whose message text varies
+        // ("Transaction validation failed: invalid ed25519 signature" vs
+        // "Invalid signature"). Detection must key on the status, not the
+        // wording.
+        let (server, client) = mock_client_for_offchain_submission(
+            ResponseTemplate::new(401).set_body_json(serde_json::json!({
+                "status": 401,
+                "message": "Transaction validation failed: invalid ed25519 signature",
+            })),
+        )
+        .await;
+        let signed = test_solana_offchain_transaction();
+
+        let err = client.send_offchain_transaction(&signed).await.unwrap_err();
 
         assert!(matches!(err, SDKError::TransactionOutdated), "{err:?}");
         let requests = server.received_requests().await.unwrap();

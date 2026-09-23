@@ -17,7 +17,9 @@ pub fn emit_struct(s: &SchemaStruct) -> TokenStream {
         | "UpdateGlobalConfigArgs"
         | "UpdateGlobalConfigArgsV1"
         | "UpdateUserMarginDiscountArgs"
-        | "TradingCreditsArgs" => {
+        | "TradingCreditsArgs"
+        | "VaultDepositPolicyArgs"
+        | "StrategicDepositorCap" => {
             quote! { #type_name<Address> }
         }
         _ => quote! { #type_name },

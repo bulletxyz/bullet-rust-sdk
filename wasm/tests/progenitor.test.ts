@@ -10,7 +10,6 @@
  * 4. Nested type getters return wrapper instances (e.g. ExchangeInfo.assets -> Asset[])
  */
 
-import { jest } from '@jest/globals';
 
 import {
   Client, Decimal,
@@ -28,8 +27,6 @@ import {
   ReadinessStatus,
 } from '../pkg/node';
 import { connectReadOnlyClient } from './helpers';
-
-jest.setTimeout(30_000);
 
 // ── Enum wrappers ────────────────────────────────────────────────────────────
 

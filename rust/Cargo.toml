@@ -1,6 +1,6 @@
 [package]
 name = "bullet-rust-sdk"
-version = "0.0.37"
+version = "0.0.38"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/bulletxyz/bullet-rust-sdk"
@@ -18,9 +18,8 @@ all-features = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bullet-exchange-interface = { version = "=0.14.3", features = ["schema"] }
+bullet-exchange-interface = { version = "=0.14.4", features = ["schema"] }
 bullet-ws-interface = "0.2"
-sov-universal-wallet = { version = "0.4", features = ["serde"] }
 
 
 progenitor-client = "0.14"
@@ -38,7 +37,7 @@ ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 rand = "0.8"
 borsh = "1"
 hex = "0.4"
-base64 = "0.22"
+base64 = "0.23"
 sha2 = "0.10"
 
 # WebSocket (works on both native and WASM)
@@ -56,8 +55,9 @@ tokio = { version = "1", features = ["sync", "rt", "macros", "time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 futures-timer = { version = "3", features = ["wasm-bindgen"] }
-getrandom = { version = "0.2", features = ["js"] }
 wasm-bindgen-futures = "0.4"
+# Declared to switch on its "js" feature for transitive users; never imported here.
+getrandom = { version = "0.2", features = ["js"] }
 
 [build-dependencies]
 progenitor = "0.14"
@@ -67,10 +67,9 @@ openapiv3 = "2"
 schemars = "0.8"
 syn = "2.0"
 prettyplease = "0.2"
-clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
-tokio = { version = "=1.52.3", features = ["rt", "macros", "io-std", "io-util"] }
+tokio = { version = "=1.53.1", features = ["rt", "macros", "io-std", "io-util"] }
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
 wiremock = "=0.6.5"
 
@@ -78,3 +77,7 @@ wiremock = "=0.6.5"
 default = []
 # enable integration tests that require a local instance running
 integration = []
+
+# Declared to enable a feature rather than imported.
+[package.metadata.cargo-shear]
+ignored = ["getrandom"]

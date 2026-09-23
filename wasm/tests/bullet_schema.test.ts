@@ -11,7 +11,6 @@
  * 5. CallMessage objects can be built into signed transactions
  */
 
-import { jest } from '@jest/globals';
 
 import {
   // Namespace modules
@@ -21,7 +20,7 @@ import {
   NewTriggerOrderArgs, NewTwapOrderArgs,
   TpslPair, Tpsl, PendingTpslPair,
   InitAssetInfoArgsV1, UpdateAssetInfoArgsV1, UpdateGlobalConfigArgsV1,
-  UpdateVaultConfigArgs,
+  UpdateVaultConfigArgs, UpdateVaultConfigArgsV1, VaultDepositPolicyArgs, StrategicDepositorCap,
   OraclePriceUpdateArgs, OraclePriceUpdateWithPythProofArgs, MarkPriceUpdateArgs,
   BackstopLiquidatePerpPositionArgs,
   // Enums
@@ -29,8 +28,6 @@ import {
   // Data-carrying enums
   DegenAction,
 } from "../pkg/node";
-
-jest.setTimeout(30_000);
 
 const textEncoder = new TextEncoder();
 const PYTH_PRIMARY_WITHOUT_QUOTE = textEncoder.encode('pyth-primary-no-quote-v1');
@@ -89,9 +86,11 @@ describe('namespace modules exist', () => {
 
   test('Vault namespace has vault methods', () => {
     expect(typeof Vault.updateVaultConfig).toBe('function');
+    expect(typeof Vault.updateVaultConfigV1).toBe('function');
     expect(typeof Vault.processWithdrawalQueue).toBe('function');
     expect(typeof Vault.whitelistDepositor).toBe('function');
     expect(typeof Vault.delegateVaultUser).toBe('function');
+    expect(typeof Vault.setDepositPolicy).toBe('function');
   });
 
   test('Warp namespace has bridge methods', () => {
@@ -532,6 +531,52 @@ describe('direct struct params', () => {
     const msg = Vault.updateVaultConfig(
       '11111111111111111111111111111111',
       config,
+    );
+    expect(msg).toBeDefined();
+  });
+
+  test('Vault.updateVaultConfigV1 accepts a withdrawal fee', () => {
+    const config = new UpdateVaultConfigArgsV1('1000.0', 24, 10, 5);
+    const msg = Vault.updateVaultConfigV1(
+      '11111111111111111111111111111111',
+      config,
+    );
+    expect(msg).toBeDefined();
+  });
+
+  test('Vault.updateVaultConfigV1 fields are optional', () => {
+    const config = new UpdateVaultConfigArgsV1(undefined, undefined, undefined, undefined);
+    const msg = Vault.updateVaultConfigV1(
+      '11111111111111111111111111111111',
+      config,
+    );
+    expect(msg).toBeDefined();
+  });
+
+  test('Vault.setDepositPolicy accepts a deposit policy', () => {
+    const policy = new VaultDepositPolicyArgs('1000.0', []);
+    const msg = Vault.setDepositPolicy(
+      '11111111111111111111111111111111',
+      policy,
+    );
+    expect(msg).toBeDefined();
+  });
+
+  test('Vault.setDepositPolicy accepts strategic caps', () => {
+    const policy = new VaultDepositPolicyArgs('1000.0', [
+      new StrategicDepositorCap('11111111111111111111111111111111', '50000.0'),
+    ]);
+    const msg = Vault.setDepositPolicy(
+      '11111111111111111111111111111111',
+      policy,
+    );
+    expect(msg).toBeDefined();
+  });
+
+  test('Vault.setDepositPolicy clears the policy when omitted', () => {
+    const msg = Vault.setDepositPolicy(
+      '11111111111111111111111111111111',
+      undefined,
     );
     expect(msg).toBeDefined();
   });

@@ -86,9 +86,9 @@ test-integration endpoint="https://tradingapi.bullet.xyz":
       test //libs/bullet-rust-sdk/rust:integration_tests \
       --test_env=BULLET_API_ENDPOINT
 
-# Run WASM Jest tests (requires build-wasm first)
+# Run WASM Vitest tests (requires build-wasm first)
 test-wasm:
-    if [ ! -x wasm/node_modules/.bin/jest ]; then cd wasm && corepack pnpm install --frozen-lockfile; fi
+    if [ ! -x wasm/node_modules/.bin/vitest ]; then cd wasm && corepack pnpm install --frozen-lockfile; fi
     cd wasm && npm test
 
 # Run all tests (Rust unit + doc + WASM)

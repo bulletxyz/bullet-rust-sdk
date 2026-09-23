@@ -2,12 +2,12 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["jest", "node"]
+    "types": ["vitest/globals", "node"]
   },
   "include": ["tests/**/*.ts", "pkg/bullet_rust_sdk_wasm.d.ts"]
 }

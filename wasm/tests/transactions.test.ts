@@ -8,7 +8,6 @@
  * 4. Transaction serialization to base64 and bytes
  */
 
-import { jest } from "@jest/globals";
 
 import {
   Keypair,
@@ -24,8 +23,6 @@ import {
   Warp,
 } from "../pkg/node";
 import { connectForUserActions } from "./helpers";
-
-jest.setTimeout(30_000);
 
 // ── Transaction.builder() pattern ────────────────────────────────────────────
 

@@ -2,11 +2,8 @@
  * Integration smoke test: connect to mainnet and call exchangeInfo().
  */
 
-import { jest } from '@jest/globals';
 
 import { connectReadOnlyClient } from './helpers';
-
-jest.setTimeout(30_000);
 
 test('exchangeInfo returns assets and symbols', async () => {
   const client = await connectReadOnlyClient();

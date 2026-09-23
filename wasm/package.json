@@ -1,6 +1,6 @@
 {
   "name": "@bulletxyz/sdk-wasm",
-  "version": "0.0.37",
+  "version": "0.0.38",
   "description": "WebAssembly bindings for the Bullet trading SDK — works in Node.js, browsers, and Deno",
   "author": "Bullet.xyz",
   "license": "MIT",
@@ -20,40 +20,17 @@
     "dex"
   ],
   "type": "module",
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@11.24.0",
   "scripts": {
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "build": "cd .. && just build-wasm",
     "prepublishOnly": "[ -n \"$CI\" ] || npm run build"
   },
   "devDependencies": {
-    "@jest/globals": "30.4.1",
-    "@types/jest": "30.0.0",
-    "@types/node": "25.9.4",
-    "jest": "30.4.2",
-    "ts-jest": "29.4.11",
-    "typescript": "6.0.3"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "testMatch": [
-      "**/tests/**/*.test.ts"
-    ],
-    "modulePathIgnorePatterns": [
-      "<rootDir>/pkg/"
-    ],
-    "transform": {
-      "^.+\\.ts$": [
-        "ts-jest",
-        {
-          "useESM": true,
-          "tsconfig": "tsconfig.json"
-        }
-      ]
-    },
-    "extensionsToTreatAsEsm": [
-      ".ts"
-    ]
+    "@types/node": "25.9.5",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
   },
   "main": "./pkg/node.js",
   "types": "./pkg/node.d.ts",
