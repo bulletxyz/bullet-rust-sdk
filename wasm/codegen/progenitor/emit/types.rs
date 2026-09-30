@@ -77,7 +77,7 @@ fn emit_from_json(deserializable: bool, sdk_type: &TokenStream, wrapper: &Ident)
 /// Emit a wrapper struct with getters for a progenitor type.
 pub fn emit_struct(s: &StructDetails, enum_names: &HashSet<&str>) -> TokenStream {
     let sdk_type = sdk_qualified_path(&s.module_path, &s.name);
-    let wrapper = format_ident!("Wasm{}", s.name);
+    let wrapper = type_map::wrapper_ident(&s.name);
     let js_name = type_map::js_name(&s.name);
     let serializable = has_serialize(&s.derives);
 
@@ -174,7 +174,7 @@ fn emit_getter(f: &FieldDetails, enum_names: &HashSet<&str>) -> TokenStream {
 /// Emit a wasm-bindgen C-style enum wrapper.
 pub fn emit_enum(e: &EnumDetails) -> TokenStream {
     let sdk_type = sdk_qualified_path(&e.module_path, &e.name);
-    let wrapper = format_ident!("Wasm{}", e.name);
+    let wrapper = type_map::wrapper_ident(&e.name);
     let js_name = type_map::js_name(&e.name);
 
     let variants: Vec<_> = e
@@ -215,7 +215,7 @@ pub fn emit_enum(e: &EnumDetails) -> TokenStream {
 /// boundary as JSON the caller parses.
 pub fn emit_enum_json(e: &EnumDetails) -> TokenStream {
     let sdk_type = sdk_qualified_path(&e.module_path, &e.name);
-    let wrapper = format_ident!("Wasm{}", e.name);
+    let wrapper = type_map::wrapper_ident(&e.name);
     let js_name = type_map::js_name(&e.name);
 
     let to_json_method = emit_to_json(has_serialize(&e.derives));

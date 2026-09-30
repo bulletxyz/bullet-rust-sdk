@@ -18,8 +18,11 @@ import init, {
 
 await init();
 
+// Tests default to testnet: the SDK refuses to connect to an endpoint whose schema does
+// not match the one it was compiled against, and testnet leads mainnet through upgrades.
+// Override with BULLET_API_ENDPOINT.
 const ENDPOINT =
-  Deno.env.get("BULLET_API_ENDPOINT") ?? "https://tradingapi.bullet.xyz";
+  Deno.env.get("BULLET_API_ENDPOINT") ?? "https://tradingapi.testnet.bullet.xyz";
 
 async function connectForUserActions(actions: string[]) {
   return Client.builder()

@@ -525,25 +525,84 @@ Decimal.zero()   Decimal.one()
 The client exposes REST endpoints as typed async methods. Response objects have
 typed getters plus `toJSON()` for full JSON serialization.
 
+Arguments are generated in alphabetical order, not in "required first" order, so
+a required argument can follow a nullable one — pass `null` or `undefined` for
+the ones you do not need (for example `client.orderBook(null, 'BTC-USD')`).
+Arguments marked `?` may be omitted entirely.
+
 ```typescript
 // Market data
 await client.exchangeInfo()
+await client.symbolConfig(symbol?)
 await client.tickerPrice(symbol?)
-await client.orderBook(symbol)
-await client.recentTrades(symbol)
-await client.fundingRate(symbol)
+await client.ticker24hr()
+await client.orderBook(limit, symbol)
+await client.recentTrades(limit, symbol)
+await client.premiumIndex(symbol?)
+await client.fundingInfo(symbol?)
+await client.fundingRate(end_time?, limit?, start_time?, symbol?)
+await client.openInterest()
+await client.leverageBracket(symbol?)
+await client.borrowLendPools(symbol?)
 
 // Account
 await client.accountInfo(address)
+await client.account(address)
+await client.accounts(addresses)
 await client.accountBalance(address)
+await client.accountBalanceBullet(address)
+await client.accountWalletBullet(address)
 await client.accountConfig(address)
+await client.addressState(address)
+await client.delegateOf(address)
+await client.commissionRate(address, symbol)
+await client.positionRisk(address, symbol?)
+
+// Orders
 await client.queryOpenOrders(address, symbol?)
-await client.queryOpenOrder(address, orderId)
+await client.queryOpenOrder(address, client_order_id, order_id, symbol, trigger_order_id?)
+await client.allOrders(address?, end_time?, limit?, order_id?, start_time?, symbol?)
+await client.orderHistory(address?, end_time?, kind?, limit?, start_time?, symbol?)
+await client.rateLimitOrder()
+
+// User history
+await client.userTrades(address?, end_time?, limit?, start_time?, symbol?)
+await client.userTransfers(action?, address?, end_time?, limit?, start_time?)
+await client.userDeposits(address?, end_time?, limit?, start_time?)
+await client.userWithdrawals(address?, end_time?, limit?, start_time?)
+await client.userFundingPayments(address?, end_time?, limit?, start_time?, symbol?)
+await client.userLiquidations(address?, end_time?, limit?, start_time?, symbol?)
+
+// Vaults
+await client.vault(address)
+await client.vaults(cursor?, limit?)
+await client.vaultEquity(address)
+await client.vaultDepositorShares(address)
+
+// TWAP
+await client.twapHistory(address?, end_time?, limit?, start_time?, symbol?, twap_id?)
+await client.twapFills(address?, end_time?, limit?, start_time?, symbol?, twap_id?)
+
+// Transaction submission (raw; prefer sendTransaction / sendOffChainTransaction)
+await client.submitTx(body)
+await client.submitSolanaOffchainTx(body)
+await client.simulate(body)
 
 // System
-await client.health()
+await client.ping()
+await client.time()
+await client.schema()
 await client.constants()
+await client.oraclePrices(asset_id?)
+await client.riskEngineConfig()
+await client.insuranceBalance()
+await client.warpRoutes()
 ```
+
+> `client.health()` and `client.ready()` are gone: the trading API serves
+> `/health` and `/health/ready` as Kubernetes probes but no longer documents them,
+> so the generated client no longer exposes them. The `HealthState` and
+> `ReadinessStatus` types were removed with them.
 
 ## Platform Support
 

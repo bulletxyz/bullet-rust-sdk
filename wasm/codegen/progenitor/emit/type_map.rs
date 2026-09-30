@@ -18,11 +18,19 @@ use super::super::{Primitive, RustType};
 
 // ── JS Name Renames ──────────────────────────────────────────────────────────
 
-/// Types that need JS name remapping to avoid shadowing built-ins.
+/// Types that need JS name remapping to avoid a name clash.
 ///
-/// Add entries here when a Rust type name conflicts with a JS global.
+/// Add an entry when a progenitor type name collides with a JS global, or with a type the
+/// CallMessage codegen already exports: both generators emit `#[wasm_bindgen(js_name = ...)]`
+/// into the same JS namespace, so a shared name is a duplicate `__wbg_<name>_free` symbol at
+/// link time rather than a Rust error, since the two live in different modules.
 pub const JS_RENAMES: &[(&str, &str)] = &[
     ("Symbol", "TradingSymbol"), // Avoid shadowing JS Symbol
+    // `TransferEndpoint` is also a CallMessage argument type (the from/to sides of a transfer
+    // instruction). This one is the API's read-side view of a recorded transfer.
+    ("TransferEndpoint", "TransferEndpointInfo"),
+    // `Vault` is the CallMessage namespace holding the vault leader factories.
+    ("Vault", "VaultInfo"),
 ];
 
 /// Get the JS-facing name for a type, applying renames if needed.
@@ -33,6 +41,16 @@ pub fn js_name(rust_name: &str) -> String {
         }
     }
     rust_name.to_string()
+}
+
+/// The Rust ident of the wasm-bindgen wrapper for a progenitor type.
+///
+/// Derived from [`js_name`] rather than the raw name so that a renamed type also avoids a Rust
+/// collision: the two generators emit into different modules that `lib.rs` re-exports with a
+/// glob, so a shared wrapper ident makes that root-level re-export ambiguous, which rustc
+/// reports rather than silently resolving.
+pub fn wrapper_ident(rust_name: &str) -> Ident {
+    format_ident!("Wasm{}", js_name(rust_name))
 }
 
 // ── JSDoc Type Helpers ──────────────────────────────────────────────────────
@@ -116,7 +134,7 @@ fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
         RustType::Named { name, .. } if name == "Value" => quote! { String },
         RustType::Named { name, .. } if enums.contains(name.as_str()) => quote! { String },
         RustType::Named { name, .. } => {
-            let w = format_ident!("Wasm{}", name);
+            let w = wrapper_ident(name);
             quote! { #w }
         }
         RustType::Option(inner) => {
@@ -145,7 +163,7 @@ fn value_conversion(ty: &RustType, expr: &TokenStream, enums: &HashSet<&str>) ->
             quote! { #expr.to_string() }
         }
         RustType::Named { name, .. } => {
-            let w = format_ident!("Wasm{}", name);
+            let w = wrapper_ident(name);
             quote! { #w(#expr.clone()) }
         }
         _ => quote! { to_json(&#expr) },
@@ -269,13 +287,13 @@ pub fn param_mapping(ty: &RustType, name: &Ident) -> (TokenStream, TokenStream) 
         // &types::Foo → &WasmFoo, unwrap to &inner.0
         RustType::Ref(inner) => match inner.as_ref() {
             RustType::Named { name: ty_name, .. } => {
-                let w = format_ident!("Wasm{}", ty_name);
+                let w = wrapper_ident(ty_name);
                 (quote! { &#w }, quote! { &#name.0 })
             }
             // &[types::Foo] → js_sys::Array, extract and convert
             RustType::Slice(elem) => match elem.as_ref() {
                 RustType::Named { name: ty_name, .. } => {
-                    let w = format_ident!("Wasm{}", ty_name);
+                    let w = wrapper_ident(ty_name);
                     (
                         quote! { js_sys::Array },
                         quote! { &extract_array::<#w>(#name)?.into_iter().map(|w| w.0.clone()).collect::<Vec<_>>() },
@@ -370,7 +388,7 @@ fn response_value_mapping(
         // ResponseValue<Vec<types::Foo>>
         RustType::Vec(elem) => match elem.as_ref() {
             RustType::Named { name, .. } => {
-                let w = format_ident!("Wasm{}", name);
+                let w = wrapper_ident(name);
                 (
                     quote! { WasmResult<Vec<#w>> },
                     quote! {
@@ -408,7 +426,7 @@ fn response_value_mapping(
             }
 
             // Regular struct
-            let w = format_ident!("Wasm{}", name);
+            let w = wrapper_ident(name);
             (
                 quote! { WasmResult<#w> },
                 quote! { Ok(#w(self.inner.#method(#(#call_args),*).await?.into_inner())) },

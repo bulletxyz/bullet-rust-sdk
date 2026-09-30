@@ -177,7 +177,19 @@ describe("external signing", () => {
     expect(message.chain_hash).toBeUndefined();
     expect(message.chain_name).toBe(client.chainName());
     expect(message.runtime_call).toBeDefined();
-    expect(BigInt(message.details.chain_id)).toBe(client.chainId());
+    expect(message.version).toBe(0);
+    // Absent unless the transaction executes as another account.
+    expect(message.address_override).toBeUndefined();
+    // `chain_hash_fragment` is the first 8 bytes of the chain hash read as a
+    // little-endian u64, serialized as a decimal string.
+    const chainHash = client.chainHash();
+    const fragment = new DataView(
+      chainHash.buffer,
+      chainHash.byteOffset,
+      8,
+    ).getBigUint64(0, true);
+    expect(BigInt(message.details.chain_hash_fragment)).toBe(fragment);
+    expect(message.details.chain_id).toBeUndefined();
 
     const signature = keypair.sign(messageBytes);
     const pubKey = keypair.publicKey();

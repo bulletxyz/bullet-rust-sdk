@@ -31,12 +31,74 @@
         }
     ],
     "paths": {
+        "/api/v1/account": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Account",
+                "description": "Superset of `/fapi/v3/balance` that surfaces data the rollup already\nreturns but the Binance-shaped endpoint doesn't expose:\naccount-level trading credits, per-asset\ngross asset/liability amounts, referral rewards, and perp positions\n(with trading_mode / user_selected_max_leverage).",
+                "operationId": "account",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Account balance and positions",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AccountBalance"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/accountConfig": {
             "get": {
                 "tags": [
-                    "Account"
+                    "API"
                 ],
-                "summary": "Account Configuration (Bullet-specific)",
+                "summary": "Account Configuration",
                 "operationId": "account_config",
                 "parameters": [
                     {
@@ -92,12 +154,88 @@
                 }
             }
         },
+        "/api/v1/accounts": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Accounts (batch)",
+                "description": "Batch variant of `/api/v1/account`: accepts a comma-separated list of\naddresses and returns an array of the same per-account shape, in the same\norder as the request. Lets vault callers avoid looping over the single\naccount endpoint.",
+                "operationId": "accounts",
+                "parameters": [
+                    {
+                        "name": "addresses",
+                        "in": "query",
+                        "description": "Comma-separated list of addresses, e.g. `address1,address2`.",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Account balances and positions, one per requested address",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/AccountBalance"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "One or more addresses are not accounts; all are named",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/addressState": {
             "get": {
                 "tags": [
-                    "Address"
+                    "API"
                 ],
-                "summary": "Per-credential on-chain state used by clients when constructing txs.",
+                "summary": "Address State",
                 "operationId": "address_state",
                 "parameters": [
                     {
@@ -147,10 +285,10 @@
         "/api/v1/balance": {
             "get": {
                 "tags": [
-                    "Account"
+                    "API"
                 ],
-                "summary": "Account Balance (Bullet-specific)",
-                "description": "Superset of `/fapi/v3/balance` that surfaces data the rollup already\nreturns but the Binance-shaped endpoint doesn't expose:\naccount-level trading credits / unrealized loss borrow, per-asset\ngross asset/liability amounts, and referral rewards.",
+                "summary": "Account Balance",
+                "description": "Deprecated alias of `/api/v1/account`, kept for backwards compat.",
                 "operationId": "account_balance_bullet",
                 "parameters": [
                     {
@@ -164,7 +302,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Account balance",
+                        "description": "Account balance and positions",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -206,9 +344,213 @@
                 }
             }
         },
+        "/api/v1/bridge/warpRoutes": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Return the rollup's cached Hyperlane warp-route configuration.",
+                "operationId": "warp_routes",
+                "responses": {
+                    "200": {
+                        "description": "Hyperlane warp routes",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WarpRoutesResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "No warp-route snapshot is available",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/delegateOf": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Resolve parent from delegate address",
+                "operationId": "delegate_of",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Parent account for the given delegate address",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DelegateOf"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Address is not a delegate",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/oraclePrices": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Asset oracle prices, including collateral assets without a market.",
+                "description": "Returns registered assets with oracle entries, sorted by asset ID. An explicit\nlookup returns 404 when the asset or oracle entry is absent. Prices and nullable\ntimestamps are returned as stored; this endpoint does not validate freshness.",
+                "operationId": "oracle_prices",
+                "parameters": [
+                    {
+                        "name": "assetId",
+                        "in": "query",
+                        "description": "Asset ID; omit for all available registered asset prices",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Asset oracle prices (always an array)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/OraclePriceResponse"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid asset ID query",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Asset or oracle price not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream snapshot unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/riskEngineConfig": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Risk Engine Configuration",
+                "operationId": "risk_engine_config",
+                "responses": {
+                    "200": {
+                        "description": "Risk engine config",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/solanaOffchainTx": {
             "post": {
-                "summary": "Submit a Solana off-chain signed transaction to the rollup.",
+                "tags": [
+                    "API"
+                ],
+                "summary": "Submit Solana off-chain signed transaction",
                 "description": "Accepts the JSON envelope produced by the SDK's `solana` / `solanaSimple`\nauthenticator (Phantom, Solflare, Ledger), where the body is signed with\na Solana off-chain message signature rather than a Sovereign credential.\nThe rollup verifies the signature and constructs the inner tx; this route\nis a pass-through proxy and intentionally skips the borsh tx validator.",
                 "operationId": "submit_solana_offchain_tx",
                 "requestBody": {
@@ -275,12 +617,371 @@
                 }
             }
         },
+        "/api/v1/vault": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Vault",
+                "operationId": "vault",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "description": "vault address (base58)",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Vault",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Vault"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Vault not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/vaultDepositorShares": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Vault Depositor Shares",
+                "operationId": "vault_depositor_shares",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "description": "depositor address (base58)",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Vault depositor shares",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VaultDepositorSharesResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Vault depositor shares not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/vaultEquity": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Vault Equity",
+                "operationId": "vault_equity",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "description": "depositor address (base58)",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Vault equity per vault, plus the total",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VaultEquityResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Vault pricing unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/vaults": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Vaults",
+                "operationId": "vaults",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "maximum number of vaults to return",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int32",
+                            "minimum": 0
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "opaque pagination cursor from a previous response's `nextCursor`",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Vault list",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VaultsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/wallet": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Wallet balances.",
+                "operationId": "account_wallet_bullet",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Wallet balances",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/AssetAmountBalance"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/fapi/v1/allOrders": {
             "get": {
                 "tags": [
                     "User Data (Beta)"
                 ],
-                "summary": "All Orders (order history from ClickHouse)",
+                "summary": "All Orders",
                 "operationId": "all_orders",
                 "parameters": [
                     {
@@ -392,6 +1093,16 @@
                             }
                         }
                     },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
                     "502": {
                         "description": "Upstream service unavailable",
                         "content": {
@@ -485,7 +1196,7 @@
                 "tags": [
                     "Account"
                 ],
-                "summary": "User Commission Rate (USER_DATA)",
+                "summary": "User Commission Rate",
                 "operationId": "commission_rate",
                 "parameters": [
                     {
@@ -533,7 +1244,7 @@
                     {
                         "name": "limit",
                         "in": "query",
-                        "description": "Limit (default 20, max 1000)",
+                        "description": "Limit (default 20, max 25)",
                         "required": false,
                         "schema": {
                             "type": "integer",
@@ -586,6 +1297,16 @@
                     },
                     "502": {
                         "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "No orderbook snapshot yet: the provider has not completed its first poll for this market",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -728,22 +1449,64 @@
                 "tags": [
                     "Market-Data"
                 ],
-                "summary": "Latest price for a symbol or symbols",
+                "summary": "Funding rate history: one row per hourly settlement, oldest first. Without\n`startTime` the most recent `limit` rows are returned, otherwise the first\n`limit` rows from it. The live and estimated rate is on `premiumIndex`.",
                 "operationId": "funding_rate",
                 "parameters": [
                     {
                         "name": "symbol",
                         "in": "query",
-                        "description": "Symbol",
+                        "description": "Trading pair symbol (optional; omit for every perp market)",
                         "required": false,
                         "schema": {
-                            "type": "string"
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "startTime",
+                        "in": "query",
+                        "description": "Start time in microseconds, inclusive (optional filter)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "endTime",
+                        "in": "query",
+                        "description": "End time in microseconds, inclusive (optional filter)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Number of results (default 100, max 1000)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 0
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Funding Rate",
+                        "description": "Funding rate history",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -787,6 +1550,16 @@
                     },
                     "502": {
                         "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Historical data not configured",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -854,7 +1627,7 @@
                 "tags": [
                     "Account"
                 ],
-                "summary": "Notional and Leverage Brackets (USER_DATA)",
+                "summary": "Notional and Leverage Brackets",
                 "operationId": "leverage_bracket",
                 "parameters": [
                     {
@@ -1186,12 +1959,151 @@
                 }
             }
         },
+        "/fapi/v1/orderHistory": {
+            "get": {
+                "tags": [
+                    "User Data (Beta)"
+                ],
+                "summary": "Unified Order History (regular + trigger)",
+                "description": "Returns a single time-sorted feed of regular (Limit/Market) and trigger\n(SL/TP) orders for the webapp Order History tab. Filterable by `kind` CSV.",
+                "operationId": "order_history",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "description": "Account address (required on first request, encoded in cursor for subsequent)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "symbol",
+                        "in": "query",
+                        "description": "Trading pair symbol (optional filter)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "kind",
+                        "in": "query",
+                        "description": "Comma-separated kinds: LIMIT, MARKET, SL, TP. Omit for all four",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "startTime",
+                        "in": "query",
+                        "description": "Start time in microseconds",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "endTime",
+                        "in": "query",
+                        "description": "End time in microseconds",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Number of results (default 500, max 1000)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Unified order history",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedResponse_OrderHistoryEntry"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Market not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Historical data service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/fapi/v1/ping": {
             "get": {
                 "tags": [
-                    "Health"
+                    "General"
                 ],
-                "summary": "Test connectivity to the Rest API",
+                "summary": "Ping - Test connectivity to the Rest API",
                 "operationId": "ping",
                 "responses": {
                     "200": {
@@ -1287,7 +2199,7 @@
                 "tags": [
                     "Account"
                 ],
-                "summary": "Query User Rate Limit (USER_DATA)",
+                "summary": "Query User Rate Limit",
                 "operationId": "rate_limit_order",
                 "responses": {
                     "501": {
@@ -1301,17 +2213,9 @@
                 "tags": [
                     "Account"
                 ],
-                "summary": "Symbol Configuration (USER_DATA)",
+                "summary": "Symbol Configuration",
                 "operationId": "symbol_config",
                 "parameters": [
-                    {
-                        "name": "address",
-                        "in": "query",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
                     {
                         "name": "symbol",
                         "in": "query",
@@ -1326,7 +2230,57 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Symbol configuration"
+                        "description": "Symbol configuration",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/SymbolConfig"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Market not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1463,9 +2417,9 @@
         "/fapi/v1/time": {
             "get": {
                 "tags": [
-                    "Health"
+                    "General"
                 ],
-                "summary": "Test connectivity to the Rest API and get the current server time",
+                "summary": "Time - Get current server time",
                 "operationId": "time",
                 "responses": {
                     "200": {
@@ -1537,6 +2491,296 @@
                     },
                     "404": {
                         "description": "Market not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Historical data service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/fapi/v1/twapFills": {
+            "get": {
+                "tags": [
+                    "User Data (Beta)"
+                ],
+                "summary": "TWAP slice fills linked to their authoritative trade rows.",
+                "operationId": "twap_fills",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "description": "Account address filter (required initially and preserved by the signed cursor)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "symbol",
+                        "in": "query",
+                        "description": "Trading pair symbol (optional filter)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "twapId",
+                        "in": "query",
+                        "description": "TWAP identifier (optional filter)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64",
+                            "minimum": 0
+                        }
+                    },
+                    {
+                        "name": "startTime",
+                        "in": "query",
+                        "description": "Start time in microseconds (creation time for history, execution time for fills)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "endTime",
+                        "in": "query",
+                        "description": "End time in microseconds (creation time for history, execution time for fills)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Number of results (default 500, max 1000)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "TWAP slice fills",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedResponse_TwapFill"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Market not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Historical data service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/fapi/v1/twapHistory": {
+            "get": {
+                "tags": [
+                    "User Data (Beta)"
+                ],
+                "summary": "TWAP parent order history.",
+                "operationId": "twap_history",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "description": "Account address filter (required initially and preserved by the signed cursor)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "symbol",
+                        "in": "query",
+                        "description": "Trading pair symbol (optional filter)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "twapId",
+                        "in": "query",
+                        "description": "TWAP identifier (optional filter)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64",
+                            "minimum": 0
+                        }
+                    },
+                    {
+                        "name": "startTime",
+                        "in": "query",
+                        "description": "Start time in microseconds (creation time for history, execution time for fills)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "endTime",
+                        "in": "query",
+                        "description": "End time in microseconds (creation time for history, execution time for fills)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Number of results (default 500, max 1000)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "TWAP parent order history",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedResponse_TwapHistoryOrder"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Market not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -2050,6 +3294,123 @@
                 }
             }
         },
+        "/fapi/v1/userTransfers": {
+            "get": {
+                "tags": [
+                    "User Data (Beta)"
+                ],
+                "summary": "User Transfer Ledger",
+                "description": "Every value movement touching the address, newest first: wallet deposits and\nwithdrawals, moves between cross, spot and isolated buckets, sends to other\naccounts or wallets, vault deposits and withdrawals, and Hyperlane bridge\narrivals and departures. Each entry names both sides of the movement.\nReferral reward claims are omitted on purpose until the ClaimReferralRewardsV2\nevent exists.",
+                "operationId": "user_transfers",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "description": "Account address (required on first request, encoded in cursor for subsequent)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "action",
+                        "in": "query",
+                        "description": "Restrict to one kind of movement, e.g. `DEPOSIT` or `BRIDGE_IN` (optional, case-insensitive)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "startTime",
+                        "in": "query",
+                        "description": "Start time in microseconds",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "endTime",
+                        "in": "query",
+                        "description": "End time in microseconds",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Number of results (default 500, max 1000)",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of user transfers",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedResponse_UserTransfer"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Historical data service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/fapi/v1/userWithdrawals": {
             "get": {
                 "tags": [
@@ -2143,6 +3504,91 @@
                     },
                     "503": {
                         "description": "Historical data service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/fapi/v2/positionRisk": {
+            "get": {
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Position Information V2",
+                "operationId": "position_risk",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "symbol",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Position risk",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/AccountPosition"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Market not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -2279,60 +3725,11 @@
                 }
             }
         },
-        "/health": {
-            "get": {
-                "tags": [
-                    "Health"
-                ],
-                "summary": "Get health of the API.",
-                "operationId": "health",
-                "responses": {
-                    "200": {
-                        "description": "Success",
-                        "content": {
-                            "text/plain": {
-                                "schema": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/health/ready": {
-            "get": {
-                "tags": [
-                    "Health"
-                ],
-                "summary": "readiness probe — 200 when all components healthy, 503 otherwise",
-                "operationId": "ready",
-                "responses": {
-                    "200": {
-                        "description": "All components ready",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ReadinessStatus"
-                                }
-                            }
-                        }
-                    },
-                    "503": {
-                        "description": "Not all components ready",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ReadinessStatus"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/rollup/constants": {
             "get": {
+                "tags": [
+                    "Rollup"
+                ],
                 "summary": "Get the rollup constants.",
                 "operationId": "constants",
                 "responses": {
@@ -2361,7 +3758,10 @@
         },
         "/rollup/schema": {
             "get": {
-                "summary": "Get the rollup schema (unwrapped).",
+                "tags": [
+                    "Rollup"
+                ],
+                "summary": "Get the rollup schema",
                 "operationId": "schema",
                 "responses": {
                     "200": {
@@ -2376,74 +3776,6 @@
                     },
                     "503": {
                         "description": "Schema not available",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/tx/submit": {
-            "post": {
-                "summary": "Submit a transaction to the rollup.",
-                "operationId": "submit_tx",
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/SubmitTxRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "description": "Transaction submitted successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/SubmitTxResponse"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid transaction format or validation failed",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Invalid signature or public key",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "502": {
-                        "description": "Upstream service unavailable",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "503": {
-                        "description": "Validation service unavailable",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -2523,6 +3855,88 @@
                     }
                 }
             }
+        },
+        "/tx/submit": {
+            "post": {
+                "tags": [
+                    "Trading"
+                ],
+                "summary": "Submit a transaction to the rollup.",
+                "description": "Accepts the JSON envelope containing the base64 encoded and borsh serialized transaction.",
+                "operationId": "submit_tx",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SubmitTxRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Transaction submitted successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubmitTxResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid transaction format or validation failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid signature or public key",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Call type not relayed by this API (warp route administration)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Validation service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -2541,6 +3955,7 @@
                     "totalCrossUnPnl",
                     "availableBalance",
                     "maxWithdrawAmount",
+                    "marginDiscount",
                     "feeTier",
                     "feeDiscountBps",
                     "assets",
@@ -2566,6 +3981,9 @@
                         "type": "integer",
                         "format": "int32",
                         "minimum": 0
+                    },
+                    "marginDiscount": {
+                        "type": "string"
                     },
                     "maxWithdrawAmount": {
                         "type": "string",
@@ -2647,11 +4065,20 @@
                 "required": [
                     "account",
                     "assets",
-                    "rewards"
+                    "iso",
+                    "spot",
+                    "rewards",
+                    "positions",
+                    "accountVariant",
+                    "perpTriggerOrders",
+                    "twaps"
                 ],
                 "properties": {
                     "account": {
                         "$ref": "#/components/schemas/AccountBalanceSummary"
+                    },
+                    "accountVariant": {
+                        "$ref": "#/components/schemas/AccountVariantInfo"
                     },
                     "assets": {
                         "type": "array",
@@ -2659,10 +4086,49 @@
                             "$ref": "#/components/schemas/AssetBalance"
                         }
                     },
+                    "iso": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/IsolatedBalance"
+                        }
+                    },
+                    "perpTriggerOrders": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PerpTriggerOrder"
+                        }
+                    },
+                    "positions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PerpPosition"
+                        }
+                    },
                     "rewards": {
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/AssetReward"
+                        }
+                    },
+                    "spot": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AssetAmountBalance"
+                        }
+                    },
+                    "twaps": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TwapOrder"
+                        }
+                    },
+                    "wallet": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "$ref": "#/components/schemas/AssetAmountBalance"
                         }
                     }
                 }
@@ -2670,10 +4136,15 @@
             "AccountBalanceSummary": {
                 "type": "object",
                 "required": [
-                    "tradingCredits"
+                    "tradingCredits",
+                    "unsettledPerpProfit"
                 ],
                 "properties": {
                     "tradingCredits": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "unsettledPerpProfit": {
                         "type": "string",
                         "format": "decimal"
                     }
@@ -2702,6 +4173,14 @@
                     "entryPrice",
                     "initialMargin",
                     "maintMargin",
+                    "marginType",
+                    "isolatedMargin",
+                    "isolatedWallet",
+                    "notional",
+                    "leverage",
+                    "maxNotionalValue",
+                    "markPrice",
+                    "liquidationPrice",
                     "positionSide",
                     "positionAmt",
                     "updateTime"
@@ -2715,7 +4194,31 @@
                         "type": "string",
                         "format": "decimal"
                     },
+                    "isolatedMargin": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "isolatedWallet": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "leverage": {
+                        "type": "integer",
+                        "format": "int32",
+                        "minimum": 0
+                    },
+                    "liquidationPrice": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
                     "maintMargin": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "marginType": {
+                        "type": "string"
+                    },
+                    "markPrice": {
                         "type": "string",
                         "format": "decimal"
                     },
@@ -2723,6 +4226,14 @@
                         "type": "integer",
                         "format": "uint16",
                         "minimum": 0
+                    },
+                    "maxNotionalValue": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "notional": {
+                        "type": "string",
+                        "format": "decimal"
                     },
                     "positionAmt": {
                         "type": "string",
@@ -2744,10 +4255,42 @@
                     }
                 }
             },
+            "AccountVariantInfo": {
+                "type": "object",
+                "required": [
+                    "kind"
+                ],
+                "properties": {
+                    "kind": {
+                        "type": "string"
+                    },
+                    "leader": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "master": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "subAccountMask": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int32",
+                        "minimum": 0
+                    }
+                }
+            },
             "AddressState": {
                 "type": "object",
                 "required": [
-                    "address"
+                    "address",
+                    "window"
                 ],
                 "properties": {
                     "address": {
@@ -2761,6 +4304,12 @@
                         ],
                         "format": "uint64",
                         "description": "highest uniqueness generation this credential has submitted with,\nor null if it has never submitted a tx. clients use this to seed a\nmonotonic generation override so the next tx doesn't collide",
+                        "minimum": 0
+                    },
+                    "window": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "description": "end of the uniqueness window. clients use this to seed a\nmonotonic window override so the next tx doesn't collide",
                         "minimum": 0
                     }
                 }
@@ -2841,7 +4390,8 @@
                         "minimum": 0
                     },
                     "marginAvailable": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "description": "Whether the asset has a configured borrow/lend pool in the margin risk engine.\nFunding-only registration does not enable margin use."
                     },
                     "tokenId": {
                         "type": [
@@ -2856,6 +4406,33 @@
                     "withdrawFee": {
                         "type": "string",
                         "format": "decimal"
+                    }
+                }
+            },
+            "AssetAmountBalance": {
+                "type": "object",
+                "required": [
+                    "asset",
+                    "assetId",
+                    "amount",
+                    "updateTime"
+                ],
+                "properties": {
+                    "amount": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "asset": {
+                        "type": "string"
+                    },
+                    "assetId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "updateTime": {
+                        "type": "integer",
+                        "format": "int64"
                     }
                 }
             },
@@ -3130,6 +4707,40 @@
                     }
                 }
             },
+            "BorrowLendLiquidation": {
+                "type": "object",
+                "description": "borrow-lend specific fields of a `borrow_lend` liquidation",
+                "required": [
+                    "liabilityAsset",
+                    "liabilityAssetId",
+                    "collateralAsset",
+                    "collateralAssetId",
+                    "collateralSize"
+                ],
+                "properties": {
+                    "collateralAsset": {
+                        "type": "string"
+                    },
+                    "collateralAssetId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "collateralSize": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "liquidatee's collateral balance at liquidation time, not the amount taken"
+                    },
+                    "liabilityAsset": {
+                        "type": "string"
+                    },
+                    "liabilityAssetId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    }
+                }
+            },
             "BorrowLendPoolResponse": {
                 "type": "object",
                 "required": [
@@ -3140,6 +4751,7 @@
                     "rateParams",
                     "depositLimit",
                     "borrowLimit",
+                    "maxUtilizationRate",
                     "availableAmount",
                     "borrowedAmount",
                     "cumulativeDepositRate",
@@ -3196,6 +4808,10 @@
                     "lastUpdateTimestamp": {
                         "type": "integer",
                         "format": "int64"
+                    },
+                    "maxUtilizationRate": {
+                        "type": "string",
+                        "format": "decimal"
                     },
                     "rateParams": {
                         "$ref": "#/components/schemas/RateParams"
@@ -3305,6 +4921,34 @@
                     }
                 }
             },
+            "DelegateOf": {
+                "type": "object",
+                "required": [
+                    "parent",
+                    "name",
+                    "flags"
+                ],
+                "properties": {
+                    "expiresAt": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64"
+                    },
+                    "flags": {
+                        "type": "integer",
+                        "format": "int32",
+                        "minimum": 0
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "parent": {
+                        "type": "string"
+                    }
+                }
+            },
             "ExchangeInfo": {
                 "type": "object",
                 "required": [
@@ -3357,6 +5001,149 @@
                     }
                 }
             },
+            "FailOutcome": {
+                "type": "object",
+                "description": "Skipped simulation outcome.",
+                "required": [
+                    "reason"
+                ],
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "The reason the transaction was skipped"
+                    }
+                }
+            },
+            "Filter": {
+                "oneOf": [
+                    {
+                        "type": "object",
+                        "required": [
+                            "tickSize",
+                            "minPrice",
+                            "maxPrice",
+                            "filterType"
+                        ],
+                        "properties": {
+                            "filterType": {
+                                "type": "string",
+                                "enum": [
+                                    "PRICE_FILTER"
+                                ]
+                            },
+                            "maxPrice": {
+                                "type": "string",
+                                "format": "decimal"
+                            },
+                            "minPrice": {
+                                "type": "string",
+                                "format": "decimal"
+                            },
+                            "tickSize": {
+                                "type": "string",
+                                "format": "decimal"
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "stepSize",
+                            "minQty",
+                            "maxQty",
+                            "filterType"
+                        ],
+                        "properties": {
+                            "filterType": {
+                                "type": "string",
+                                "enum": [
+                                    "LOT_SIZE"
+                                ]
+                            },
+                            "maxQty": {
+                                "type": "string",
+                                "format": "decimal"
+                            },
+                            "minQty": {
+                                "type": "string",
+                                "format": "decimal"
+                            },
+                            "stepSize": {
+                                "type": "string",
+                                "format": "decimal"
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "limit",
+                            "filterType"
+                        ],
+                        "properties": {
+                            "filterType": {
+                                "type": "string",
+                                "enum": [
+                                    "MAX_NUM_ORDERS"
+                                ]
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "format": "uint16",
+                                "minimum": 0
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "limit",
+                            "filterType"
+                        ],
+                        "properties": {
+                            "filterType": {
+                                "type": "string",
+                                "enum": [
+                                    "MAX_NUM_ALGO_ORDERS"
+                                ]
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "format": "uint16",
+                                "minimum": 0
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "multiplierUp",
+                            "multiplierDown",
+                            "multiplierDecimal",
+                            "filterType"
+                        ],
+                        "properties": {
+                            "filterType": {
+                                "type": "string",
+                                "enum": [
+                                    "PERCENT_PRICE"
+                                ]
+                            },
+                            "multiplierDecimal": {
+                                "type": "string"
+                            },
+                            "multiplierDown": {
+                                "type": "string",
+                                "format": "decimal"
+                            },
+                            "multiplierUp": {
+                                "type": "string",
+                                "format": "decimal"
+                            }
+                        }
+                    }
+                ]
+            },
             "FundingInfo": {
                 "type": "object",
                 "description": "funding rate metadata per symbol",
@@ -3369,11 +5156,13 @@
                 "properties": {
                     "adjustedFundingRateCap": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "highest 8h rate this market can reach, i.e. the configured clamp after dampening"
                     },
                     "adjustedFundingRateFloor": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "lowest 8h rate this market can reach, i.e. the configured clamp after dampening"
                     },
                     "fundingIntervalHours": {
                         "type": "integer",
@@ -3390,21 +5179,17 @@
                 "required": [
                     "symbol",
                     "fundingRate",
-                    "fundingTime",
-                    "markPrice"
+                    "fundingTime"
                 ],
                 "properties": {
                     "fundingRate": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "last settled 8h funding rate, dampened by the market's funding dampening multiplier"
                     },
                     "fundingTime": {
                         "type": "integer",
                         "format": "int64"
-                    },
-                    "markPrice": {
-                        "type": "string",
-                        "format": "decimal"
                     },
                     "symbol": {
                         "type": "string"
@@ -3475,15 +5260,6 @@
                         "format": "decimal"
                     }
                 }
-            },
-            "HealthState": {
-                "type": "string",
-                "description": "health state for a single component",
-                "enum": [
-                    "starting",
-                    "running",
-                    "recovering"
-                ]
             },
             "HistoricalOrder": {
                 "type": "object",
@@ -3607,6 +5383,53 @@
                     }
                 }
             },
+            "IsolatedBalance": {
+                "type": "object",
+                "required": [
+                    "symbol",
+                    "marketId",
+                    "asset",
+                    "assetId",
+                    "balance",
+                    "unsettledPerpProfit",
+                    "maxWithdrawAmount",
+                    "updateTime"
+                ],
+                "properties": {
+                    "asset": {
+                        "type": "string"
+                    },
+                    "assetId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "balance": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "marketId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "maxWithdrawAmount": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "unsettledPerpProfit": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "updateTime": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            },
             "JsonValidationErrorDetail": {
                 "type": "object",
                 "description": "One JSON shape failure: machine-readable `rule` + full serde\nmessage including line/column. Surfaced under `details` on the wire.",
@@ -3689,6 +5512,16 @@
                     }
                 }
             },
+            "LiquidationType": {
+                "type": "string",
+                "description": "`liquidation_type` values in gold_unified_liquidations",
+                "enum": [
+                    "orderbook",
+                    "backstop",
+                    "adl",
+                    "borrow_lend"
+                ]
+            },
             "ModuleRef": {
                 "type": "object",
                 "description": "Reference to a module",
@@ -3721,6 +5554,37 @@
                     "time": {
                         "type": "integer",
                         "format": "int64"
+                    }
+                }
+            },
+            "OraclePriceResponse": {
+                "type": "object",
+                "required": [
+                    "assetId",
+                    "asset",
+                    "oraclePrice"
+                ],
+                "properties": {
+                    "asset": {
+                        "type": "string"
+                    },
+                    "assetId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "lastUpdateTimestamp": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64",
+                        "description": "Oracle update time in Unix microseconds; null if no update is recorded."
+                    },
+                    "oraclePrice": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Stored oracle price, including zero for uninitialized entries."
                     }
                 }
             },
@@ -3778,6 +5642,108 @@
                         "minimum": 0
                     }
                 }
+            },
+            "OrderHistoryEntry": {
+                "type": "object",
+                "description": "unified order-history row: regular (Limit/Market) and trigger (SL/TP) merged\ninto a single time-sorted feed for the webapp Order History tab",
+                "required": [
+                    "kind",
+                    "id",
+                    "symbol",
+                    "side",
+                    "type",
+                    "status",
+                    "time",
+                    "updateTime",
+                    "txHashes",
+                    "reduceOnly",
+                    "price",
+                    "origQty",
+                    "executedQty",
+                    "avgPrice"
+                ],
+                "properties": {
+                    "avgPrice": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "executedQty": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "failureReason": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "id": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0
+                    },
+                    "kind": {
+                        "$ref": "#/components/schemas/OrderHistoryKind"
+                    },
+                    "origQty": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "price": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "reduceOnly": {
+                        "type": "boolean",
+                        "description": "hardcoded: true for SL/TP rows (TPSL legs are reduce-only by rollup invariant),\nfalse for regular rows pending rollup `Event::PlaceOrderV1`"
+                    },
+                    "side": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "NEW | PARTIALLY_FILLED | FILLED | CANCELED | EXPIRED | REJECTED | ACTIVATED | FAILED"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "time": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "triggerConditions": {
+                        "oneOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "$ref": "#/components/schemas/TriggerConditions"
+                            }
+                        ]
+                    },
+                    "txHashes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "updateTime": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            },
+            "OrderHistoryKind": {
+                "type": "string",
+                "enum": [
+                    "LIMIT",
+                    "MARKET",
+                    "SL",
+                    "TP"
+                ]
             },
             "PaginatedResponse_HistoricalOrder": {
                 "type": "object",
@@ -3877,6 +5843,256 @@
                     }
                 }
             },
+            "PaginatedResponse_OrderHistoryEntry": {
+                "type": "object",
+                "description": "paginated response wrapper with optional cursor for next page",
+                "required": [
+                    "data"
+                ],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "description": "unified order-history row: regular (Limit/Market) and trigger (SL/TP) merged\ninto a single time-sorted feed for the webapp Order History tab",
+                            "required": [
+                                "kind",
+                                "id",
+                                "symbol",
+                                "side",
+                                "type",
+                                "status",
+                                "time",
+                                "updateTime",
+                                "txHashes",
+                                "reduceOnly",
+                                "price",
+                                "origQty",
+                                "executedQty",
+                                "avgPrice"
+                            ],
+                            "properties": {
+                                "avgPrice": {
+                                    "type": "string",
+                                    "format": "decimal"
+                                },
+                                "executedQty": {
+                                    "type": "string",
+                                    "format": "decimal"
+                                },
+                                "failureReason": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                },
+                                "id": {
+                                    "type": "integer",
+                                    "format": "uint64",
+                                    "minimum": 0
+                                },
+                                "kind": {
+                                    "$ref": "#/components/schemas/OrderHistoryKind"
+                                },
+                                "origQty": {
+                                    "type": "string",
+                                    "format": "decimal"
+                                },
+                                "price": {
+                                    "type": "string",
+                                    "format": "decimal"
+                                },
+                                "reduceOnly": {
+                                    "type": "boolean",
+                                    "description": "hardcoded: true for SL/TP rows (TPSL legs are reduce-only by rollup invariant),\nfalse for regular rows pending rollup `Event::PlaceOrderV1`"
+                                },
+                                "side": {
+                                    "type": "string"
+                                },
+                                "status": {
+                                    "type": "string",
+                                    "description": "NEW | PARTIALLY_FILLED | FILLED | CANCELED | EXPIRED | REJECTED | ACTIVATED | FAILED"
+                                },
+                                "symbol": {
+                                    "type": "string"
+                                },
+                                "time": {
+                                    "type": "integer",
+                                    "format": "int64"
+                                },
+                                "triggerConditions": {
+                                    "oneOf": [
+                                        {
+                                            "type": "null"
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/TriggerConditions"
+                                        }
+                                    ]
+                                },
+                                "txHashes": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": {
+                                    "type": "string"
+                                },
+                                "updateTime": {
+                                    "type": "integer",
+                                    "format": "int64"
+                                }
+                            }
+                        }
+                    },
+                    "nextCursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "PaginatedResponse_TwapFill": {
+                "type": "object",
+                "description": "paginated response wrapper with optional cursor for next page",
+                "required": [
+                    "data"
+                ],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/components/schemas/UserTrade"
+                                },
+                                {
+                                    "type": "object",
+                                    "required": [
+                                        "twapId"
+                                    ],
+                                    "properties": {
+                                        "twapId": {
+                                            "type": "integer",
+                                            "format": "uint64",
+                                            "minimum": 0
+                                        }
+                                    }
+                                }
+                            ],
+                            "description": "Fully linked TWAP slice fill for `/fapi/v1/twapFills`."
+                        }
+                    },
+                    "nextCursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "PaginatedResponse_TwapHistoryOrder": {
+                "type": "object",
+                "description": "paginated response wrapper with optional cursor for next page",
+                "required": [
+                    "data"
+                ],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "description": "Parent TWAP lifecycle row for `/fapi/v1/twapHistory`.",
+                            "required": [
+                                "twapId",
+                                "symbol",
+                                "marketId",
+                                "side",
+                                "status",
+                                "totalSize",
+                                "executedSize",
+                                "totalDurationSeconds",
+                                "sliceCount",
+                                "reduceOnly",
+                                "createTime",
+                                "updateTime",
+                                "txHashes"
+                            ],
+                            "properties": {
+                                "createTime": {
+                                    "type": "integer",
+                                    "format": "int64"
+                                },
+                                "executedSize": {
+                                    "type": "string",
+                                    "format": "decimal"
+                                },
+                                "marketId": {
+                                    "type": "integer",
+                                    "format": "uint16",
+                                    "minimum": 0
+                                },
+                                "reduceOnly": {
+                                    "type": "boolean"
+                                },
+                                "rejectionReason": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                },
+                                "side": {
+                                    "type": "string"
+                                },
+                                "sliceCount": {
+                                    "type": "integer",
+                                    "format": "uint64",
+                                    "minimum": 0
+                                },
+                                "status": {
+                                    "type": "string",
+                                    "description": "NEW | COMPLETED | REJECTED | CANCELED"
+                                },
+                                "symbol": {
+                                    "type": "string"
+                                },
+                                "totalDurationSeconds": {
+                                    "type": "integer",
+                                    "format": "uint64",
+                                    "minimum": 0
+                                },
+                                "totalSize": {
+                                    "type": "string",
+                                    "format": "decimal"
+                                },
+                                "twapId": {
+                                    "type": "integer",
+                                    "format": "uint64",
+                                    "minimum": 0
+                                },
+                                "txHashes": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "updateTime": {
+                                    "type": "integer",
+                                    "format": "int64"
+                                }
+                            }
+                        }
+                    },
+                    "nextCursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
             "PaginatedResponse_UserDeposit": {
                 "type": "object",
                 "description": "paginated response wrapper with optional cursor for next page",
@@ -3892,17 +6108,12 @@
                                 "asset",
                                 "assetId",
                                 "amount",
-                                "amountNotional",
                                 "txHash",
                                 "eventNumber",
                                 "time"
                             ],
                             "properties": {
                                 "amount": {
-                                    "type": "string",
-                                    "format": "decimal"
-                                },
-                                "amountNotional": {
                                     "type": "string",
                                     "format": "decimal"
                                 },
@@ -4005,61 +6216,137 @@
                         "items": {
                             "type": "object",
                             "required": [
-                                "symbol",
+                                "liquidationType",
                                 "liquidateeAddress",
-                                "liquidatorAddress",
-                                "marketId",
-                                "markPrice",
+                                "price",
                                 "size",
-                                "side",
-                                "liquidatorReward",
-                                "realizedPnl",
                                 "txHash",
                                 "eventNumber",
                                 "time"
                             ],
                             "properties": {
+                                "borrowLend": {
+                                    "oneOf": [
+                                        {
+                                            "type": "null"
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/BorrowLendLiquidation",
+                                            "description": "`borrow_lend` only, null otherwise"
+                                        }
+                                    ]
+                                },
                                 "eventNumber": {
                                     "type": "integer",
                                     "format": "uint64",
                                     "minimum": 0
                                 },
+                                "fee": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "decimal",
+                                    "description": "null unless `orderbook` or `adl`"
+                                },
+                                "isMaker": {
+                                    "type": [
+                                        "boolean",
+                                        "null"
+                                    ],
+                                    "description": "`adl` only"
+                                },
                                 "liquidateeAddress": {
                                     "type": "string"
                                 },
+                                "liquidationType": {
+                                    "$ref": "#/components/schemas/LiquidationType"
+                                },
                                 "liquidatorAddress": {
-                                    "type": "string"
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "null for `orderbook` and `adl`"
                                 },
                                 "liquidatorReward": {
-                                    "type": "string",
-                                    "format": "decimal"
-                                },
-                                "markPrice": {
-                                    "type": "string",
-                                    "format": "decimal"
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "decimal",
+                                    "description": "null unless `backstop` or `borrow_lend`"
                                 },
                                 "marketId": {
-                                    "type": "integer",
+                                    "type": [
+                                        "integer",
+                                        "null"
+                                    ],
                                     "format": "uint16",
+                                    "description": "null for `borrow_lend`",
                                     "minimum": 0
                                 },
-                                "realizedPnl": {
+                                "orderId": {
+                                    "type": [
+                                        "integer",
+                                        "null"
+                                    ],
+                                    "format": "uint64",
+                                    "description": "null unless `orderbook` or `adl`",
+                                    "minimum": 0
+                                },
+                                "price": {
                                     "type": "string",
-                                    "format": "decimal"
+                                    "format": "decimal",
+                                    "description": "fill price; mark price for `backstop`; liability oracle price for `borrow_lend`"
+                                },
+                                "protocolReward": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "decimal",
+                                    "description": "null unless `backstop` or `borrow_lend`"
+                                },
+                                "realizedPnl": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "decimal",
+                                    "description": "null for `borrow_lend`"
                                 },
                                 "side": {
-                                    "type": "string"
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "`BUY`/`SELL`; null for `borrow_lend`"
                                 },
                                 "size": {
                                     "type": "string",
-                                    "format": "decimal"
+                                    "format": "decimal",
+                                    "description": "fill size; position size for `backstop`; liability size for `borrow_lend`"
                                 },
                                 "symbol": {
-                                    "type": "string"
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "null for `borrow_lend`"
                                 },
                                 "time": {
                                     "type": "integer",
                                     "format": "int64"
+                                },
+                                "tradeId": {
+                                    "type": [
+                                        "integer",
+                                        "null"
+                                    ],
+                                    "format": "uint64",
+                                    "description": "null unless `orderbook` or `adl`",
+                                    "minimum": 0
                                 },
                                 "txHash": {
                                     "type": "string"
@@ -4182,6 +6469,91 @@
                     }
                 }
             },
+            "PaginatedResponse_UserTransfer": {
+                "type": "object",
+                "description": "paginated response wrapper with optional cursor for next page",
+                "required": [
+                    "data"
+                ],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "description": "user transfer ledger entry",
+                            "required": [
+                                "action",
+                                "asset",
+                                "assetId",
+                                "amount",
+                                "fee",
+                                "shares",
+                                "from",
+                                "to",
+                                "memo",
+                                "txHash",
+                                "eventNumber",
+                                "time"
+                            ],
+                            "properties": {
+                                "action": {
+                                    "type": "string",
+                                    "description": "`DEPOSIT`, `WITHDRAWAL`, `TRANSFER` (own buckets), `SEND` (another account or\nwallet), `VAULT_DEPOSIT`, `VAULT_WITHDRAWAL`, `BRIDGE_IN` or `BRIDGE_OUT`"
+                                },
+                                "amount": {
+                                    "type": "string",
+                                    "format": "decimal"
+                                },
+                                "asset": {
+                                    "type": "string"
+                                },
+                                "assetId": {
+                                    "type": "integer",
+                                    "format": "uint16",
+                                    "minimum": 0
+                                },
+                                "eventNumber": {
+                                    "type": "integer",
+                                    "format": "uint64",
+                                    "minimum": 0
+                                },
+                                "fee": {
+                                    "type": "string",
+                                    "format": "decimal"
+                                },
+                                "from": {
+                                    "$ref": "#/components/schemas/TransferEndpoint"
+                                },
+                                "memo": {
+                                    "type": "string"
+                                },
+                                "shares": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "vault shares minted or burned, zero outside vault movements"
+                                },
+                                "time": {
+                                    "type": "integer",
+                                    "format": "int64",
+                                    "description": "microseconds. Chain execution time, except bridge and wallet send rows whose\nevents carry no chain time and report the indexing time instead"
+                                },
+                                "to": {
+                                    "$ref": "#/components/schemas/TransferEndpoint"
+                                },
+                                "txHash": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "nextCursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
             "PaginatedResponse_UserWithdrawal": {
                 "type": "object",
                 "description": "paginated response wrapper with optional cursor for next page",
@@ -4197,7 +6569,6 @@
                                 "asset",
                                 "assetId",
                                 "amount",
-                                "amountNotional",
                                 "fee",
                                 "txHash",
                                 "eventNumber",
@@ -4205,10 +6576,6 @@
                             ],
                             "properties": {
                                 "amount": {
-                                    "type": "string",
-                                    "format": "decimal"
-                                },
-                                "amountNotional": {
                                     "type": "string",
                                     "format": "decimal"
                                 },
@@ -4279,6 +6646,158 @@
                     }
                 }
             },
+            "PerpPosition": {
+                "type": "object",
+                "required": [
+                    "symbol",
+                    "marketId",
+                    "tradingMode",
+                    "userSelectedMaxLeverage",
+                    "liquidationPrice",
+                    "position",
+                    "notionalOpenBidOrders",
+                    "notionalOpenAskOrders"
+                ],
+                "properties": {
+                    "liquidationPrice": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "marketId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "notionalOpenAskOrders": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "notionalOpenBidOrders": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "position": {
+                        "$ref": "#/components/schemas/PerpPositionDetail"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "tradingMode": {
+                        "type": "string"
+                    },
+                    "userSelectedMaxLeverage": {
+                        "type": "integer",
+                        "format": "int32",
+                        "minimum": 0
+                    }
+                }
+            },
+            "PerpPositionDetail": {
+                "type": "object",
+                "required": [
+                    "size",
+                    "costOfTrades",
+                    "realizedPnl",
+                    "cachedMarkPrice",
+                    "fundingPaymentsOnSide",
+                    "fundingPaymentsOnPosition"
+                ],
+                "properties": {
+                    "cachedMarkPrice": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "costOfTrades": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "fundingPaymentsOnPosition": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "fundingPaymentsOnSide": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "realizedPnl": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "size": {
+                        "type": "string",
+                        "format": "decimal"
+                    }
+                }
+            },
+            "PerpTriggerOrder": {
+                "type": "object",
+                "required": [
+                    "triggerOrderId",
+                    "symbol",
+                    "marketId",
+                    "side",
+                    "triggerDirection",
+                    "priceCondition",
+                    "orderType",
+                    "triggerPrice",
+                    "orderPrice",
+                    "lastUpdateTimestamp"
+                ],
+                "properties": {
+                    "lastUpdateTimestamp": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "linkedTriggerOrderId": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64",
+                        "minimum": 0
+                    },
+                    "marketId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "orderPrice": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "orderType": {
+                        "type": "string"
+                    },
+                    "priceCondition": {
+                        "type": "string"
+                    },
+                    "side": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "triggerDirection": {
+                        "type": "string"
+                    },
+                    "triggerOrderId": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    },
+                    "triggerPrice": {
+                        "type": "string",
+                        "format": "decimal"
+                    }
+                }
+            },
             "PingResponse": {
                 "type": "object"
             },
@@ -4299,7 +6818,7 @@
                     "estimatedFundingRate": {
                         "type": "string",
                         "format": "decimal",
-                        "description": "pre-computed estimated 1h funding rate (8h rate ÷ 8) from current premium index accumulator"
+                        "description": "pre-computed estimated 1h funding rate (dampened 8h rate ÷ 8) from current premium index\naccumulator"
                     },
                     "indexPrice": {
                         "type": "string",
@@ -4307,12 +6826,13 @@
                     },
                     "interestRate": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "interest rate component of the funding formula, on the undampened 8h basis"
                     },
                     "lastFundingRate": {
                         "type": "string",
                         "format": "decimal",
-                        "description": "funding rate for 8h period"
+                        "description": "funding rate for 8h period, dampened by the market's funding dampening multiplier"
                     },
                     "markPrice": {
                         "type": "string",
@@ -4382,7 +6902,7 @@
             "RateParams": {
                 "type": "object",
                 "required": [
-                    "optimal_utilisation_rate",
+                    "optimal_utilization_rate",
                     "min_borrow_rate",
                     "optimal_borrow_rate",
                     "max_borrow_rate"
@@ -4400,31 +6920,22 @@
                         "type": "string",
                         "format": "decimal"
                     },
-                    "optimal_utilisation_rate": {
+                    "optimal_utilization_rate": {
                         "type": "string",
                         "format": "decimal"
                     }
                 }
             },
-            "ReadinessStatus": {
+            "RevertOutcome": {
                 "type": "object",
-                "description": "readiness response returned by /health/ready",
+                "description": "Reverted simulation outcome.",
                 "required": [
-                    "ready",
-                    "components"
+                    "detail"
                 ],
                 "properties": {
-                    "components": {
+                    "detail": {
                         "type": "object",
-                        "additionalProperties": {
-                            "$ref": "#/components/schemas/HealthState"
-                        },
-                        "propertyNames": {
-                            "type": "string"
-                        }
-                    },
-                    "ready": {
-                        "type": "boolean"
+                        "description": "Structured detail about the revert (`ErrorContext`, an arbitrary JSON object)"
                     }
                 }
             },
@@ -4457,6 +6968,147 @@
                         "type": "integer",
                         "format": "uint64",
                         "minimum": 0
+                    }
+                }
+            },
+            "SequencerParameter": {
+                "type": "object",
+                "description": "Optional sequencer configuration for a simulation request.",
+                "properties": {
+                    "da_address": {
+                        "type": "string",
+                        "description": "Custom data availability address for the sequencer"
+                    },
+                    "rollup_address": {
+                        "type": "string",
+                        "description": "Custom rollup address for the sequencer"
+                    }
+                }
+            },
+            "SimulateOutcome": {
+                "oneOf": [
+                    {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/SuccessOutcome",
+                                "description": "The transaction executed successfully."
+                            },
+                            {
+                                "type": "object",
+                                "required": [
+                                    "outcome"
+                                ],
+                                "properties": {
+                                    "outcome": {
+                                        "type": "string",
+                                        "enum": [
+                                            "success"
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        "description": "The transaction executed successfully."
+                    },
+                    {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RevertOutcome",
+                                "description": "The transaction reverted during execution."
+                            },
+                            {
+                                "type": "object",
+                                "required": [
+                                    "outcome"
+                                ],
+                                "properties": {
+                                    "outcome": {
+                                        "type": "string",
+                                        "enum": [
+                                            "reverted"
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        "description": "The transaction reverted during execution."
+                    },
+                    {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/FailOutcome",
+                                "description": "The transaction was skipped due to pre-execution errors."
+                            },
+                            {
+                                "type": "object",
+                                "required": [
+                                    "outcome"
+                                ],
+                                "properties": {
+                                    "outcome": {
+                                        "type": "string",
+                                        "enum": [
+                                            "skipped"
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        "description": "The transaction was skipped due to pre-execution errors."
+                    }
+                ],
+                "description": "Outcome of a transaction simulation.\n\nDiscriminated on `outcome`, mirroring the sequencer's `SimulateOutcome`\n(`sov-rollup-apis`): `success` / `reverted` / `skipped`."
+            },
+            "SimulateParameters": {
+                "type": "object",
+                "description": "Parameters for a transaction simulation request.\n\nMirrors the sequencer's `SimulateParameters`. Documentation-only: like\n`/tx/submit`, the handler forwards the raw body, so this type is not\ndeserialized in-process.",
+                "required": [
+                    "sender",
+                    "call"
+                ],
+                "properties": {
+                    "call": {
+                        "type": "object",
+                        "description": "The runtime call to simulate, provided as JSON"
+                    },
+                    "sender": {
+                        "type": "string",
+                        "description": "The credential ID of the transaction sender"
+                    },
+                    "sequencer": {
+                        "$ref": "#/components/schemas/SequencerParameter",
+                        "description": "Optional sequencer configuration"
+                    },
+                    "tx_details": {
+                        "$ref": "#/components/schemas/TxDetailsParameter",
+                        "description": "Optional transaction details (gas limit, fees)"
+                    },
+                    "uniqueness": {
+                        "type": "object",
+                        "description": "Optional uniqueness data for the transaction"
+                    }
+                }
+            },
+            "SimulatedEvent": {
+                "type": "object",
+                "description": "An event emitted during transaction simulation.",
+                "required": [
+                    "value",
+                    "key",
+                    "module"
+                ],
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "The event key"
+                    },
+                    "module": {
+                        "type": "string",
+                        "description": "The module that emitted the event"
+                    },
+                    "value": {
+                        "type": "object",
+                        "description": "The event data (arbitrary JSON)"
                     }
                 }
             },
@@ -4517,6 +7169,32 @@
                         "format": "uint64",
                         "description": "Transaction number (if processed)",
                         "minimum": 0
+                    }
+                }
+            },
+            "SuccessOutcome": {
+                "type": "object",
+                "description": "Successful simulation outcome.",
+                "required": [
+                    "gas_used",
+                    "priority_fee",
+                    "events"
+                ],
+                "properties": {
+                    "events": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SimulatedEvent"
+                        },
+                        "description": "Events emitted during execution"
+                    },
+                    "gas_used": {
+                        "type": "string",
+                        "description": "Gas consumed by the transaction (gas-token amount, as a decimal string)"
+                    },
+                    "priority_fee": {
+                        "type": "string",
+                        "description": "Priority fee paid (gas-token amount, as a decimal string)"
                     }
                 }
             },
@@ -4663,6 +7341,35 @@
                         }
                     },
                     "underlyingType": {
+                        "type": "string"
+                    }
+                }
+            },
+            "SymbolConfig": {
+                "type": "object",
+                "required": [
+                    "symbol",
+                    "marginType",
+                    "isAutoAddMargin",
+                    "leverage",
+                    "maxNotionalValue"
+                ],
+                "properties": {
+                    "isAutoAddMargin": {
+                        "type": "boolean"
+                    },
+                    "leverage": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "marginType": {
+                        "type": "string"
+                    },
+                    "maxNotionalValue": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "symbol": {
                         "type": "string"
                     }
                 }
@@ -4826,6 +7533,259 @@
                     }
                 }
             },
+            "TransferEndpoint": {
+                "type": "object",
+                "description": "one side of a user transfer",
+                "required": [
+                    "bucket"
+                ],
+                "properties": {
+                    "address": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "account or wallet address, absent for the remote side of a bridge movement"
+                    },
+                    "bucket": {
+                        "type": "string",
+                        "description": "`BANK` (wallet), `CROSS`, `SPOT`, `ISO`, `VAULT` or `BRIDGE` (remote chain)"
+                    },
+                    "symbol": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "market symbol when `bucket` is `ISO`"
+                    },
+                    "vaultName": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "vault name when `bucket` is `VAULT` and the vault is known"
+                    }
+                }
+            },
+            "TriggerConditions": {
+                "type": "object",
+                "required": [
+                    "triggerPrice",
+                    "workingType",
+                    "direction",
+                    "coverage"
+                ],
+                "properties": {
+                    "coverage": {
+                        "type": "string",
+                        "description": "FULL if rollup `size` was NULL (close-position trigger), else PARTIAL"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "description": "ABOVE | BELOW"
+                    },
+                    "triggerPrice": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "workingType": {
+                        "type": "string",
+                        "description": "MARK_PRICE | ORACLE_PRICE | LAST_PRICE — preserves rollup granularity\n(see compat_helpers::trigger_price_condition_display)"
+                    }
+                }
+            },
+            "TwapFill": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/UserTrade"
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "twapId"
+                        ],
+                        "properties": {
+                            "twapId": {
+                                "type": "integer",
+                                "format": "uint64",
+                                "minimum": 0
+                            }
+                        }
+                    }
+                ],
+                "description": "Fully linked TWAP slice fill for `/fapi/v1/twapFills`."
+            },
+            "TwapHistoryOrder": {
+                "type": "object",
+                "description": "Parent TWAP lifecycle row for `/fapi/v1/twapHistory`.",
+                "required": [
+                    "twapId",
+                    "symbol",
+                    "marketId",
+                    "side",
+                    "status",
+                    "totalSize",
+                    "executedSize",
+                    "totalDurationSeconds",
+                    "sliceCount",
+                    "reduceOnly",
+                    "createTime",
+                    "updateTime",
+                    "txHashes"
+                ],
+                "properties": {
+                    "createTime": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "executedSize": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "marketId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "reduceOnly": {
+                        "type": "boolean"
+                    },
+                    "rejectionReason": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "side": {
+                        "type": "string"
+                    },
+                    "sliceCount": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "NEW | COMPLETED | REJECTED | CANCELED"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "totalDurationSeconds": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0
+                    },
+                    "totalSize": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "twapId": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0
+                    },
+                    "txHashes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "updateTime": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            },
+            "TwapOrder": {
+                "type": "object",
+                "required": [
+                    "twapId",
+                    "symbol",
+                    "marketId",
+                    "side",
+                    "totalOrders",
+                    "executedOrders",
+                    "totalSize",
+                    "executedSize",
+                    "totalDurationSeconds",
+                    "costOfTrade",
+                    "reduceOnly"
+                ],
+                "properties": {
+                    "costOfTrade": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "executedOrders": {
+                        "type": "integer",
+                        "format": "int32",
+                        "minimum": 0
+                    },
+                    "executedSize": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "marketId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "reduceOnly": {
+                        "type": "boolean"
+                    },
+                    "side": {
+                        "type": "string"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "totalDurationSeconds": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    },
+                    "totalOrders": {
+                        "type": "integer",
+                        "format": "int32",
+                        "minimum": 0
+                    },
+                    "totalSize": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "twapId": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    }
+                }
+            },
+            "TxDetailsParameter": {
+                "type": "object",
+                "description": "Optional transaction details for a simulation request.",
+                "properties": {
+                    "gas_limit": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 0
+                        },
+                        "description": "Gas limit for the transaction, as an array of u64 values"
+                    },
+                    "max_fee": {
+                        "type": "string",
+                        "description": "Maximum fee the sender is willing to pay"
+                    },
+                    "max_priority_fee_bips": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "description": "Maximum priority fee in basis points",
+                        "minimum": 0
+                    }
+                }
+            },
             "TxReceipt": {
                 "type": "object",
                 "description": "Transaction receipt",
@@ -4866,17 +7826,12 @@
                     "asset",
                     "assetId",
                     "amount",
-                    "amountNotional",
                     "txHash",
                     "eventNumber",
                     "time"
                 ],
                 "properties": {
                     "amount": {
-                        "type": "string",
-                        "format": "decimal"
-                    },
-                    "amountNotional": {
                         "type": "string",
                         "format": "decimal"
                     },
@@ -4943,61 +7898,137 @@
             "UserLiquidation": {
                 "type": "object",
                 "required": [
-                    "symbol",
+                    "liquidationType",
                     "liquidateeAddress",
-                    "liquidatorAddress",
-                    "marketId",
-                    "markPrice",
+                    "price",
                     "size",
-                    "side",
-                    "liquidatorReward",
-                    "realizedPnl",
                     "txHash",
                     "eventNumber",
                     "time"
                 ],
                 "properties": {
+                    "borrowLend": {
+                        "oneOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "$ref": "#/components/schemas/BorrowLendLiquidation",
+                                "description": "`borrow_lend` only, null otherwise"
+                            }
+                        ]
+                    },
                     "eventNumber": {
                         "type": "integer",
                         "format": "uint64",
                         "minimum": 0
                     },
+                    "fee": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "null unless `orderbook` or `adl`"
+                    },
+                    "isMaker": {
+                        "type": [
+                            "boolean",
+                            "null"
+                        ],
+                        "description": "`adl` only"
+                    },
                     "liquidateeAddress": {
                         "type": "string"
                     },
+                    "liquidationType": {
+                        "$ref": "#/components/schemas/LiquidationType"
+                    },
                     "liquidatorAddress": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "null for `orderbook` and `adl`"
                     },
                     "liquidatorReward": {
-                        "type": "string",
-                        "format": "decimal"
-                    },
-                    "markPrice": {
-                        "type": "string",
-                        "format": "decimal"
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "null unless `backstop` or `borrow_lend`"
                     },
                     "marketId": {
-                        "type": "integer",
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
                         "format": "uint16",
+                        "description": "null for `borrow_lend`",
                         "minimum": 0
                     },
-                    "realizedPnl": {
+                    "orderId": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "uint64",
+                        "description": "null unless `orderbook` or `adl`",
+                        "minimum": 0
+                    },
+                    "price": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "fill price; mark price for `backstop`; liability oracle price for `borrow_lend`"
+                    },
+                    "protocolReward": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "null unless `backstop` or `borrow_lend`"
+                    },
+                    "realizedPnl": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "null for `borrow_lend`"
                     },
                     "side": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "`BUY`/`SELL`; null for `borrow_lend`"
                     },
                     "size": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "fill size; position size for `backstop`; liability size for `borrow_lend`"
                     },
                     "symbol": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "null for `borrow_lend`"
                     },
                     "time": {
                         "type": "integer",
                         "format": "int64"
+                    },
+                    "tradeId": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "uint64",
+                        "description": "null unless `orderbook` or `adl`",
+                        "minimum": 0
                     },
                     "txHash": {
                         "type": "string"
@@ -5093,13 +8124,79 @@
                     }
                 }
             },
+            "UserTransfer": {
+                "type": "object",
+                "description": "user transfer ledger entry",
+                "required": [
+                    "action",
+                    "asset",
+                    "assetId",
+                    "amount",
+                    "fee",
+                    "shares",
+                    "from",
+                    "to",
+                    "memo",
+                    "txHash",
+                    "eventNumber",
+                    "time"
+                ],
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "`DEPOSIT`, `WITHDRAWAL`, `TRANSFER` (own buckets), `SEND` (another account or\nwallet), `VAULT_DEPOSIT`, `VAULT_WITHDRAWAL`, `BRIDGE_IN` or `BRIDGE_OUT`"
+                    },
+                    "amount": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "asset": {
+                        "type": "string"
+                    },
+                    "assetId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "eventNumber": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0
+                    },
+                    "fee": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "from": {
+                        "$ref": "#/components/schemas/TransferEndpoint"
+                    },
+                    "memo": {
+                        "type": "string"
+                    },
+                    "shares": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "vault shares minted or burned, zero outside vault movements"
+                    },
+                    "time": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "microseconds. Chain execution time, except bridge and wallet send rows whose\nevents carry no chain time and report the indexing time instead"
+                    },
+                    "to": {
+                        "$ref": "#/components/schemas/TransferEndpoint"
+                    },
+                    "txHash": {
+                        "type": "string"
+                    }
+                }
+            },
             "UserWithdrawal": {
                 "type": "object",
                 "required": [
                     "asset",
                     "assetId",
                     "amount",
-                    "amountNotional",
                     "fee",
                     "txHash",
                     "eventNumber",
@@ -5107,10 +8204,6 @@
                 ],
                 "properties": {
                     "amount": {
-                        "type": "string",
-                        "format": "decimal"
-                    },
-                    "amountNotional": {
                         "type": "string",
                         "format": "decimal"
                     },
@@ -5140,354 +8233,346 @@
                     }
                 }
             },
-            "SimulateParameters": {
+            "Vault": {
                 "type": "object",
-                "description": "Parameters for a transaction simulation request.\n\nMirrors the sequencer's `SimulateParameters`. Documentation-only: like\n`/tx/submit`, the handler forwards the raw body, so this type is not\ndeserialized in-process.",
                 "required": [
-                    "sender",
-                    "call"
+                    "address",
+                    "leader",
+                    "name",
+                    "description",
+                    "depositAssetIds",
+                    "withdrawAssetId",
+                    "depositLimit",
+                    "withdrawLockupPeriodHours",
+                    "profitSharePercentage",
+                    "withdrawalFeeBps",
+                    "totalShares",
+                    "highWatermark",
+                    "queuedWithdrawals",
+                    "whitelistedDepositors"
                 ],
                 "properties": {
-                    "call": {
-                        "type": "object",
-                        "description": "The runtime call to simulate, provided as JSON"
+                    "address": {
+                        "type": "string"
                     },
-                    "sender": {
-                        "type": "string",
-                        "description": "The credential ID of the transaction sender"
-                    },
-                    "sequencer": {
-                        "$ref": "#/components/schemas/SequencerParameter",
-                        "description": "Optional sequencer configuration"
-                    },
-                    "tx_details": {
-                        "$ref": "#/components/schemas/TxDetailsParameter",
-                        "description": "Optional transaction details (gas limit, fees)"
-                    },
-                    "uniqueness": {
-                        "type": "object",
-                        "description": "Optional uniqueness data for the transaction"
-                    }
-                }
-            },
-            "SimulateOutcome": {
-                "oneOf": [
-                    {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/SuccessOutcome",
-                                "description": "The transaction executed successfully."
-                            },
-                            {
-                                "type": "object",
-                                "required": [
-                                    "outcome"
-                                ],
-                                "properties": {
-                                    "outcome": {
-                                        "type": "string",
-                                        "enum": [
-                                            "success"
-                                        ]
-                                    }
-                                }
-                            }
-                        ],
-                        "description": "The transaction executed successfully."
-                    },
-                    {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/RevertOutcome",
-                                "description": "The transaction reverted during execution."
-                            },
-                            {
-                                "type": "object",
-                                "required": [
-                                    "outcome"
-                                ],
-                                "properties": {
-                                    "outcome": {
-                                        "type": "string",
-                                        "enum": [
-                                            "reverted"
-                                        ]
-                                    }
-                                }
-                            }
-                        ],
-                        "description": "The transaction reverted during execution."
-                    },
-                    {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/FailOutcome",
-                                "description": "The transaction was skipped due to pre-execution errors."
-                            },
-                            {
-                                "type": "object",
-                                "required": [
-                                    "outcome"
-                                ],
-                                "properties": {
-                                    "outcome": {
-                                        "type": "string",
-                                        "enum": [
-                                            "skipped"
-                                        ]
-                                    }
-                                }
-                            }
-                        ],
-                        "description": "The transaction was skipped due to pre-execution errors."
-                    }
-                ],
-                "description": "Outcome of a transaction simulation.\n\nDiscriminated on `outcome`, mirroring the sequencer's `SimulateOutcome`\n(`sov-rollup-apis`): `success` / `reverted` / `skipped`."
-            },
-            "SuccessOutcome": {
-                "type": "object",
-                "description": "Successful simulation outcome.",
-                "required": [
-                    "gas_used",
-                    "priority_fee",
-                    "events"
-                ],
-                "properties": {
-                    "events": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/SimulatedEvent"
-                        },
-                        "description": "Events emitted during execution"
-                    },
-                    "gas_used": {
-                        "type": "string",
-                        "description": "Gas consumed by the transaction (gas-token amount, as a decimal string)"
-                    },
-                    "priority_fee": {
-                        "type": "string",
-                        "description": "Priority fee paid (gas-token amount, as a decimal string)"
-                    }
-                }
-            },
-            "RevertOutcome": {
-                "type": "object",
-                "description": "Reverted simulation outcome.",
-                "required": [
-                    "detail"
-                ],
-                "properties": {
-                    "detail": {
-                        "type": "object",
-                        "description": "Structured detail about the revert (`ErrorContext`, an arbitrary JSON object)"
-                    }
-                }
-            },
-            "FailOutcome": {
-                "type": "object",
-                "description": "Skipped simulation outcome.",
-                "required": [
-                    "reason"
-                ],
-                "properties": {
-                    "reason": {
-                        "type": "string",
-                        "description": "The reason the transaction was skipped"
-                    }
-                }
-            },
-            "SimulatedEvent": {
-                "type": "object",
-                "description": "An event emitted during transaction simulation.",
-                "required": [
-                    "value",
-                    "key",
-                    "module"
-                ],
-                "properties": {
-                    "key": {
-                        "type": "string",
-                        "description": "The event key"
-                    },
-                    "module": {
-                        "type": "string",
-                        "description": "The module that emitted the event"
-                    },
-                    "value": {
-                        "type": "object",
-                        "description": "The event data (arbitrary JSON)"
-                    }
-                }
-            },
-            "SequencerParameter": {
-                "type": "object",
-                "description": "Optional sequencer configuration for a simulation request.",
-                "properties": {
-                    "da_address": {
-                        "type": "string",
-                        "description": "Custom data availability address for the sequencer"
-                    },
-                    "rollup_address": {
-                        "type": "string",
-                        "description": "Custom rollup address for the sequencer"
-                    }
-                }
-            },
-            "TxDetailsParameter": {
-                "type": "object",
-                "description": "Optional transaction details for a simulation request.",
-                "properties": {
-                    "gas_limit": {
+                    "depositAssetIds": {
                         "type": "array",
                         "items": {
                             "type": "integer",
-                            "format": "int64",
+                            "format": "int32",
                             "minimum": 0
-                        },
-                        "description": "Gas limit for the transaction, as an array of u64 values"
+                        }
                     },
-                    "max_fee": {
+                    "depositLimit": {
                         "type": "string",
-                        "description": "Maximum fee the sender is willing to pay"
+                        "format": "decimal"
                     },
-                    "max_priority_fee_bips": {
+                    "description": {
+                        "type": "string"
+                    },
+                    "highWatermark": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "leader": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "profitSharePercentage": {
                         "type": "integer",
-                        "format": "uint64",
-                        "description": "Maximum priority fee in basis points",
+                        "format": "int32",
+                        "minimum": 0
+                    },
+                    "queuedWithdrawals": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/VaultQueuedWithdrawal"
+                        }
+                    },
+                    "totalShares": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "whitelistedDepositors": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "withdrawAssetId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "withdrawLockupPeriodHours": {
+                        "type": "integer",
+                        "format": "int32",
+                        "minimum": 0
+                    },
+                    "withdrawalFeeBps": {
+                        "type": "integer",
+                        "format": "int32",
                         "minimum": 0
                     }
                 }
             },
-            "Filter": {
+            "VaultDepositorSharesResponse": {
+                "type": "object",
+                "required": [
+                    "address",
+                    "shares"
+                ],
+                "properties": {
+                    "address": {
+                        "type": "string"
+                    },
+                    "shares": {
+                        "type": "object"
+                    }
+                }
+            },
+            "VaultEquityResponse": {
+                "type": "object",
+                "required": [
+                    "address",
+                    "totalEquity",
+                    "vaults"
+                ],
+                "properties": {
+                    "address": {
+                        "type": "string"
+                    },
+                    "totalEquity": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "vaults": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/VaultPositionEquity"
+                        }
+                    }
+                }
+            },
+            "VaultPositionEquity": {
+                "type": "object",
+                "required": [
+                    "vaultAddress",
+                    "shares",
+                    "equity"
+                ],
+                "properties": {
+                    "equity": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "shares": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "held plus queued for withdrawal"
+                    },
+                    "vaultAddress": {
+                        "type": "string"
+                    }
+                }
+            },
+            "VaultQueuedWithdrawal": {
+                "type": "object",
+                "required": [
+                    "user",
+                    "shares",
+                    "timestamp"
+                ],
+                "properties": {
+                    "shares": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "timestamp": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "user": {
+                        "type": "string"
+                    }
+                }
+            },
+            "VaultsResponse": {
+                "type": "object",
+                "required": [
+                    "items"
+                ],
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Vault"
+                        }
+                    },
+                    "nextCursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "WarpRouteAsset": {
+                "type": "object",
+                "required": [
+                    "symbol",
+                    "assetId"
+                ],
+                "properties": {
+                    "assetId": {
+                        "type": "integer",
+                        "format": "int32",
+                        "minimum": 0
+                    },
+                    "symbol": {
+                        "type": "string"
+                    }
+                }
+            },
+            "WarpRouteResponse": {
+                "type": "object",
+                "required": [
+                    "routeId",
+                    "tokenSource",
+                    "enrolledDestinations"
+                ],
+                "properties": {
+                    "asset": {
+                        "oneOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "$ref": "#/components/schemas/WarpRouteAsset"
+                            }
+                        ]
+                    },
+                    "enrolledDestinations": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "format": "int32",
+                            "minimum": 0
+                        }
+                    },
+                    "routeId": {
+                        "type": "string"
+                    },
+                    "tokenSource": {
+                        "$ref": "#/components/schemas/WarpRouteTokenSource"
+                    }
+                }
+            },
+            "WarpRouteTokenSource": {
                 "oneOf": [
                     {
                         "type": "object",
                         "required": [
-                            "tickSize",
-                            "minPrice",
-                            "maxPrice",
-                            "filterType"
+                            "localTokenId",
+                            "remoteTokenId",
+                            "localDecimals",
+                            "remoteDecimals",
+                            "type"
                         ],
                         "properties": {
-                            "filterType": {
-                                "type": "string",
-                                "enum": [
-                                    "PRICE_FILTER"
-                                ]
-                            },
-                            "maxPrice": {
-                                "type": "string",
-                                "format": "decimal"
-                            },
-                            "minPrice": {
-                                "type": "string",
-                                "format": "decimal"
-                            },
-                            "tickSize": {
-                                "type": "string",
-                                "format": "decimal"
-                            }
-                        }
-                    },
-                    {
-                        "type": "object",
-                        "required": [
-                            "stepSize",
-                            "minQty",
-                            "maxQty",
-                            "filterType"
-                        ],
-                        "properties": {
-                            "filterType": {
-                                "type": "string",
-                                "enum": [
-                                    "LOT_SIZE"
-                                ]
-                            },
-                            "maxQty": {
-                                "type": "string",
-                                "format": "decimal"
-                            },
-                            "minQty": {
-                                "type": "string",
-                                "format": "decimal"
-                            },
-                            "stepSize": {
-                                "type": "string",
-                                "format": "decimal"
-                            }
-                        }
-                    },
-                    {
-                        "type": "object",
-                        "required": [
-                            "limit",
-                            "filterType"
-                        ],
-                        "properties": {
-                            "filterType": {
-                                "type": "string",
-                                "enum": [
-                                    "MAX_NUM_ORDERS"
-                                ]
-                            },
-                            "limit": {
+                            "localDecimals": {
                                 "type": "integer",
-                                "format": "uint16",
+                                "format": "int32",
                                 "minimum": 0
-                            }
-                        }
-                    },
-                    {
-                        "type": "object",
-                        "required": [
-                            "limit",
-                            "filterType"
-                        ],
-                        "properties": {
-                            "filterType": {
-                                "type": "string",
-                                "enum": [
-                                    "MAX_NUM_ALGO_ORDERS"
-                                ]
                             },
-                            "limit": {
-                                "type": "integer",
-                                "format": "uint16",
-                                "minimum": 0
-                            }
-                        }
-                    },
-                    {
-                        "type": "object",
-                        "required": [
-                            "multiplierUp",
-                            "multiplierDown",
-                            "multiplierDecimal",
-                            "filterType"
-                        ],
-                        "properties": {
-                            "filterType": {
-                                "type": "string",
-                                "enum": [
-                                    "PERCENT_PRICE"
-                                ]
-                            },
-                            "multiplierDecimal": {
+                            "localTokenId": {
                                 "type": "string"
                             },
-                            "multiplierDown": {
-                                "type": "string",
-                                "format": "decimal"
+                            "remoteDecimals": {
+                                "type": "integer",
+                                "format": "int32",
+                                "minimum": 0
                             },
-                            "multiplierUp": {
+                            "remoteTokenId": {
+                                "type": "string"
+                            },
+                            "type": {
                                 "type": "string",
-                                "format": "decimal"
+                                "enum": [
+                                    "synthetic"
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "localTokenId",
+                            "type"
+                        ],
+                        "properties": {
+                            "localTokenId": {
+                                "type": "string"
+                            },
+                            "type": {
+                                "type": "string",
+                                "enum": [
+                                    "collateral"
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "type"
+                        ],
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": [
+                                    "native"
+                                ]
                             }
                         }
                     }
                 ]
+            },
+            "WarpRoutesResponse": {
+                "type": "object",
+                "required": [
+                    "routes"
+                ],
+                "properties": {
+                    "routes": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/WarpRouteResponse"
+                        }
+                    }
+                }
             }
         }
-    }
+    },
+    "x-tagGroups": [
+        {
+            "name": "Trading API (/fapi)",
+            "tags": [
+                "General",
+                "Account",
+                "Market-Data",
+                "Trading",
+                "User Data (Beta)"
+            ]
+        },
+        {
+            "name": "Bullet API",
+            "tags": [
+                "API",
+                "Rollup"
+            ]
+        }
+    ]
 }
