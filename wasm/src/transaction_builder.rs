@@ -552,8 +552,10 @@ pub struct WasmUnsignedTransaction {
 impl WasmUnsignedTransaction {
     /// Serialize into the bytes that must be signed.
     ///
-    /// Borsh-serializes the transaction and appends the chain hash (32 bytes)
-    /// as domain separator. Pass the resulting `Uint8Array` to your signing function.
+    /// These are the Borsh bytes of the rollup's V0 signing payload: a version
+    /// byte (`0`), the unsigned transaction, and the chain hash (32 bytes) as
+    /// domain separator. Pass the resulting `Uint8Array` to your signing function.
+    /// @returns {Uint8Array} The signable bytes.
     #[wasm_bindgen(js_name = toBytes)]
     pub fn to_bytes(&self) -> WasmResult<Vec<u8>> {
         Ok(self.inner.to_bytes()?)
@@ -568,6 +570,12 @@ impl WasmUnsignedTransaction {
     /// stored JSON representation. The rebuilt bytes are byte-identical to what
     /// was signed. `client` supplies the chain name and validates that the
     /// embedded chain hash matches the connected network.
+    ///
+    /// Only bytes produced by this signing format are accepted. Bytes persisted
+    /// by a pre-fork SDK (no leading version byte) cannot be rebuilt here and
+    /// are rejected with a serialization error. The network may still admit a
+    /// transaction signed over them while its legacy cutoff is open (single
+    /// signer only); rebuild from the inputs and re-sign to be safe.
     ///
     /// @param {Uint8Array} bytes - Bytes from a previous `toBytes()` call.
     /// @param {Client} client - The trading API client.
@@ -609,9 +617,10 @@ impl WasmUnsignedTransaction {
     /// Serialize into readable JSON bytes for offchain signing.
     ///
     /// External Solana wallets should sign these bytes when the backend uses
-    /// the `solanaSimple` authenticator. The JSON includes `chain_name` and
-    /// `chain_id`; the current sequencer offchain authenticator also requires
-    /// the envelope assembled by `SolanaOffchainTransaction.fromParts(...)`.
+    /// the `solanaSimple` authenticator. The JSON includes `chain_name`,
+    /// `details.chain_hash_fragment` and `version`; the current sequencer
+    /// offchain authenticator also requires the envelope assembled by
+    /// `SolanaOffchainTransaction.fromParts(...)`.
     /// Submit the result with `client.sendOffChainTransaction(...)`.
     ///
     /// @returns {Uint8Array} UTF-8 JSON bytes to pass to `wallet.signMessage`.
@@ -853,6 +862,7 @@ impl WasmTransactionEntry {
 /// - `gasLimit` - Optional gas limit [ref_time, proof_size]
 /// - `generation` - Uniqueness generation value (default: current unix timestamp in milliseconds)
 /// - `nonce` / `window` - Alternative uniqueness types (mutually exclusive with `generation`)
+/// - `addressOverride` - Account to execute as (default: the signer's own address)
 /// - `signer` - Keypair to sign the transaction (not required for `buildUnsigned`)
 #[wasm_bindgen(js_name = TransactionBuilder)]
 pub struct WasmTransactionBuilder {
@@ -861,6 +871,7 @@ pub struct WasmTransactionBuilder {
     priority_fee_bips: Option<u64>,
     gas_limit: Option<[u64; 2]>,
     uniqueness: Option<UniquenessData>,
+    address_override: Option<Address>,
     signer: Option<WasmKeypair>,
 }
 
@@ -872,6 +883,7 @@ impl WasmTransactionBuilder {
             priority_fee_bips: None,
             gas_limit: None,
             uniqueness: None,
+            address_override: None,
             signer: None,
         }
     }
@@ -957,6 +969,30 @@ impl WasmTransactionBuilder {
         self
     }
 
+    /// Execute the transaction as another account.
+    ///
+    /// By default a transaction executes as the signer's own default address.
+    /// Set this to execute as an account that explicitly authorised the
+    /// signer's credential (e.g. a multisig or a delegated account). The
+    /// override is signed as part of the transaction and included in both the
+    /// Borsh payload (`toBytes()`) and the Solana offchain JSON
+    /// (`toMessageBytes()`).
+    /// @param {string} address - Base58 address of the account to execute as.
+    /// @returns {TransactionBuilder}
+    /// @example
+    /// ```js
+    /// const tx = Transaction.builder()
+    ///     .callMessage(User.deposit(0, '1000.0'))
+    ///     .addressOverride(multisigAddress)
+    ///     .signer(memberKeypair)
+    ///     .build(client);
+    /// ```
+    #[wasm_bindgen(js_name = addressOverride)]
+    pub fn address_override(mut self, address: &str) -> WasmResult<WasmTransactionBuilder> {
+        self.address_override = Some(parse_addr(address)?);
+        Ok(self)
+    }
+
     /// Set the keypair used to sign this transaction.
     pub fn signer(mut self, keypair: WasmKeypair) -> WasmTransactionBuilder {
         self.signer = Some(keypair);
@@ -996,6 +1032,7 @@ impl WasmTransactionBuilder {
             priority_fee_bips,
             gas_limit,
             self.uniqueness,
+            self.address_override,
             &client.inner,
         )?;
 
@@ -1016,6 +1053,7 @@ impl WasmTransactionBuilder {
             self.priority_fee_bips,
             gas_limit,
             self.uniqueness,
+            self.address_override,
             signer_ref,
             &client.inner,
         )?;

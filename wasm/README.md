@@ -156,6 +156,23 @@ const tx = Transaction.builder()
     .send(client);
 ```
 
+### Executing as another account
+
+By default a transaction executes as the signer's own default address. Use
+`.addressOverride(address)` to execute as an account that explicitly authorised
+the signer's credential (e.g. a multisig or a delegated account). The override
+is signed as part of the transaction and included in both the Borsh payload
+(`toBytes()`) and the Solana offchain JSON (`toMessageBytes()`). It takes a
+base58 address and throws on an invalid one.
+
+```typescript
+const tx = Transaction.builder()
+    .callMessage(msg)
+    .addressOverride(multisigAddress) // base58 string
+    .signer(memberKeypair)
+    .build(client);
+```
+
 ### External Signing
 
 For hardware wallets or external signing services that can sign the standard
@@ -183,7 +200,7 @@ Returned by `Transaction.builder().buildUnsigned(client)`. Contains the
 chain hash so signable bytes can be produced without a client reference.
 
 ```typescript
-unsigned.toBytes()  // Uint8Array — borsh-serialized tx + chain hash (signable bytes)
+unsigned.toBytes()  // Uint8Array — borsh signing payload: version byte, tx, chain hash (signable bytes)
 unsigned.toDisplayMessage() // string — human-readable unsigned payload for display only
 unsigned.toMessageBytes() // Uint8Array — readable JSON bytes for Solana wallets
 
@@ -197,6 +214,13 @@ as its exact signable bytes and rebuilds it later for display and submission —
 the rebuilt bytes are byte-identical to what was signed, so the stored bytes are
 the source of truth rather than a separate JSON representation.
 
+`fromBytes` only accepts bytes produced by this signing format. Bytes persisted
+by a pre-fork SDK — which had no leading version byte — cannot be rebuilt and
+are rejected with a serialization error. The network may still admit a
+transaction signed over them while the environment's legacy cutoff is open
+(single-signer transactions only), but rebuild those transactions from their
+inputs and re-sign them to be safe.
+
 Some external wallets display `signMessage` bytes as raw UTF-8, so `toBytes()`
 can look garbled in the wallet confirmation. That is expected: those bytes are
 what the network verifies. Use `toDisplayMessage()` in your app UI to show the
@@ -204,7 +228,8 @@ transaction contents before asking the wallet to sign `toBytes()`.
 
 For external Solana wallets where the wallet confirmation should show readable
 JSON, use the Solana offchain path instead. `toMessageBytes()` returns the
-readable JSON payload with `chain_name` and `chain_id` as the domain fields.
+readable JSON payload with `chain_name`, `details.chain_hash_fragment` and
+`version` as the domain fields.
 `SolanaOffchainTransaction.fromParts(...)` also carries the chain hash required
 by the current sequencer offchain authenticator envelope:
 

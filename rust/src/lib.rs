@@ -64,8 +64,8 @@ pub use bullet_exchange_interface::decimals::PositiveDecimal;
 pub use bullet_exchange_interface::message::UserActionDiscriminants;
 // Order argument structs
 pub use bullet_exchange_interface::message::{
-    AmendOrderArgs, CancelOrderArgs, NewOrderArgs, NewTriggerOrderArgs, NewTwapOrderArgs,
-    PendingTpslPair, Tpsl, TpslPair,
+    AmendOrderArgs, BackstopLiquidatePerpPositionArgsV1, CancelOrderArgs, NewOrderArgs,
+    NewTriggerOrderArgs, NewTwapOrderArgs, PendingTpslPair, Tpsl, TpslPair,
 };
 /// Transaction uniqueness/replay-protection data: `Nonce`, `Generation`, or `Window`.
 ///

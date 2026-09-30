@@ -2670,15 +2670,10 @@
             "AccountBalanceSummary": {
                 "type": "object",
                 "required": [
-                    "tradingCredits",
-                    "unrealizedLossBorrow"
+                    "tradingCredits"
                 ],
                 "properties": {
                     "tradingCredits": {
-                        "type": "string",
-                        "format": "decimal"
-                    },
-                    "unrealizedLossBorrow": {
                         "type": "string",
                         "format": "decimal"
                     }

@@ -22,7 +22,7 @@ import {
   InitAssetInfoArgsV1, UpdateAssetInfoArgsV1, UpdateGlobalConfigArgsV1,
   UpdateVaultConfigArgs, UpdateVaultConfigArgsV1, VaultDepositPolicyArgs, StrategicDepositorCap,
   OraclePriceUpdateArgs, OraclePriceUpdateWithPythProofArgs, MarkPriceUpdateArgs,
-  BackstopLiquidatePerpPositionArgs,
+  BackstopLiquidatePerpPositionArgs, BackstopLiquidatePerpPositionArgsV1,
   // Enums
   Side, OrderType, TriggerDirection, TriggerPriceCondition,
   // Data-carrying enums
@@ -385,6 +385,17 @@ describe('struct wrapper constructors', () => {
   test('BackstopLiquidatePerpPositionArgs', () => {
     const args = new BackstopLiquidatePerpPositionArgs(0, '1.0');
     expect(args).toBeDefined();
+  });
+
+  test('priced backstop V1 args and factories', () => {
+    const address = '11111111111111111111111111111111';
+    const position = new BackstopLiquidatePerpPositionArgsV1(
+      0, '1.0', Side.Bid, '99.5',
+    );
+
+    expect(User.backstopLiquidatePerpPositionsV1(
+      address, [position], 2,
+    )).toBeDefined();
   });
 
   test('Admin V1 asset args', () => {

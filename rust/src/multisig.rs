@@ -130,6 +130,9 @@ impl UnsignedTransaction {
         let bytes = self.to_message_bytes()?;
         let mut message: serde_json::Map<String, serde_json::Value> =
             serde_json::from_slice(&bytes)?;
+        // The V1 payload orders `multisig_id` before `version`; drop the V0 version
+        // first so re-inserting places it last.
+        message.remove("version");
         message.insert(
             "multisig_id".to_string(),
             serde_json::Value::String(config.multisig_id()),
@@ -379,11 +382,12 @@ mod tests {
             })),
             uniqueness: UniquenessData::Nonce(5),
             details: TxDetails {
-                chain_id: 1,
+                chain_hash_fragment: 1,
                 max_fee: Amount(10_000_000),
                 gas_limit: None,
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
+            address_override: None,
         };
         UnsignedTransaction {
             inner,

@@ -33,10 +33,12 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use bon::bon;
 use borsh::{BorshDeserialize, BorshSerialize};
+use bullet_exchange_interface::address::Address;
 use bullet_exchange_interface::schema::Schema;
 use bullet_exchange_interface::transaction::{
-    Amount, Gas, PriorityFeeBips, RuntimeCall, Transaction as SignedTransaction, TxDetails,
-    UniquenessData, UnsignedTransaction as RawUnsignedTransaction, Version0,
+    Amount, Gas, PriorityFeeBips, RuntimeCall, Transaction as SignedTransaction,
+    TransactionSigningPayload, TxDetails, UniquenessData,
+    UnsignedTransaction as RawUnsignedTransaction, chain_hash_fragment,
 };
 use serde_json::Value;
 
@@ -48,6 +50,11 @@ use crate::types::CallMessage;
 use crate::{Client, Keypair, SDKError, SDKResult};
 
 // ── UnsignedTransaction ──────────────────────────────────────────────────────
+
+/// The Borsh discriminant of [`TransactionSigningPayload::V0`]: the first byte
+/// of every post-fork signable payload. Pre-fork signable bytes started with
+/// the `RuntimeCall` discriminant instead (7 for exchange calls).
+const SIGNING_PAYLOAD_VERSION_V0: u8 = 0;
 
 /// An unsigned transaction with the chain hash baked in.
 ///
@@ -64,41 +71,59 @@ pub struct UnsignedTransaction {
 impl UnsignedTransaction {
     /// Serialize into the bytes that must be signed.
     ///
-    /// Borsh-serializes the transaction and appends the chain hash (32 bytes)
-    /// as a domain separator.
+    /// These are the Borsh bytes of the rollup's V0 signing payload: a version
+    /// byte (`0`), the unsigned transaction, and the chain hash (32 bytes) as a
+    /// domain separator.
     pub fn to_bytes(&self) -> SDKResult<Vec<u8>> {
-        let mut data =
-            borsh::to_vec(&self.inner).map_err(|e| SDKError::SerializationError(e.to_string()))?;
-        data.extend_from_slice(&self.chain_hash);
-        Ok(data)
+        Ok(self.inner.signing_bytes(&self.chain_hash))
     }
 
     /// Reconstruct an [`UnsignedTransaction`] from the canonical bytes produced
     /// by [`to_bytes`](UnsignedTransaction::to_bytes) — the inverse of that
     /// method.
     ///
-    /// `to_bytes` is `borsh(payload) ++ chain_hash` (a 32-byte domain
-    /// separator). This reads back the payload and trailing chain hash, taking
-    /// `chain_name` from `client`. The embedded chain hash is checked against
-    /// the client's to reject bytes that were built for a different network.
+    /// `to_bytes` is the Borsh V0 signing payload, which ends with the chain
+    /// hash (a 32-byte domain separator). This reads back the payload and its
+    /// chain hash, taking `chain_name` from `client`. The embedded chain hash is
+    /// checked against the client's to reject bytes that were built for a
+    /// different network.
     ///
     /// This lets a coordinator persist a transaction as its exact signable
-    /// bytes and rebuild it later — across SDK upgrades or process restarts —
-    /// without re-deriving from structured inputs. Because the payload is read
-    /// back verbatim rather than re-serialized, the rebuilt signable bytes are
+    /// bytes and rebuild it later — e.g. across process restarts — without
+    /// re-deriving from structured inputs. Because the payload is read back
+    /// verbatim rather than re-serialized, the rebuilt signable bytes are
     /// byte-identical to what was signed; the stored bytes, not a separate JSON
     /// representation, are the source of truth.
+    ///
+    /// Only bytes produced by this signing format are accepted. Bytes persisted
+    /// by a pre-fork SDK (`borsh(unsigned_tx) ++ chain_hash`, no leading version
+    /// byte) cannot be rebuilt by this decoder and are rejected with
+    /// [`SDKError::SerializationError`]. Whether the network still accepts a
+    /// transaction signed over such bytes is a separate question: single-signer
+    /// transactions in the pre-fork encoding are admitted only below each
+    /// environment's `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` cutoff. Rebuild the
+    /// transaction from its inputs and re-sign it to be safe.
     pub fn from_bytes(bytes: &[u8], client: &Client) -> SDKResult<UnsignedTransaction> {
-        const CHAIN_HASH_LEN: usize = 32;
-        if bytes.len() < CHAIN_HASH_LEN {
+        if bytes.first() != Some(&SIGNING_PAYLOAD_VERSION_V0) {
             return Err(SDKError::SerializationError(format!(
-                "unsigned transaction bytes too short: {} (need at least {CHAIN_HASH_LEN} for the chain hash)",
-                bytes.len()
+                "signable bytes must start with signing payload version byte \
+                 {SIGNING_PAYLOAD_VERSION_V0} (found {:?}); this SDK cannot rebuild them — \
+                 rebuild the transaction from its inputs and re-sign it",
+                bytes.first()
             )));
         }
-        let (payload, chain_hash_bytes) = bytes.split_at(bytes.len() - CHAIN_HASH_LEN);
-        let mut chain_hash = [0u8; CHAIN_HASH_LEN];
-        chain_hash.copy_from_slice(chain_hash_bytes);
+        let payload = match TransactionSigningPayload::from_signing_bytes(bytes)
+            .map_err(|e| SDKError::SerializationError(e.to_string()))?
+        {
+            TransactionSigningPayload::V0(payload) => payload,
+            #[allow(unreachable_patterns)]
+            other => {
+                return Err(SDKError::SerializationError(format!(
+                    "unsupported signing payload version: {other:?}"
+                )));
+            }
+        };
+        let chain_hash = payload.chain_hash;
 
         if chain_hash != client.chain_hash() {
             return Err(SDKError::InvalidChainHash(
@@ -106,11 +131,8 @@ impl UnsignedTransaction {
             ));
         }
 
-        let inner = RawUnsignedTransaction::try_from_slice(payload)
-            .map_err(|e| SDKError::SerializationError(e.to_string()))?;
-
         Ok(UnsignedTransaction {
-            inner,
+            inner: payload.into_unsigned_transaction(),
             chain_hash,
             chain_name: client.chain_name(),
         })
@@ -174,6 +196,8 @@ impl UnsignedTransaction {
             "chain_name".to_string(),
             Value::String(self.chain_name.clone()),
         );
+        // The single-signer Solana payload carries an explicit format version.
+        message.insert("version".to_string(), Value::from(0u8));
         serde_json::to_vec(&Value::Object(message)).map_err(Into::into)
     }
 
@@ -212,6 +236,11 @@ impl UnsignedTransaction {
         /// round-trip and tolerates many in-flight transactions. Set explicitly
         /// to use a nonce or generation instead.
         uniqueness: Option<UniquenessData>,
+        /// The account to execute as. Defaults to `None`, which executes as the
+        /// signer's own default address. Set to `Some(address)` to execute as
+        /// another account that explicitly authorised the signer's credential
+        /// (e.g. a multisig or a delegated account).
+        address_override: Option<Address>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
         Self::from_runtime_call(
@@ -220,6 +249,7 @@ impl UnsignedTransaction {
             priority_fee_bips,
             gas_limit,
             uniqueness,
+            address_override,
             client,
         )
     }
@@ -234,12 +264,17 @@ impl UnsignedTransaction {
     ///
     /// Exchange call messages are validated against the connected client's
     /// schema; other runtime-call variants pass through.
+    ///
+    /// `address_override` selects the account to execute as: `None` executes
+    /// as the signer's default address, `Some(address)` as another account that
+    /// explicitly authorised the signer's credential.
     pub fn from_runtime_call(
         runtime_call: RuntimeCall,
         max_fee: u128,
         priority_fee_bips: u64,
         gas_limit: Option<Gas>,
         uniqueness: Option<UniquenessData>,
+        address_override: Option<Address>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
         if let RuntimeCall::Exchange(ref call_message) = runtime_call
@@ -250,8 +285,9 @@ impl UnsignedTransaction {
 
         let uniqueness =
             uniqueness.unwrap_or_else(|| UniquenessData::Window(client.next_window_nonce()));
+        let chain_hash = client.chain_hash();
         let details = TxDetails {
-            chain_id: client.chain_id(),
+            chain_hash_fragment: chain_hash_fragment(&chain_hash),
             max_fee: Amount(max_fee),
             gas_limit,
             max_priority_fee_bips: PriorityFeeBips(priority_fee_bips),
@@ -262,8 +298,9 @@ impl UnsignedTransaction {
                 runtime_call,
                 uniqueness,
                 details,
+                address_override,
             },
-            chain_hash: client.chain_hash(),
+            chain_hash,
             chain_name: client.chain_name(),
         })
     }
@@ -435,6 +472,11 @@ impl Transaction {
         priority_fee_bips: Option<u64>,
         gas_limit: Option<Gas>,
         uniqueness: Option<UniquenessData>,
+        /// The account to execute as. Defaults to `None`, which executes as the
+        /// signer's own default address. Set to `Some(address)` to execute as
+        /// another account that explicitly authorised the signer's credential
+        /// (e.g. a multisig or a delegated account).
+        address_override: Option<Address>,
         signer: Option<&Keypair>,
         client: &Client,
     ) -> SDKResult<SignedTransaction> {
@@ -444,6 +486,7 @@ impl Transaction {
             priority_fee_bips,
             gas_limit,
             uniqueness,
+            address_override,
             signer,
             client,
         )
@@ -456,6 +499,9 @@ impl Transaction {
     /// transaction, signs `to_bytes()` with `signer` (falling back to the
     /// client's keypair), and assembles the result. Use this to sign a call
     /// assembled dynamically rather than via the typed factories.
+    ///
+    /// `address_override` selects the account to execute as; see
+    /// [`UnsignedTransaction::from_runtime_call`].
     #[allow(clippy::too_many_arguments)]
     pub fn from_runtime_call(
         runtime_call: RuntimeCall,
@@ -463,6 +509,7 @@ impl Transaction {
         priority_fee_bips: Option<u64>,
         gas_limit: Option<Gas>,
         uniqueness: Option<UniquenessData>,
+        address_override: Option<Address>,
         signer: Option<&Keypair>,
         client: &Client,
     ) -> SDKResult<SignedTransaction> {
@@ -481,6 +528,7 @@ impl Transaction {
             priority_fee_bips,
             gas_limit,
             uniqueness,
+            address_override,
             client,
         )?;
 
@@ -506,18 +554,7 @@ impl Transaction {
         signature: [u8; 64],
         pub_key: [u8; 32],
     ) -> SignedTransaction {
-        let RawUnsignedTransaction {
-            runtime_call,
-            uniqueness,
-            details,
-        } = tx.inner;
-        SignedTransaction::V0(Version0 {
-            signature,
-            pub_key,
-            runtime_call,
-            uniqueness,
-            details,
-        })
+        tx.inner.into_signed(pub_key, signature)
     }
 
     /// Borsh-serialize a signed transaction to bytes.
@@ -624,6 +661,7 @@ impl Client {
             None,
             None,
             None,
+            None,
             self,
         )?;
         match self.send_transaction(&signed).await {
@@ -632,6 +670,7 @@ impl Client {
                 // submit directly so a second 401 comes back as ApiError, not TransactionOutdated
                 let signed = Transaction::from_runtime_call(
                     runtime_call,
+                    None,
                     None,
                     None,
                     None,
@@ -721,11 +760,12 @@ mod tests {
             })),
             uniqueness: UniquenessData::Generation(12345),
             details: TxDetails {
-                chain_id: 1,
+                chain_hash_fragment: 1,
                 max_fee: Amount(10_000_000),
                 gas_limit: None,
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
+            address_override: None,
         };
         UnsignedTransaction {
             inner,
@@ -814,11 +854,12 @@ mod tests {
     }
 
     #[test]
-    fn to_bytes_is_borsh_plus_chain_hash() {
+    fn to_bytes_is_versioned_borsh_plus_chain_hash() {
         let unsigned = test_unsigned_tx();
         let bytes = unsigned.to_bytes().unwrap();
 
-        let mut expected = borsh::to_vec(&unsigned.inner).unwrap();
+        let mut expected = vec![0u8]; // V0 signing payload
+        expected.extend(borsh::to_vec(&unsigned.inner).unwrap());
         expected.extend_from_slice(&unsigned.chain_hash);
         assert_eq!(bytes, expected);
     }
@@ -835,11 +876,12 @@ mod tests {
             })),
             uniqueness: UniquenessData::Window(99),
             details: TxDetails {
-                chain_id: client.chain_id(),
+                chain_hash_fragment: chain_hash_fragment(&client.chain_hash()),
                 max_fee: Amount(10_000_000),
                 gas_limit: None,
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
+            address_override: None,
         };
         let original = UnsignedTransaction {
             inner,
@@ -879,6 +921,89 @@ mod tests {
         assert!(matches!(err, SDKError::SerializationError(_)), "{err:?}");
     }
 
+    #[tokio::test]
+    async fn from_bytes_rejects_pre_fork_signable_bytes() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+
+        // Pre-fork SDKs signed `borsh(unsigned_tx) ++ chain_hash`: no version
+        // byte, so the payload starts with the RuntimeCall discriminant.
+        let mut unsigned = test_unsigned_tx();
+        unsigned.chain_hash = client.chain_hash();
+        let mut pre_fork = borsh::to_vec(&unsigned.inner).unwrap();
+        assert_eq!(pre_fork[0], 7, "RuntimeCall::Exchange discriminant");
+        pre_fork.extend_from_slice(&unsigned.chain_hash);
+
+        let err = UnsignedTransaction::from_bytes(&pre_fork, &client).unwrap_err();
+        let SDKError::SerializationError(message) = err else {
+            panic!("expected SerializationError, got {err:?}");
+        };
+        assert!(message.contains("version byte"), "{message}");
+        assert!(message.contains("re-sign"), "{message}");
+    }
+
+    #[tokio::test]
+    async fn builder_address_override_is_carried_in_borsh_and_json() {
+        let (_server, client) =
+            mock_client_for_offchain_submission(ResponseTemplate::new(200)).await;
+        let keypair = Keypair::generate();
+        let call_msg = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
+        let override_address = Address([0xAB; 32]);
+
+        let unsigned = UnsignedTransaction::builder()
+            .call_message(call_msg.clone())
+            .max_fee(10_000_000)
+            .priority_fee_bips(0)
+            .address_override(override_address)
+            .client(&client)
+            .build()
+            .unwrap();
+        assert_eq!(unsigned.inner.address_override, Some(override_address));
+
+        // The Solana offchain JSON carries the override as a base58 string.
+        let message: serde_json::Value =
+            serde_json::from_slice(&unsigned.to_message_bytes().unwrap()).unwrap();
+        assert_eq!(
+            message["address_override"],
+            serde_json::Value::String(override_address.to_string())
+        );
+
+        // The signable bytes round-trip the override.
+        let restored =
+            UnsignedTransaction::from_bytes(&unsigned.to_bytes().unwrap(), &client).unwrap();
+        assert_eq!(restored.inner.address_override, Some(override_address));
+
+        // The signed transaction carries it in its Borsh bytes.
+        let signed = Transaction::builder()
+            .call_message(call_msg.clone())
+            .max_fee(10_000_000)
+            .address_override(override_address)
+            .signer(&keypair)
+            .client(&client)
+            .build()
+            .unwrap();
+        let SignedTransaction::V0(ref version_0) = signed else {
+            panic!("expected V0 signed transaction");
+        };
+        assert_eq!(version_0.address_override, Some(override_address));
+        let decoded: SignedTransaction =
+            borsh::from_slice(&Transaction::to_bytes(&signed).unwrap()).unwrap();
+        assert_eq!(decoded, signed);
+
+        // Omitting the override keeps the default (`None`, absent from JSON).
+        let unsigned = UnsignedTransaction::builder()
+            .call_message(call_msg)
+            .max_fee(10_000_000)
+            .priority_fee_bips(0)
+            .client(&client)
+            .build()
+            .unwrap();
+        assert_eq!(unsigned.inner.address_override, None);
+        let message: serde_json::Value =
+            serde_json::from_slice(&unsigned.to_message_bytes().unwrap()).unwrap();
+        assert!(message.get("address_override").is_none(), "{message}");
+    }
+
     #[test]
     fn to_display_message_renders_unsigned_payload_without_chain_hash() {
         let unsigned = test_unsigned_tx();
@@ -899,8 +1024,10 @@ mod tests {
         let message: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         assert_eq!(message["chain_name"], "TestChain");
+        assert_eq!(message["version"], 0);
+        assert!(message.get("address_override").is_none());
         assert_eq!(message["uniqueness"]["generation"], 12345);
-        assert_eq!(message["details"]["chain_id"], 1);
+        assert_eq!(message["details"]["chain_hash_fragment"], "1");
         assert_eq!(message["details"]["max_fee"], "10000000");
         assert!(message.get("runtime_call").is_some());
     }
@@ -945,7 +1072,7 @@ mod tests {
     fn stringify_offchain_max_fee_errors_when_max_fee_is_missing() {
         let mut message = serde_json::json!({
             "details": {
-                "chain_id": 1,
+                "chain_hash_fragment": "1",
             },
         })
         .as_object()
@@ -966,7 +1093,7 @@ mod tests {
         let message: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         assert_eq!(message["details"]["max_priority_fee_bips"], u64::MAX);
-        assert_eq!(message["details"]["chain_id"], 1);
+        assert_eq!(message["details"]["chain_hash_fragment"], "1");
         assert_eq!(message["uniqueness"]["generation"], 12345);
     }
 
@@ -983,11 +1110,12 @@ mod tests {
             })),
             uniqueness: UniquenessData::Generation(12345),
             details: TxDetails {
-                chain_id: 1,
+                chain_hash_fragment: 1,
                 max_fee: Amount(10_000_000),
                 gas_limit: None,
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
+            address_override: None,
         };
         let unsigned = UnsignedTransaction {
             inner,
@@ -1022,11 +1150,12 @@ mod tests {
             }),
             uniqueness: UniquenessData::Window(42),
             details: TxDetails {
-                chain_id: 1,
+                chain_hash_fragment: 1,
                 max_fee: Amount(10_000_000),
                 gas_limit: None,
                 max_priority_fee_bips: PriorityFeeBips(0),
             },
+            address_override: None,
         };
         let unsigned = UnsignedTransaction {
             inner,
@@ -1481,20 +1610,14 @@ mod tests {
             runtime_call: unsigned.inner.runtime_call.clone(),
             uniqueness: unsigned.inner.uniqueness.clone(),
             details: unsigned.inner.details.clone(),
+            address_override: None,
         };
         let assembled = Transaction::from_parts(unsigned, sig, pk);
 
-        // Direct Version0 construction
-        let mut data = borsh::to_vec(&inner_clone).unwrap();
-        data.extend_from_slice(&chain_hash);
+        // Direct construction over the interface's signing payload
+        let data = inner_clone.signing_bytes(&chain_hash);
         let sig2: [u8; 64] = keypair.sign(&data).try_into().unwrap();
-        let direct = SignedTransaction::V0(Version0 {
-            runtime_call: inner_clone.runtime_call,
-            uniqueness: inner_clone.uniqueness,
-            details: inner_clone.details,
-            pub_key: pk,
-            signature: sig2,
-        });
+        let direct = inner_clone.into_signed(pk, sig2);
 
         assert_eq!(assembled, direct);
         assert_eq!(
