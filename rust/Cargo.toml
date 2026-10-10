@@ -69,7 +69,7 @@ syn = "2.0"
 prettyplease = "0.2"
 
 [dev-dependencies]
-tokio = { version = "=1.53.1", features = ["rt", "macros", "io-std", "io-util"] }
+tokio = { version = "=1.53.2", features = ["rt", "macros", "io-std", "io-util"] }
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
 wiremock = "=0.6.5"
 
