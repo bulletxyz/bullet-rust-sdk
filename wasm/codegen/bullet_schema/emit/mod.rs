@@ -14,7 +14,6 @@ pub struct EmittedParams {
     pub jsdoc: Vec<String>,
 }
 
-/// Emit the complete generated source file.
 pub fn emit_all(info: &SchemaInfo) -> String {
     let helper = extract_array_helper();
 
@@ -41,8 +40,6 @@ pub fn emit_all(info: &SchemaInfo) -> String {
     let ast = syn::parse2(tokens).expect("generated code should be valid Rust");
     prettyplease::unparse(&ast)
 }
-
-// ── Shared helpers ───────────────────────────────────────────────────────────
 
 /// Build field assignment tokens for a struct initializer.
 pub fn field_assignments(fields: &[MappedField]) -> Vec<TokenStream> {

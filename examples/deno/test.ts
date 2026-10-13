@@ -1,8 +1,4 @@
-/**
- * Bullet SDK — Deno tests
- *
- * Run with: deno task test
- */
+// Run with: deno task test
 
 import { assertEquals } from "jsr:@std/assert";
 import { assertThrows } from "jsr:@std/assert/throws";

@@ -594,6 +594,16 @@
                             }
                         }
                     },
+                    "403": {
+                        "description": "Call message not relayed by this API",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
                     "502": {
                         "description": "Upstream service unavailable",
                         "content": {
@@ -761,12 +771,120 @@
                 }
             }
         },
+        "/api/v1/vaultDepositors": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Vault Depositors",
+                "operationId": "vault_depositors",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "description": "vault address (base58)",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "maximum number of depositors to return",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int32",
+                            "minimum": 0
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "opaque pagination cursor from a previous response's `nextCursor`",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Active depositors for a vault",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VaultDepositorsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Vault not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Vault pricing unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/vaultEquity": {
             "get": {
                 "tags": [
                     "API"
                 ],
-                "summary": "Vault Equity",
+                "summary": "Vault Equity\nReturns 503 when the cached state collection is over 90 seconds old. Collection\nage measures successful API refreshes, not whether the underlying rollup is advancing.",
                 "operationId": "vault_equity",
                 "parameters": [
                     {
@@ -821,7 +939,7 @@
                         }
                     },
                     "503": {
-                        "description": "Vault pricing unavailable",
+                        "description": "Vault pricing unavailable or state snapshot stale",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -3227,6 +3345,18 @@
                         }
                     },
                     {
+                        "name": "isDegen",
+                        "in": "query",
+                        "description": "Restrict results to Degen (`true`) or non-Degen (`false`) fills; omit for both",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "boolean",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
                         "name": "limit",
                         "in": "query",
                         "description": "Number of results (default 500, max 1000)",
@@ -3906,7 +4036,7 @@
                         }
                     },
                     "403": {
-                        "description": "Call type not relayed by this API (warp route administration)",
+                        "description": "Call message not relayed by this API",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -8052,6 +8182,7 @@
                     "positionSide",
                     "buyer",
                     "maker",
+                    "isDegen",
                     "address",
                     "txHash"
                 ],
@@ -8081,6 +8212,9 @@
                         "type": "integer",
                         "format": "uint64",
                         "minimum": 0
+                    },
+                    "isDegen": {
+                        "type": "boolean"
                     },
                     "maker": {
                         "type": "boolean"
@@ -8249,7 +8383,8 @@
                     "totalShares",
                     "highWatermark",
                     "queuedWithdrawals",
-                    "whitelistedDepositors"
+                    "whitelistedDepositors",
+                    "depositPolicy"
                 ],
                 "properties": {
                     "address": {
@@ -8266,6 +8401,16 @@
                     "depositLimit": {
                         "type": "string",
                         "format": "decimal"
+                    },
+                    "depositPolicy": {
+                        "oneOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "$ref": "#/components/schemas/VaultDepositPolicyResponse"
+                            }
+                        ]
                     },
                     "description": {
                         "type": "string"
@@ -8318,6 +8463,149 @@
                     }
                 }
             },
+            "VaultDepositPolicyResponse": {
+                "type": "object",
+                "required": [
+                    "defaultUserDepositCap",
+                    "strategicCaps"
+                ],
+                "properties": {
+                    "defaultUserDepositCap": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "strategicCaps": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/VaultStrategicDepositCap"
+                        }
+                    }
+                }
+            },
+            "VaultDepositor": {
+                "type": "object",
+                "required": [
+                    "address",
+                    "heldShares",
+                    "queuedShares",
+                    "shares",
+                    "cumulativeDeposited",
+                    "equity",
+                    "initialDepositAmount",
+                    "initialDepositTimestamp",
+                    "remainingCostBasis",
+                    "netDeposits",
+                    "percentageReturn",
+                    "percentageReturnIsEstimate",
+                    "historyUpdatedAt",
+                    "historyLastTxNumber",
+                    "historyShares",
+                    "historyComplete"
+                ],
+                "properties": {
+                    "address": {
+                        "type": "string"
+                    },
+                    "cumulativeDeposited": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Current net deposited notional used by the rollup for per-user deposit-cap\nenforcement. Deposits increase it; paid-out withdrawals reduce it by the\npre-fee value of shares burned, floored at zero; and a full exit with no\nqueued withdrawals resets it to zero. Queueing or cancelling a withdrawal\ndoes not change it. Legacy migrated positions may report zero. It is not\nlifetime deposits, initial deposit amount, current principal, or remaining\ncost basis."
+                    },
+                    "equity": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Current USD value of `shares` at the vault's current equity per share."
+                    },
+                    "heldShares": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Shares currently held in the depositor's vault position."
+                    },
+                    "historyComplete": {
+                        "type": "boolean",
+                        "description": "Whether the historical projection reports complete, valid history for\nits own processed data. Does not guarantee freshness or alignment with\nlive shares/equity. False for missing, unavailable, or invalid history."
+                    },
+                    "historyLastTxNumber": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64",
+                        "description": "Latest vault event transaction included by the historical projection.\nThis is not a ledger boundary shared with the live position.",
+                        "minimum": 0
+                    },
+                    "historyShares": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Shares represented by remainingCostBasis at historyUpdatedAt."
+                    },
+                    "historyUpdatedAt": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64",
+                        "description": "Historical projection refresh time in Unix microseconds. Independent of\nstateUpdatedAt; freshness does not prove ingestion has caught up with live state."
+                    },
+                    "initialDepositAmount": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "USD notional of the first-ever deposit into this vault, according to the\nhistorical projection. Null when history is unavailable or invalid, or\nthe user only received fee shares."
+                    },
+                    "initialDepositTimestamp": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64",
+                        "description": "First-ever deposit time in Unix microseconds. Null with initialDepositAmount."
+                    },
+                    "netDeposits": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Deposited notional less completed USDC withdrawal amounts. Null when\nhistory is unavailable or incomplete, or a withdrawal cannot be converted\nto the deposit notional denomination. Zero after a complete exit."
+                    },
+                    "percentageReturn": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Estimated unrealized return: (equity - remainingCostBasis) /\nremainingCostBasis * 100. A value of \"12.5\" means 12.5 percent. Combines\nindependently refreshed sources; matching shares do not prove alignment.\nNull when state collection is over 90 seconds old, history is over 30 minutes\nold, live and historical shares differ by more than 0.000000000000000001,\nbasis is zero, or arithmetic overflows.\nExcludes realized returns on previous withdrawals."
+                    },
+                    "percentageReturnIsEstimate": {
+                        "type": "boolean",
+                        "description": "True whenever percentageReturn is provided. Clients must label it as an\nestimate, not an exact or lifetime cash-flow return."
+                    },
+                    "queuedShares": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Shares currently queued for withdrawal."
+                    },
+                    "remainingCostBasis": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Remaining average acquisition cost in USD as of historyUpdatedAt for\nhistoryShares, not necessarily the live position. Processed withdrawals\nremove proportional cost; fee shares add no cost. Null for unavailable,\nincomplete, or invalid history."
+                    },
+                    "shares": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Held shares plus queued withdrawal shares."
+                    }
+                }
+            },
             "VaultDepositorSharesResponse": {
                 "type": "object",
                 "required": [
@@ -8330,6 +8618,49 @@
                     },
                     "shares": {
                         "type": "object"
+                    }
+                }
+            },
+            "VaultDepositorsResponse": {
+                "type": "object",
+                "required": [
+                    "vaultAddress",
+                    "stateSlot",
+                    "stateUpdatedAt",
+                    "depositorCount",
+                    "items"
+                ],
+                "properties": {
+                    "depositorCount": {
+                        "type": "integer",
+                        "description": "Total active depositors before pagination.",
+                        "minimum": 0
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/VaultDepositor"
+                        }
+                    },
+                    "nextCursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "stateSlot": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Committed state version selected by the rollup snapshot endpoint. All\npositions, queues, vault accounts (including sub-accounts), and pricing\nare read at this version. ClickHouse history is independent of it.",
+                        "minimum": 0
+                    },
+                    "stateUpdatedAt": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Time this cached rollup-state collection finished, in Unix microseconds.\nThis is a fetch timestamp, not the block time or history refresh time."
+                    },
+                    "vaultAddress": {
+                        "type": "string"
                     }
                 }
             },
@@ -8392,9 +8723,26 @@
                     },
                     "timestamp": {
                         "type": "integer",
-                        "format": "int64"
+                        "format": "int64",
+                        "description": "When the withdrawal was queued, in unix micros; pass it to `CancelQueuedWithdrawalV1` to\ncancel this withdrawal. Unique among the user's queued withdrawals in the vault."
                     },
                     "user": {
+                        "type": "string"
+                    }
+                }
+            },
+            "VaultStrategicDepositCap": {
+                "type": "object",
+                "required": [
+                    "userAddress",
+                    "cap"
+                ],
+                "properties": {
+                    "cap": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "userAddress": {
                         "type": "string"
                     }
                 }

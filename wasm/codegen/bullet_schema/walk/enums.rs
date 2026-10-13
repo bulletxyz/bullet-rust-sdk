@@ -8,8 +8,7 @@ use super::super::{SchemaEnum, Types};
 
 /// Scan already-visited indices for simple enums.
 ///
-/// Called after struct discovery so `visited` contains all reachable indices.
-/// Any `Ty::Enum` where every variant has `value: None` is a simple enum.
+/// Run after struct discovery so `visited` holds every reachable index.
 pub fn discover_enums(visited: &HashSet<usize>, types: &Types) -> Vec<SchemaEnum> {
     let mut indices: Vec<_> = visited.iter().copied().collect();
     indices.sort_unstable();

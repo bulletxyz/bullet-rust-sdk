@@ -1,6 +1,4 @@
-//! Mapping for known newtype wrappers.
-//!
-//! These are `Tuple` types in the schema that wrap a single inner value.
+//! Mapping for known newtypes (single-value `Tuple`s in the schema).
 
 use sov_universal_wallet::schema::{Link, Primitive as SchemaPrimitive};
 use sov_universal_wallet::ty::{ByteDisplay, IntegerType, Ty};

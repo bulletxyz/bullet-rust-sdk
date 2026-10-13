@@ -1,63 +1,36 @@
-# Bullet SDK — WASM Examples
+# WASM examples
 
-Demonstrates using `@bulletxyz/sdk-wasm` across Node.js, Deno, and the browser.
+Examples for `@bulletxyz/sdk-wasm` in Node.js (ESM), Deno and a Next.js browser app.
+Build the package first with `just build-wasm` from the SDK root.
 
-## Structure
+## Node.js and browser
 
-```
-examples/
-├── turbo.json          # Turborepo config (orchestrates node + web)
-├── package.json        # Workspace root
-├── node/               # Node.js (CJS via wasm-pack nodejs target)
-│   ├── index.mjs       # Demo script
-│   └── test.mjs        # node:test tests
-├── deno/               # Deno (ESM via wasm-pack web target)
-│   ├── index.ts        # Demo script
-│   └── test.ts         # Deno.test tests
-└── web/                # Next.js + Turbopack (browser via wasm-pack web target)
-    ├── app/page.tsx    # React page loading WASM
-    ├── test.spec.ts    # Playwright e2e test
-    └── next.config.mjs # WASM webpack config
-```
-
-## Running
-
-### All (Node + Web via Turbo)
-
-```bash
+```sh
 cd examples
-npm install
-npm test          # runs node tests + web build
-npm run dev       # starts Next.js dev server with Turbopack
+npm install --install-links
+npm test
+npm run dev
 ```
 
-### Node.js only
+To run a single example, use its directory:
 
-```bash
+```sh
 cd examples/node
-npm install
-npm start         # run demo
-npm test          # run tests
+npm install --install-links
+npm start
+NETWORK=testnet npm run create-vault -- <leader-keypair.json> [delegate-address]
 ```
 
-### Deno only
+The vault script requires Node.js 23.6 or later. In `examples/web`, use `npm run dev`,
+`npm run build` or `npm test` (Playwright starts the development server).
 
-```bash
+## Deno
+
+```sh
 cd examples/deno
-deno task start   # run demo
-deno task test    # run tests
+deno task start
+deno task test
 ```
 
-### Web only
-
-```bash
-cd examples/web
-npm install
-npm run dev       # Next.js + Turbopack dev server at http://localhost:3000
-npm run build     # production build
-npm test          # Playwright e2e (starts dev server automatically)
-```
-
-## Environment
-
-Set `BULLET_API_ENDPOINT` to use a different API endpoint (defaults to mainnet).
+Set `BULLET_API_ENDPOINT` to override the endpoint. Demos default to mainnet;
+Node.js and Deno tests default to testnet.

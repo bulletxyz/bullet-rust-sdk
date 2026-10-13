@@ -9,6 +9,7 @@ pub mod client;
 pub mod errors;
 pub mod generated;
 pub mod keypair;
+pub mod memo;
 pub mod metadata;
 pub mod multisig;
 pub mod sub_account;
@@ -17,12 +18,11 @@ pub mod utils;
 pub mod vault;
 pub mod ws;
 
-// Re-export the public surface so consumers can do:
-//   import { WasmTradingApi, WasmKeypair, WasmTopic, … } from 'bullet-rust-sdk-wasm'
 pub use client::*;
 pub use errors::*;
 pub use generated::*;
 pub use keypair::*;
+pub use memo::*;
 pub use metadata::*;
 pub use multisig::*;
 pub use sub_account::*;

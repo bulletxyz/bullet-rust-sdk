@@ -1,8 +1,8 @@
 //! Multisig (M-of-N) transaction support over the Solana offchain authenticator.
 //!
-//! Multisig transactions are submitted through the same spec-compliant Solana
-//! offchain wire format used for Ledger signing, extended to N signers. The
-//! formats mirror the Sovereign SDK's `sov-solana-offchain-auth` crate.
+//!
+//! Uses the Ledger Solana offchain wire format extended to N signers, mirroring the Sovereign SDK's
+//! `sov-solana-offchain-auth` crate.
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -17,14 +17,10 @@ use crate::{SDKError, SDKResult, UnsignedTransaction};
 /// offchain preamble caps total size).
 pub const MAX_MULTISIG_SIGNERS: usize = 21;
 
-// ── MultisigConfig ───────────────────────────────────────────────────────────
-
 /// An M-of-N multisig signer set.
 ///
-/// Public keys are canonicalized (sorted bytewise) on construction, matching
-/// the Sovereign SDK's credential derivation. The same set of keys always
-/// produces the same [`credential_id`](MultisigConfig::credential_id),
-/// regardless of input order.
+/// Public keys are sorted bytewise on construction (as the Sovereign SDK does), so the
+/// [`credential_id`](MultisigConfig::credential_id) is independent of input order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MultisigConfig {
     min_signers: u8,
@@ -51,9 +47,8 @@ impl MultisigConfig {
             ));
         }
         for pubkey in &pubkeys {
-            // Reject keys that aren't valid Ed25519 points, or that are weak
-            // (small-order) — signature verification uses `verify_strict`,
-            // which rejects weak keys, so such a signer could never contribute.
+            // Reject invalid or weak (small-order) keys: `verify_strict` rejects weak keys, so such
+            // a signer could never contribute.
             let key = ed25519_dalek::VerifyingKey::from_bytes(pubkey).map_err(|_| {
                 SDKError::InvalidMultisig(format!(
                     "invalid Ed25519 public key: {}",
@@ -105,8 +100,7 @@ impl MultisigConfig {
     /// The credential id as a bullet base58 address string, as committed to in
     /// the signed multisig message (`multisig_id` field).
     ///
-    /// Uses the exchange interface's [`Address`] encoding (`bullet-bs58`) so it
-    /// matches the address format the rollup derives for the credential.
+    /// Uses the [`Address`] encoding (`bullet-bs58`) the rollup derives for the credential.
     pub fn multisig_id(&self) -> String {
         Address(self.credential_id()).to_string()
     }
@@ -117,15 +111,12 @@ impl MultisigConfig {
     }
 }
 
-// ── Multisig signable bytes ──────────────────────────────────────────────────
-
 impl UnsignedTransaction {
     /// Serialize into the JSON message every multisig signer must commit to.
     ///
-    /// Extends [`to_message_bytes`](UnsignedTransaction::to_message_bytes)
-    /// with the `multisig_id` (base58 credential id) and `version: 1` fields
-    /// required by the V1 Solana offchain payload. All signers of the same
-    /// transaction and config produce identical bytes.
+    /// Adds `multisig_id` and `version: 1` to
+    /// [`to_message_bytes`](UnsignedTransaction::to_message_bytes), as the V1 Solana offchain
+    /// payload requires. All signers of the same transaction and config produce identical bytes.
     pub fn to_multisig_message_bytes(&self, config: &MultisigConfig) -> SDKResult<Vec<u8>> {
         let bytes = self.to_message_bytes()?;
         let mut message: serde_json::Map<String, serde_json::Value> =
@@ -144,10 +135,9 @@ impl UnsignedTransaction {
     /// Build the bytes each multisig signer (e.g. a Ledger hardware wallet)
     /// must sign.
     ///
-    /// Prepends the spec-compliant Solana off-chain preamble — carrying all
-    /// N signer pubkeys — to the multisig JSON message. Collect the resulting
-    /// signatures with [`SolanaLedgerMultisigTransaction::add_signature`] and
-    /// submit via `Client::send_ledger_multisig_transaction`.
+    /// Prepends the Solana off-chain preamble (all N signer pubkeys) to the multisig JSON message.
+    /// Collect signatures with [`SolanaLedgerMultisigTransaction::add_signature`] and submit via
+    /// `Client::send_ledger_multisig_transaction`.
     pub fn to_ledger_multisig_signable_bytes(&self, config: &MultisigConfig) -> SDKResult<Vec<u8>> {
         let json_bytes = self.to_multisig_message_bytes(config)?;
         let message_len = u16::try_from(json_bytes.len()).map_err(|_| {
@@ -167,12 +157,8 @@ impl UnsignedTransaction {
     }
 }
 
-// ── Multisig transaction assembly ────────────────────────────────────────────
-
 /// Borsh-serializable mirror of the Sovereign SDK's
-/// `SolanaOffchainSpecCompliantMultisigMessage`. Deriving `BorshSerialize`
-/// produces the exact wire layout (`Vec<u8>`/`Vec<_>` are length-prefixed,
-/// `[u8; 64]` and `u32`/`u8` are written verbatim), so we don't hand-encode it.
+/// `SolanaOffchainSpecCompliantMultisigMessage`; derived Borsh gives the exact wire layout.
 #[derive(BorshSerialize)]
 struct SpecCompliantMultisigMessage {
     /// Preamble (all N pubkeys) + the multisig JSON message.
@@ -188,20 +174,12 @@ struct SpecCompliantMultisigMessage {
 /// A multisig transaction collecting signatures over the spec-compliant Solana
 /// offchain wire format (the format Ledger hardware wallets sign).
 ///
-/// Every signer must sign the exact same bytes. Distribute the bytes from
-/// [`signable_bytes`](Self::signable_bytes) to each signer rather than having
-/// each rebuild the transaction independently — the signed message embeds the
-/// chain hash and a JSON payload whose byte representation must match exactly
-/// for the signatures to verify against one credential. Once
-/// [`is_complete`](Self::is_complete), submit via
+/// Every signer must sign the identical bytes from [`signable_bytes`](Self::signable_bytes); don't
+/// rebuild the transaction per signer. Once [`is_complete`](Self::is_complete), submit via
 /// [`Client::send_ledger_multisig_transaction`].
 ///
-/// The signable bytes bake in the chain hash at construction time, so if the
-/// chain hash rotates (a schema update) before enough signatures are collected,
-/// submission fails with [`SDKError::TransactionOutdated`] and the transaction
-/// must be rebuilt and re-signed by every signer. The default `Window`
-/// uniqueness needs no chain round-trip; override via `.uniqueness(...)` only
-/// if you need a specific value.
+/// The chain hash is baked in at construction: if it rotates before enough signatures are
+/// collected, submission fails with [`SDKError::TransactionOutdated`] and everyone must re-sign.
 ///
 /// ```ignore
 /// let unsigned = UnsignedTransaction::builder()
@@ -268,9 +246,7 @@ impl SolanaLedgerMultisigTransaction {
         let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&pubkey)
             .map_err(|e| SDKError::InvalidMultisig(format!("invalid public key: {e}")))?;
         let signature = ed25519_dalek::Signature::from_bytes(&signature);
-        // `verify_strict` matches the rollup's verification (rejects weak keys
-        // and non-canonical signatures), so a signature accepted here is
-        // accepted on-chain.
+        // `verify_strict` matches the rollup, so a signature accepted here is accepted on-chain.
         verifying_key
             .verify_strict(&self.signed_message, &signature)
             .map_err(|_| {
@@ -329,14 +305,11 @@ impl SolanaLedgerMultisigTransaction {
     }
 }
 
-// ── Client methods ───────────────────────────────────────────────────────────
-
 impl crate::Client {
     /// Send a completed multisig transaction to the network.
     ///
-    /// Submits the spec-compliant multisig wire format to the trading API's
-    /// `/api/v1/solanaOffchainTx`. The transaction must have collected at least
-    /// [`MultisigConfig::min_signers`] signatures.
+    /// Submits to `/api/v1/solanaOffchainTx`; requires at least [`MultisigConfig::min_signers`]
+    /// signatures.
     pub async fn send_ledger_multisig_transaction(
         &self,
         signed: &SolanaLedgerMultisigTransaction,
@@ -344,8 +317,6 @@ impl crate::Client {
         self.submit_offchain(signed.to_base64()?).await
     }
 }
-
-// ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -359,9 +330,8 @@ mod tests {
     use crate::types::CallMessage;
     use crate::{Keypair, SDKError, UnsignedTransaction};
 
-    /// Three real Ed25519 pubkeys derived from fixed seeds, returned out of
-    /// canonical (bytewise) order. Derived from seeds so the golden vectors
-    /// below can be reproduced with the JS reference (`@noble/ed25519`).
+    /// Three Ed25519 pubkeys from fixed seeds, out of canonical order. Seeded so the golden vectors
+    /// can be reproduced with `@noble/ed25519`.
     fn test_keys() -> Vec<[u8; 32]> {
         let mut seed3 = [0u8; 32];
         seed3[0] = 3;

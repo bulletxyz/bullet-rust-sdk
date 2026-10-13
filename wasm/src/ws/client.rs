@@ -428,6 +428,16 @@ impl WasmManagedWebsocket {
         Ok(())
     }
 
+    /// Send an application-level ping. The server's pong arrives as a
+    /// `WsEvent` and resets the connection's idle timer, which protocol-level
+    /// ping/pong does not.
+    /// @param {bigint} [id] - Optional request id, echoed in the pong.
+    /// @returns {void}
+    pub fn ping(&self, id: Option<u64>) -> WasmResult<()> {
+        self.inner.ping(id.map(RequestId::new))?;
+        Ok(())
+    }
+
     /// Unsubscribe from topics.
     /// @param {Array<Topic>} topics
     /// @param {number} [id]

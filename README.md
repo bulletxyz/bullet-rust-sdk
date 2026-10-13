@@ -4,108 +4,42 @@
 [![Documentation](https://docs.rs/bullet-rust-sdk/badge.svg)](https://docs.rs/bullet-rust-sdk)
 [![License: MIT](https://img.shields.io/crates/l/bullet-rust-sdk.svg)](LICENSE)
 
-A Rust SDK for interacting with the Bullet trading API, with WASM bindings for JavaScript/TypeScript.
+Rust client for the Bullet trading API, with [JavaScript/TypeScript bindings](wasm/README.md).
 
-## Project Structure
-
-```
-bullet-rust-sdk/
-├── rust/       # Core Rust SDK (bullet-rust-sdk)
-├── wasm/       # WASM bindings for JS/TS (bullet-rust-sdk-wasm)
-└── justfile    # Development commands
-```
-
-## Features
-
-- **REST API Client**: Type-safe client generated from OpenAPI spec using Progenitor
-- **WebSocket Support**: Real-time market data and order submission — including a portable `ManagedWebsocket` (auto-reconnect, exponential backoff, subscription replay, idle-stream detection, backoff reset on stable uptime, subscribe dedup) that works on both native and WASM
-- **Transaction Building**: Fluent builder pattern for constructing and signing transactions
-- **Cross-platform**: Works on native Rust and WASM (browser/Node.js)
-- **Client Defaults**: Configure keypair, max fee, etc. once on the client
-
-## Quick Start (Rust)
+## Rust quickstart
 
 ```toml
 [dependencies]
 bullet-rust-sdk = "*"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-### Basic Usage
-
 ```rust
-use bullet_rust_sdk::{Client, Keypair, Transaction};
+use bullet_rust_sdk::Client;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Connect to mainnet with default keypair
-    let keypair = Keypair::from_hex("your-private-key")?;
-    let client = Client::builder()
-        .url("https://tradingapi.bullet.xyz")
-        .keypair(keypair)
-        .max_fee(10_000_000.into())
-        .build()
-        .await?;
-
-    // Query market data
+    let client = Client::mainnet().await?;
     let info = client.exchange_info().await?.into_inner();
     println!("Symbols: {}", info.symbols.len());
-
-    // Build and send a transaction (uses client defaults)
-    let response = Transaction::builder()
-        .call_message(call_msg)
-        .send(&client)
-        .await?;
-
     Ok(())
 }
 ```
 
-## Quick Start (JavaScript/TypeScript)
+For signing, order submission and streaming, see the [Rust API](https://docs.rs/bullet-rust-sdk)
+and [runnable examples](rust/examples/).
 
-```bash
-npm install bullet-rust-sdk-wasm
+## JavaScript/TypeScript
+
+```sh
+npm install @bulletxyz/sdk-wasm
 ```
 
-```typescript
-import { Client, Keypair, Transaction, User } from 'bullet-rust-sdk-wasm';
+See the [npm usage guide](wasm/README.md) and [platform examples](examples/README.md).
 
-// Connect with defaults
-const keypair = Keypair.fromHex('your-private-key');
-const client = await Client.builder()
-    .url('https://tradingapi.bullet.xyz')
-    .keypair(keypair)
-    .maxFee(10_000_000n)
-    .build();
+## Development
 
-// Build a transaction using generated factory methods
-const callMsg = User.deposit({ asset_id: 0, amount: 1000000n });
-
-// Send transaction (uses client defaults for signing)
-const response = await Transaction.builder()
-    .callMessage(callMsg)
-    .send(client);
-```
-
-## Architecture
-
-### REST Client Generation
-
-The REST client is generated at build time from the committed
-`rust/openapi.json` using
-[Progenitor](https://github.com/oxidecomputer/progenitor). Normal builds do not
-access the network; refreshing the specification is an explicit workflow.
-
-### WASM CallMessage Codegen
-
-The WASM crate uses build-time codegen to generate `wasm_bindgen` factory methods for `CallMessage` variants. This walks the `bullet-exchange-interface` schema and generates:
-
-- **Namespace structs** (`User`, `Public`, `Keeper`, `Vault`, `Admin`) with factory methods
-- **Wrapper structs** for complex types (e.g., `WasmNewOrderArgs`)
-- **Enum wrappers** for schema enums
-
-See `wasm/codegen/` for the implementation.
-
-## Contributing
-
-See [AGENTS.md](./AGENTS.md) for development guidelines, including the critical requirement that **WASM bindings must mirror the Rust SDK** when adding or modifying public APIs.
+The REST client is generated from committed `rust/openapi.json`; normal builds do not
+fetch a schema. Refresh it with `just refresh-spec` when the Trading API changes.
+Rust and WASM public APIs must stay in sync. See [WASM codegen](wasm/ARCHITECTURE.md)
+for the generated-source boundary and `just --list` for development commands.

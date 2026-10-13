@@ -1,22 +1,4 @@
-//! Multisig (M-of-N) transaction support for WASM.
-//!
-//! Mirrors `rust/src/multisig.rs`. Multisig transactions are submitted through
-//! the same spec-compliant Solana offchain wire format used for Ledger
-//! signing, extended to N signers.
-//!
-//! ```js
-//! const config = new MultisigConfig(2, [pubkeyA, pubkeyB, pubkeyC]);
-//!
-//! const unsigned = Transaction.builder()
-//!     .callMessage(callMsg)
-//!     .buildUnsigned(client);
-//!
-//! const tx = new SolanaLedgerMultisigTransaction(unsigned, config);
-//! const signature = await ledgerWallet.signMessage(tx.signableBytes());
-//! tx.addSignature(pubkeyA, signature);
-//! // ... collect more signatures until tx.isComplete() ...
-//! await client.sendLedgerMultisigTransaction(tx);
-//! ```
+//! Multisig signing with the Solana offchain format used by Ledger wallets.
 
 use bullet_rust_sdk::{
     MultisigConfig, SolanaLedgerMultisigTransaction as RustSolanaLedgerMultisigTransaction,
@@ -27,8 +9,6 @@ use crate::client::WasmTradingApi;
 use crate::errors::WasmResult;
 use crate::transaction_builder::WasmUnsignedTransaction;
 use crate::utils::to_fixed_bytes;
-
-// ── WasmMultisigConfig ───────────────────────────────────────────────────────
 
 /// An M-of-N multisig signer set.
 ///
@@ -102,8 +82,6 @@ impl WasmMultisigConfig {
     }
 }
 
-// ── WasmUnsignedTransaction multisig methods ─────────────────────────────────
-
 #[wasm_bindgen(js_class = UnsignedTransaction)]
 impl WasmUnsignedTransaction {
     /// Serialize into the JSON message every multisig signer must commit to.
@@ -137,8 +115,6 @@ impl WasmUnsignedTransaction {
             .to_ledger_multisig_signable_bytes(&config.inner)?)
     }
 }
-
-// ── WasmSolanaLedgerMultisigTransaction ──────────────────────────────────────
 
 /// A multisig transaction collecting signatures over the spec-compliant Solana
 /// offchain wire format (the format Ledger hardware wallets sign).
@@ -234,8 +210,6 @@ impl WasmSolanaLedgerMultisigTransaction {
         Ok(self.inner.to_base64()?)
     }
 }
-
-// ── Client convenience methods ───────────────────────────────────────────────
 
 #[wasm_bindgen(js_class = Client)]
 impl WasmTradingApi {

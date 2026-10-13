@@ -17,8 +17,6 @@ pub struct WasmDecimal(pub(crate) Decimal);
 
 #[wasm_bindgen(js_class = "Decimal")]
 impl WasmDecimal {
-    // ── Constructors ─────────────────────────────────────────────────────
-
     /// Parse a decimal from a string (e.g. `"1.23456"`).
     #[wasm_bindgen(constructor)]
     pub fn new(value: &str) -> WasmResult<WasmDecimal> {
@@ -55,8 +53,6 @@ impl WasmDecimal {
     pub fn from_scientific(value: &str) -> WasmResult<WasmDecimal> {
         Ok(Decimal::from_scientific(value).map(WasmDecimal)?)
     }
-
-    // ── Arithmetic ───────────────────────────────────────────────────────
 
     pub fn add(&self, other: &WasmDecimal) -> WasmDecimal {
         WasmDecimal(self.0 + other.0)
@@ -122,8 +118,6 @@ impl WasmDecimal {
         self.0.checked_rem(other.0).map(WasmDecimal)
     }
 
-    // ── Rounding ─────────────────────────────────────────────────────────
-
     /// Round to `dp` decimal places (half away from zero, i.e. 2.5 → 3, -2.5 → -3).
     pub fn round(&self, dp: u32) -> WasmDecimal {
         WasmDecimal(
@@ -162,8 +156,6 @@ impl WasmDecimal {
     pub fn normalize(&self) -> WasmDecimal {
         WasmDecimal(self.0.normalize())
     }
-
-    // ── Comparison ───────────────────────────────────────────────────────
 
     #[allow(clippy::should_implement_trait)]
     pub fn eq(&self, other: &WasmDecimal) -> bool {
@@ -204,8 +196,6 @@ impl WasmDecimal {
         WasmDecimal(self.0.max(other.0))
     }
 
-    // ── Predicates ───────────────────────────────────────────────────────
-
     #[wasm_bindgen(js_name = isZero)]
     pub fn is_zero(&self) -> bool {
         self.0.is_zero()
@@ -226,8 +216,6 @@ impl WasmDecimal {
     pub fn is_integer(&self) -> bool {
         self.0.is_integer()
     }
-
-    // ── Conversion ───────────────────────────────────────────────────────
 
     /// String representation (e.g. `"1.23"`).
     #[wasm_bindgen(js_name = toString)]

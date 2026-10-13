@@ -49,23 +49,18 @@ fn map_vec_by_index(
     serde_metadata: &SerdeMetadata,
     wrapper_indices: &HashSet<usize>,
 ) -> ParamMapping {
-    // Known newtype Vecs.
     if let Some(m) = newtypes::classify(field_name, inner_idx, types, serde_metadata)
         .and_then(NewtypeKind::vec_mapping)
     {
         return m;
     }
 
-    // Dynamic dispatch based on inner type.
     let inner_ty = &types[inner_idx];
     match inner_ty {
-        // Vec<NamedStruct> — accept js_sys::Array of wrapper objects.
         Ty::Struct(s) if !s.type_name.starts_with("__SovVirtualWallet_") => {
             if wrapper_indices.contains(&inner_idx) {
-                // This struct has a generated wrapper — accept a JS Array
-                // of wrapper objects. Each element is recovered from the
-                // JsValue via TryFromJsValue, then .inner extracts the
-                // domain type. JS usage: `[new NewOrderArgs(...), ...]`
+                // JS passes `[new NewOrderArgs(...), ...]`; each element is recovered via
+                // TryFromJsValue.
                 let wrapper_name = format!("Wasm{}", s.type_name);
                 ParamMapping {
                     param_type: "js_sys::Array".into(),
@@ -76,14 +71,12 @@ fn map_vec_by_index(
                     is_optional: false,
                 }
             } else {
-                // No wrapper — fall back to JSON string.
                 json_fallback()
             }
         }
         // Vec<(multi-field tuple)> — currently used by admin cancel ops.
         Ty::Tuple(t) => map_admin_cancel_vec(context_name, t, types, serde_metadata)
             .unwrap_or_else(json_fallback),
-        // Everything else — JSON fallback.
         _ => json_fallback(),
     }
 }

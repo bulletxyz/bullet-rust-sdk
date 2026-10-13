@@ -1,33 +1,4 @@
-//! Fluent transaction builder for constructing and submitting transactions.
-//!
-//! All transaction construction goes through the builder pattern:
-//!
-//! ```ignore
-//! use bullet_rust_sdk::{Transaction, UnsignedTransaction, Client, Keypair};
-//!
-//! // Build and send with explicit signer
-//! let response = Transaction::builder()
-//!     .call_message(call_msg)
-//!     .max_fee(10_000_000)
-//!     .signer(&keypair)
-//!     .client(&client)
-//!     .build()?;
-//!
-//! // External signing
-//! let unsigned = UnsignedTransaction::builder()
-//!     .call_message(call_msg)
-//!     .max_fee(10_000_000)
-//!     .client(&client)
-//!     .build()?;
-//!
-//! let signable = unsigned.to_bytes()?;
-//! let signature: [u8; 64] = external_signer.sign(&signable);
-//! let pub_key: [u8; 32] = external_signer.public_key();
-//! let signed = Transaction::from_parts(unsigned, signature, pub_key);
-//!
-//! // Submit later
-//! client.send_transaction(&signed).await?;
-//! ```
+//! Versioned, chain-bound transaction building, signing and submission.
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -49,11 +20,6 @@ use crate::generated::types::{
 use crate::types::CallMessage;
 use crate::{Client, Keypair, SDKError, SDKResult};
 
-// ── UnsignedTransaction ──────────────────────────────────────────────────────
-
-/// The Borsh discriminant of [`TransactionSigningPayload::V0`]: the first byte
-/// of every post-fork signable payload. Pre-fork signable bytes started with
-/// the `RuntimeCall` discriminant instead (7 for exchange calls).
 const SIGNING_PAYLOAD_VERSION_V0: u8 = 0;
 
 /// An unsigned transaction with the chain hash baked in.
@@ -78,31 +44,14 @@ impl UnsignedTransaction {
         Ok(self.inner.signing_bytes(&self.chain_hash))
     }
 
-    /// Reconstruct an [`UnsignedTransaction`] from the canonical bytes produced
-    /// by [`to_bytes`](UnsignedTransaction::to_bytes) — the inverse of that
-    /// method.
+    /// Reconstruct an [`UnsignedTransaction`] from the bytes produced by
+    /// [`to_bytes`](UnsignedTransaction::to_bytes).
     ///
-    /// `to_bytes` is the Borsh V0 signing payload, which ends with the chain
-    /// hash (a 32-byte domain separator). This reads back the payload and its
-    /// chain hash, taking `chain_name` from `client`. The embedded chain hash is
-    /// checked against the client's to reject bytes that were built for a
-    /// different network.
+    /// The embedded chain hash must match `client`'s, rejecting bytes built for another network.
+    /// The payload is read back verbatim, so persisted signable bytes rebuild byte-identically.
     ///
-    /// This lets a coordinator persist a transaction as its exact signable
-    /// bytes and rebuild it later — e.g. across process restarts — without
-    /// re-deriving from structured inputs. Because the payload is read back
-    /// verbatim rather than re-serialized, the rebuilt signable bytes are
-    /// byte-identical to what was signed; the stored bytes, not a separate JSON
-    /// representation, are the source of truth.
-    ///
-    /// Only bytes produced by this signing format are accepted. Bytes persisted
-    /// by a pre-fork SDK (`borsh(unsigned_tx) ++ chain_hash`, no leading version
-    /// byte) cannot be rebuilt by this decoder and are rejected with
-    /// [`SDKError::SerializationError`]. Whether the network still accepts a
-    /// transaction signed over such bytes is a separate question: single-signer
-    /// transactions in the pre-fork encoding are admitted only below each
-    /// environment's `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` cutoff. Rebuild the
-    /// transaction from its inputs and re-sign it to be safe.
+    /// Pre-fork bytes (`borsh(unsigned_tx) ++ chain_hash`, no version byte) are rejected with
+    /// [`SDKError::SerializationError`]; rebuild those from their inputs and re-sign.
     pub fn from_bytes(bytes: &[u8], client: &Client) -> SDKResult<UnsignedTransaction> {
         if bytes.first() != Some(&SIGNING_PAYLOAD_VERSION_V0) {
             return Err(SDKError::SerializationError(format!(
@@ -140,8 +89,7 @@ impl UnsignedTransaction {
 
     /// Render the unsigned transaction payload as a human-readable message.
     ///
-    /// This is useful when an external wallet can only show raw message bytes
-    /// during signing. The returned string is for display only; sign the bytes
+    /// For external wallets that can only display raw message bytes. Display only; sign the bytes
     /// from [`to_bytes`](UnsignedTransaction::to_bytes).
     pub fn to_display_message(&self) -> SDKResult<String> {
         let schema = Schema::of_single_type::<RawUnsignedTransaction>()
@@ -155,11 +103,10 @@ impl UnsignedTransaction {
 
     /// Build the bytes a Ledger hardware wallet must sign.
     ///
-    /// Prepends the 85-byte Solana off-chain message preamble (using `chain_hash`
-    /// as the application domain) to the JSON message bytes. This is the spec-
-    /// compliant format required by Ledger firmware. Pass the resulting bytes to
-    /// `wallet.signMessage`; then assemble and submit with
-    /// [`SolanaLedgerTransaction::from_parts`] and [`Client::send_ledger_transaction`].
+    /// Prepends the 85-byte Solana off-chain message preamble (with `chain_hash` as the application
+    /// domain) to the JSON message, as Ledger firmware requires. Sign with `wallet.signMessage`,
+    /// then assemble with [`SolanaLedgerTransaction::from_parts`] and submit with
+    /// [`Client::send_ledger_transaction`].
     pub fn to_ledger_signable_bytes(&self, pubkey: &[u8; 32]) -> SDKResult<Vec<u8>> {
         let json_bytes = self.to_message_bytes()?;
         let message_len = u16::try_from(json_bytes.len()).map_err(|_| {
@@ -176,9 +123,8 @@ impl UnsignedTransaction {
 
     /// Serialize into the human-readable JSON bytes for offchain signing.
     ///
-    /// This is the message external Solana wallets should sign when the backend
-    /// uses the `solanaSimple` authenticator. The resulting signature must be
-    /// wrapped with [`SolanaOffchainTransaction::from_parts`] and submitted via
+    /// External Solana wallets sign this when the backend uses the `solanaSimple` authenticator.
+    /// Wrap the signature with [`SolanaOffchainTransaction::from_parts`] and submit via
     /// [`Client::send_offchain_transaction`].
     pub fn to_message_bytes(&self) -> SDKResult<Vec<u8>> {
         let message = serde_json::to_value(&self.inner)?;
@@ -188,9 +134,8 @@ impl UnsignedTransaction {
                 "unsigned transaction serialized to non-object JSON".to_string(),
             ));
         };
-        // The Solana offchain authenticator expects only `max_fee` as a JSON
-        // string today because it is the interface's only u128 transaction
-        // detail. Other integer fields must remain JSON numbers.
+        // The offchain authenticator expects `max_fee` (the only u128 detail) as a JSON string;
+        // other integers stay numbers.
         stringify_offchain_max_fee(&mut message, self.inner.details.max_fee.0)?;
         message.insert(
             "chain_name".to_string(),
@@ -203,9 +148,8 @@ impl UnsignedTransaction {
 
     /// Build an unsigned transaction.
     ///
-    /// The returned [`UnsignedTransaction`] contains the chain hash, so
-    /// [`to_bytes()`](UnsignedTransaction::to_bytes) produces signable bytes
-    /// without needing a client reference.
+    /// The result embeds the chain hash, so [`to_bytes()`](UnsignedTransaction::to_bytes) needs no
+    /// client.
     ///
     /// # Example
     ///
@@ -230,16 +174,11 @@ impl UnsignedTransaction {
         /// Transaction uniqueness ([`UniquenessData::Nonce`],
         /// [`UniquenessData::Generation`], or [`UniquenessData::Window`]).
         ///
-        /// Defaults to [`UniquenessData::Window`] from a per-client counter
-        /// that tracks the millisecond unix timestamp and increments per
-        /// transaction — a monotonic, duplicate-free value that needs no chain
-        /// round-trip and tolerates many in-flight transactions. Set explicitly
-        /// to use a nonce or generation instead.
+        /// Defaults to [`UniquenessData::Window`] from a per-client millisecond counter: monotonic,
+        /// duplicate-free and needs no chain round-trip.
         uniqueness: Option<UniquenessData>,
-        /// The account to execute as. Defaults to `None`, which executes as the
-        /// signer's own default address. Set to `Some(address)` to execute as
-        /// another account that explicitly authorised the signer's credential
-        /// (e.g. a multisig or a delegated account).
+        /// Account to execute as. `None` = the signer's default address; `Some` = another account
+        /// that authorised the signer's credential (e.g. a multisig or delegated account).
         address_override: Option<Address>,
         client: &Client,
     ) -> SDKResult<UnsignedTransaction> {
@@ -256,18 +195,11 @@ impl UnsignedTransaction {
 
     /// Build an unsigned transaction from a whole [`RuntimeCall`].
     ///
-    /// This is the primary constructor: [`builder`](UnsignedTransaction::builder)
-    /// is sugar that wraps a typed [`CallMessage`] as `RuntimeCall::Exchange` and
-    /// calls this. Use this directly to build a call assembled dynamically — e.g.
-    /// `RuntimeCall` deserialized from JSON via its `serde` support — without
-    /// going through the typed factories.
-    ///
-    /// Exchange call messages are validated against the connected client's
-    /// schema; other runtime-call variants pass through.
-    ///
-    /// `address_override` selects the account to execute as: `None` executes
-    /// as the signer's default address, `Some(address)` as another account that
-    /// explicitly authorised the signer's credential.
+    /// The primary constructor; [`builder`](UnsignedTransaction::builder) wraps a typed
+    /// [`CallMessage`] as `RuntimeCall::Exchange` and calls this. Use it for dynamically assembled
+    /// calls (e.g. a `RuntimeCall` deserialized from JSON). Exchange calls are validated against
+    /// the client's schema; other variants pass through. For `address_override` see
+    /// [`builder`](UnsignedTransaction::builder).
     pub fn from_runtime_call(
         runtime_call: RuntimeCall,
         max_fee: u128,
@@ -306,17 +238,11 @@ impl UnsignedTransaction {
     }
 }
 
-// ── Solana preamble ──────────────────────────────────────────────────────────
-
 // Solana off-chain signing domain: 0xff followed by "solana offchain" (15 bytes).
 const SOLANA_SIGNING_DOMAIN: [u8; 16] = *b"\xffsolana offchain";
 
-/// Build the Solana off-chain message preamble for one or more signers.
-///
-/// A single-signer preamble is just `N = 1`. Layout
-/// (`53 + 32 * pubkeys.len()` bytes):
-///   `[16: signing domain][1: header_version][32: chain_hash][1: message_format]
-///    [1: signer_count = N][32 * N: pubkeys][2: message_length LE]`
+// Solana offchain preamble layout: domain[16], version[1], chain_hash[32], format[1],
+// signer_count[1], pubkeys[32 * N], message_length[2 LE].
 pub(crate) fn make_solana_preamble(
     pubkeys: &[[u8; 32]],
     chain_hash: &[u8; 32],
@@ -335,13 +261,11 @@ pub(crate) fn make_solana_preamble(
     preamble
 }
 
-// ── Solana offchain transaction ──────────────────────────────────────────────
-
 /// A Solana offchain transaction ready for sequencer submission.
 ///
-/// Use this for external Solana wallets that should display readable JSON
-/// instead of Borsh bytes. Sign [`UnsignedTransaction::to_message_bytes`],
-/// assemble with [`SolanaOffchainTransaction::from_parts`], then submit via
+/// For external Solana wallets that display readable JSON instead of Borsh bytes. Sign
+/// [`UnsignedTransaction::to_message_bytes`], assemble with
+/// [`SolanaOffchainTransaction::from_parts`], then submit via
 /// [`Client::send_offchain_transaction`].
 #[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct SolanaOffchainTransaction {
@@ -385,8 +309,6 @@ impl SolanaOffchainTransaction {
         Ok(BASE64.encode(&bytes))
     }
 }
-
-// ── Solana Ledger transaction ────────────────────────────────────────────────
 
 /// A Solana offchain transaction using the spec-compliant Ledger wire format.
 ///
@@ -438,8 +360,6 @@ impl SolanaLedgerTransaction {
     }
 }
 
-// ── Transaction ──────────────────────────────────────────────────────────────
-
 /// Transaction construction and serialization.
 ///
 /// Use `Transaction::builder()` for signed transactions, or
@@ -450,8 +370,8 @@ pub struct Transaction;
 impl Transaction {
     /// Build a signed transaction.
     ///
-    /// Internally builds an unsigned transaction, serializes it,
-    /// signs with the provided keypair, and assembles the result.
+    /// Builds the unsigned transaction, signs it with the provided keypair and assembles the
+    /// result.
     ///
     /// # Example
     ///
@@ -472,10 +392,7 @@ impl Transaction {
         priority_fee_bips: Option<u64>,
         gas_limit: Option<Gas>,
         uniqueness: Option<UniquenessData>,
-        /// The account to execute as. Defaults to `None`, which executes as the
-        /// signer's own default address. Set to `Some(address)` to execute as
-        /// another account that explicitly authorised the signer's credential
-        /// (e.g. a multisig or a delegated account).
+        /// Account to execute as; see [`UnsignedTransaction::builder`].
         address_override: Option<Address>,
         signer: Option<&Keypair>,
         client: &Client,
@@ -494,13 +411,8 @@ impl Transaction {
 
     /// Build and sign a transaction from a whole [`RuntimeCall`].
     ///
-    /// The signed-transaction counterpart of
-    /// [`UnsignedTransaction::from_runtime_call`]: builds the unsigned
-    /// transaction, signs `to_bytes()` with `signer` (falling back to the
-    /// client's keypair), and assembles the result. Use this to sign a call
-    /// assembled dynamically rather than via the typed factories.
-    ///
-    /// `address_override` selects the account to execute as; see
+    /// Builds the unsigned transaction, signs `to_bytes()` with `signer` (default: the client's
+    /// keypair) and assembles the result. `address_override` as in
     /// [`UnsignedTransaction::from_runtime_call`].
     #[allow(clippy::too_many_arguments)]
     pub fn from_runtime_call(
@@ -571,7 +483,6 @@ impl Transaction {
     }
 }
 
-// ── Client methods ───────────────────────────────────────────────────────────
 impl Client {
     /// Send a signed transaction to the network.
     ///
@@ -594,9 +505,8 @@ impl Client {
 
     /// Send a Solana offchain transaction to the network.
     ///
-    /// Submits to the trading API's `/api/v1/solanaOffchainTx`, which accepts
-    /// the JSON-based Solana authenticator payload used by external Solana
-    /// wallets and proxies it to the rollup.
+    /// Submits to `/api/v1/solanaOffchainTx`, which proxies the JSON Solana authenticator payload
+    /// to the rollup.
     pub async fn send_offchain_transaction(
         &self,
         signed: &SolanaOffchainTransaction,
@@ -619,10 +529,8 @@ impl Client {
 
     /// Submit a base64-encoded Solana offchain envelope via the trading API.
     ///
-    /// Stale-chain-hash errors are mapped to [`SDKError::TransactionOutdated`]
-    /// so the caller knows to rebuild and re-sign — for the offchain envelope
-    /// that's the spec's `400` chain-hash mismatch (the chain hash is a
-    /// validated field), as well as any `401` signature failure.
+    /// Stale chain hashes map to [`SDKError::TransactionOutdated`] (rebuild and re-sign): a `400`
+    /// chain-hash mismatch or any `401` signature failure.
     pub(crate) async fn submit_offchain(&self, body: String) -> SDKResult<SubmitTxResponse> {
         let request = SubmitSolanaOffchainTxRequest { body };
         match self.client().submit_solana_offchain_tx(&request).await {
@@ -666,8 +574,7 @@ impl Client {
         )?;
         match self.send_transaction(&signed).await {
             Err(SDKError::TransactionOutdated) => {
-                // chain hash was refreshed; re-sign with the new hash and retry once.
-                // submit directly so a second 401 comes back as ApiError, not TransactionOutdated
+                // Submit directly so a second 401 comes back as ApiError, not TransactionOutdated.
                 let signed = Transaction::from_runtime_call(
                     runtime_call,
                     None,
@@ -690,11 +597,8 @@ impl Client {
     }
 
     async fn submit_tx_api_error(&self, error: ApiErrorResponse) -> SDKResult<SDKError> {
-        // A stale chain hash surfaces differently per submission path: the borsh
-        // path bakes it into the signed bytes, so verification fails with a 401 —
-        // the message text varies, so key on the status alone. The Solana
-        // offchain envelope carries the hash as a validated field (→ 400
-        // chain-hash mismatch). Both mean "rebuild and re-sign".
+        // Stale chain hash: the borsh path fails signature verification (401, message varies, so
+        // key on status); the offchain envelope validates the hash field (400 mismatch).
         let stale_chain_hash = error.status == 401
             || (error.status == 400 && {
                 let message = error.message.to_lowercase();
@@ -728,8 +632,6 @@ fn stringify_offchain_max_fee(
     *max_fee_value = Value::String(max_fee.to_string());
     Ok(())
 }
-
-// ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -1311,10 +1213,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_offchain_transaction_maps_trading_api_validator_401_to_outdated() {
-        // A stale signature is rejected with a 401 whose message text varies
-        // ("Transaction validation failed: invalid ed25519 signature" vs
-        // "Invalid signature"). Detection must key on the status, not the
-        // wording.
+        // The 401 message text varies; detection must key on the status.
         let (server, client) = mock_client_for_offchain_submission(
             ResponseTemplate::new(401).set_body_json(serde_json::json!({
                 "status": 401,

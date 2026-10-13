@@ -1,14 +1,10 @@
-//! Mapping for Option<T> types.
-//!
-//! Wraps an inner ParamMapping to produce the Option-ified version.
-//! Handles the wasm-bindgen constraint that Option<&str> must be Option<String>,
-//! and that fallible conversions need .map().transpose() patterns.
+//! Mapping for Option<T>. wasm-bindgen can't take `Option<&str>`, and fallible conversions
+//! need `.map().transpose()`.
 
 use super::ParamMapping;
 
 /// Wrap an inner mapping as Option<T>.
 pub fn map_option(inner: ParamMapping) -> ParamMapping {
-    // Option<&str> → Option<String> because wasm-bindgen can't do Option<&str>.
     let param_type = if inner.param_type == "&str" {
         "Option<String>".into()
     } else {
@@ -30,13 +26,11 @@ fn build_option_conversion(inner: &ParamMapping) -> String {
     if inner.param_type == "&str" {
         build_str_option_conversion(inner)
     } else if inner.conversion.ends_with(".inner") {
-        // Option<WasmStruct> → .map(|w| w.inner)
         "{v}.map(|w| w.inner)".into()
     } else if inner.conversion == "{v}" {
-        // Identity: Option<T> passes through.
         "{v}".into()
     } else if inner.param_type == "js_sys::Array" {
-        // Option<Array> — inner has complex ? usage, wrap in Result closure.
+        // Inner conversion uses `?`, so wrap it in a Result closure.
         let inner_expr = inner.conversion.replace("{v}", "v");
         format!("{{v}}.map(|v| -> Result<_, String> {{ Ok({inner_expr}) }}).transpose()?")
     } else {

@@ -113,6 +113,8 @@ impl From<SDKError> for WasmError {
             | SDKError::TransactionOutdated
             | SDKError::InvalidMultisig(_)
             | SDKError::InvalidSubAccountIndex(_)
+            | SDKError::InvalidAddress(_)
+            | SDKError::InvalidMemo(_)
             | SDKError::RequestError(_) => WasmErrorKind::Validation,
             SDKError::JsonSerializeError(_)
             | SDKError::StringParseError(_)

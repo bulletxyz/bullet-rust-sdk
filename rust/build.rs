@@ -9,8 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=BULLET_REFRESH_SPEC");
 
     // Read the committed openapi.json by default — no network access required.
-    // Set `BULLET_REFRESH_SPEC=1` to fetch the live spec instead; this is used
-    // by the `just refresh-spec` workflow when tracking upstream changes.
+    // `BULLET_REFRESH_SPEC=1` fetches the live spec instead (`just refresh-spec`).
     let spec_json = if std::env::var("BULLET_REFRESH_SPEC").is_ok() {
         fetch_spec().ok_or("BULLET_REFRESH_SPEC set but live fetch failed")?
     } else {
@@ -41,9 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let mut generator = progenitor::Generator::new(&settings);
 
-    // Ensure error responses are defined so progenitor generates Error<types::ApiErrorResponse>.
-    // If the spec already includes ApiErrorResponse (from the trading API's utoipa annotations),
-    // this is a no-op. Otherwise, it injects them — needed for older spec versions.
+    // Make progenitor generate `Error<types::ApiErrorResponse>`; a no-op for current specs.
     ensure_error_responses(&mut spec);
 
     let spec: openapiv3::OpenAPI = serde_json::from_value(spec.clone()).map_err(|e| {
@@ -146,10 +143,7 @@ fn convert_nullable_types(v: &mut Value) {
 /// Ensure all operations have error response definitions so progenitor generates
 /// `Error<types::ApiErrorResponse>` and auto-deserializes error bodies.
 ///
-/// If the spec already includes `ApiErrorResponse` in components/schemas (from the
-/// trading API's utoipa annotations), this only fills in missing error responses on
-/// operations that lack them. For older specs without any error schemas, it injects
-/// everything.
+/// Fills in missing error responses; injects the schema too for older specs that lack it.
 ///
 /// Note: `default` responses can't be used because progenitor treats `default` as both
 /// success and error, causing `assert!(response_types.len() <= 1)` in progenitor-impl.

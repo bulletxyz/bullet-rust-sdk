@@ -1,31 +1,4 @@
-//! Strongly-typed WebSocket subscription topics.
-//!
-//! This module provides type-safe topic builders for WebSocket subscriptions,
-//! eliminating the need to remember string formats like `"BTC-USD@depth10"`.
-//!
-//! # Example
-//!
-//! ```no_run
-//! use bullet_rust_sdk::types::RequestId;
-//! use bullet_rust_sdk::ws::topics::{KlineInterval, OrderbookDepth, Topic};
-//!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! # let api = bullet_rust_sdk::Client::mainnet().await?;
-//! # let mut ws = api.connect_ws().call().await?;
-//! // Type-safe subscriptions
-//! ws.subscribe(
-//!     [
-//!         Topic::agg_trade("BTC-USD"),
-//!         Topic::depth("ETH-USD", OrderbookDepth::D10),
-//!         Topic::book_ticker("SOL-USD"),
-//!         Topic::kline("BTC-USD", KlineInterval::H1),
-//!     ],
-//!     Some(RequestId::new(1)),
-//! )
-//! .await?;
-//! # Ok(())
-//! # }
-//! ```
+//! Typed constructors for WebSocket subscription strings.
 
 use std::fmt;
 
@@ -88,22 +61,6 @@ impl KlineInterval {
 ///
 /// Topics are created using the static constructor methods and converted to
 /// the wire format automatically when passed to [`subscribe()`](super::WebsocketHandle::subscribe).
-///
-/// # Available Topics
-///
-/// | Topic | Description |
-/// |-------|-------------|
-/// | [`Topic::agg_trade`] | Aggregated trade updates |
-/// | [`Topic::depth`] | Order book depth snapshots |
-/// | [`Topic::book_ticker`] | Best bid/ask prices |
-/// | [`Topic::mark_price`] | Mark price updates |
-/// | [`Topic::kline`] | Candlestick/kline data |
-/// | [`Topic::force_order`] | Liquidation orders |
-/// | [`Topic::user_orders`] | User order updates |
-/// | [`Topic::all_tickers`] | All symbol mini tickers |
-/// | [`Topic::all_mark_prices`] | All mark prices |
-/// | [`Topic::all_book_tickers`] | All best bid/ask |
-/// | [`Topic::all_force_orders`] | All liquidations |
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Topic {
     /// Aggregated trade stream for a symbol.
@@ -144,19 +101,13 @@ pub enum Topic {
 
     /// All symbols liquidation stream.
     AllForceOrders,
+
+    /// Trading status of every market: a snapshot on subscribe, deltas after.
+    AllMarketStatuses,
 }
 
 impl Topic {
     /// Subscribe to aggregated trades for a symbol.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::Topic;
-    ///
-    /// let topic = Topic::agg_trade("BTC-USD");
-    /// assert_eq!(topic.to_string(), "BTC-USD@aggTrade");
-    /// ```
     pub fn agg_trade(symbol: impl Into<String>) -> Self {
         Self::AggTrade {
             symbol: symbol.into(),
@@ -164,15 +115,6 @@ impl Topic {
     }
 
     /// Subscribe to order book depth for a symbol.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::{OrderbookDepth, Topic};
-    ///
-    /// let topic = Topic::depth("BTC-USD", OrderbookDepth::D10);
-    /// assert_eq!(topic.to_string(), "BTC-USD@depth10");
-    /// ```
     pub fn depth(symbol: impl Into<String>, depth: OrderbookDepth) -> Self {
         Self::Depth {
             symbol: symbol.into(),
@@ -181,15 +123,6 @@ impl Topic {
     }
 
     /// Subscribe to best bid/ask for a symbol.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::Topic;
-    ///
-    /// let topic = Topic::book_ticker("BTC-USD");
-    /// assert_eq!(topic.to_string(), "BTC-USD@bookTicker");
-    /// ```
     pub fn book_ticker(symbol: impl Into<String>) -> Self {
         Self::BookTicker {
             symbol: symbol.into(),
@@ -197,15 +130,6 @@ impl Topic {
     }
 
     /// Subscribe to mark price updates for a symbol.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::Topic;
-    ///
-    /// let topic = Topic::mark_price("BTC-USD");
-    /// assert_eq!(topic.to_string(), "BTC-USD@markPrice");
-    /// ```
     pub fn mark_price(symbol: impl Into<String>) -> Self {
         Self::MarkPrice {
             symbol: symbol.into(),
@@ -213,15 +137,6 @@ impl Topic {
     }
 
     /// Subscribe to kline/candlestick data for a symbol.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::{KlineInterval, Topic};
-    ///
-    /// let topic = Topic::kline("BTC-USD", KlineInterval::H1);
-    /// assert_eq!(topic.to_string(), "BTC-USD@kline_1h");
-    /// ```
     pub fn kline(symbol: impl Into<String>, interval: KlineInterval) -> Self {
         Self::Kline {
             symbol: symbol.into(),
@@ -230,15 +145,6 @@ impl Topic {
     }
 
     /// Subscribe to liquidation orders for a symbol.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::Topic;
-    ///
-    /// let topic = Topic::force_order("BTC-USD");
-    /// assert_eq!(topic.to_string(), "BTC-USD@forceOrder");
-    /// ```
     pub fn force_order(symbol: impl Into<String>) -> Self {
         Self::ForceOrder {
             symbol: symbol.into(),
@@ -246,15 +152,6 @@ impl Topic {
     }
 
     /// Subscribe to user order updates for an address.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::Topic;
-    ///
-    /// let topic = Topic::user_orders("0xabc");
-    /// assert_eq!(topic.to_string(), "0xabc@user.orders");
-    /// ```
     pub fn user_orders(address: impl Into<String>) -> Self {
         Self::UserOrders {
             address: address.into(),
@@ -262,59 +159,28 @@ impl Topic {
     }
 
     /// Subscribe to mini ticker updates for all symbols.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::Topic;
-    ///
-    /// let topic = Topic::all_tickers();
-    /// assert_eq!(topic.to_string(), "!ticker@arr");
-    /// ```
     pub fn all_tickers() -> Self {
         Self::AllTickers
     }
 
     /// Subscribe to mark price updates for all symbols.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::Topic;
-    ///
-    /// let topic = Topic::all_mark_prices();
-    /// assert_eq!(topic.to_string(), "!markPrice@arr");
-    /// ```
     pub fn all_mark_prices() -> Self {
         Self::AllMarkPrices
     }
 
     /// Subscribe to book ticker updates for all symbols.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::Topic;
-    ///
-    /// let topic = Topic::all_book_tickers();
-    /// assert_eq!(topic.to_string(), "!bookTicker@arr");
-    /// ```
     pub fn all_book_tickers() -> Self {
         Self::AllBookTickers
     }
 
     /// Subscribe to liquidation orders for all symbols.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bullet_rust_sdk::ws::topics::Topic;
-    ///
-    /// let topic = Topic::all_force_orders();
-    /// assert_eq!(topic.to_string(), "!forceOrder@arr");
-    /// ```
     pub fn all_force_orders() -> Self {
         Self::AllForceOrders
+    }
+
+    /// Subscribe to the trading status of all markets.
+    pub fn all_market_statuses() -> Self {
+        Self::AllMarketStatuses
     }
 }
 
@@ -332,6 +198,7 @@ impl fmt::Display for Topic {
             Topic::AllMarkPrices => write!(f, "!markPrice@arr"),
             Topic::AllBookTickers => write!(f, "!bookTicker@arr"),
             Topic::AllForceOrders => write!(f, "!forceOrder@arr"),
+            Topic::AllMarketStatuses => write!(f, "!marketStatus@arr"),
         }
     }
 }
@@ -347,83 +214,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_agg_trade() {
-        assert_eq!(Topic::agg_trade("BTC-USD").to_string(), "BTC-USD@aggTrade");
-    }
-
-    #[test]
-    fn test_depth() {
-        assert_eq!(
-            Topic::depth("BTC-USD", OrderbookDepth::D5).to_string(),
-            "BTC-USD@depth5"
-        );
-        assert_eq!(
-            Topic::depth("BTC-USD", OrderbookDepth::D10).to_string(),
-            "BTC-USD@depth10"
-        );
-        assert_eq!(
-            Topic::depth("BTC-USD", OrderbookDepth::D20).to_string(),
-            "BTC-USD@depth20"
-        );
-    }
-
-    #[test]
-    fn test_book_ticker() {
-        assert_eq!(
-            Topic::book_ticker("ETH-USD").to_string(),
-            "ETH-USD@bookTicker"
-        );
-    }
-
-    #[test]
-    fn test_mark_price() {
-        assert_eq!(
-            Topic::mark_price("SOL-USD").to_string(),
-            "SOL-USD@markPrice"
-        );
-    }
-
-    #[test]
-    fn test_kline() {
-        assert_eq!(
-            Topic::kline("BTC-USD", KlineInterval::M1).to_string(),
-            "BTC-USD@kline_1m"
-        );
-        assert_eq!(
-            Topic::kline("BTC-USD", KlineInterval::H4).to_string(),
-            "BTC-USD@kline_4h"
-        );
-        assert_eq!(
-            Topic::kline("BTC-USD", KlineInterval::D1).to_string(),
-            "BTC-USD@kline_1d"
-        );
-    }
-
-    #[test]
-    fn test_force_order() {
-        assert_eq!(
-            Topic::force_order("BTC-USD").to_string(),
-            "BTC-USD@forceOrder"
-        );
-    }
-
-    #[test]
-    fn test_user_orders() {
-        assert_eq!(Topic::user_orders("0xabc").to_string(), "0xabc@user.orders");
-    }
-
-    #[test]
-    fn test_all_streams() {
-        assert_eq!(Topic::all_tickers().to_string(), "!ticker@arr");
-        assert_eq!(Topic::all_mark_prices().to_string(), "!markPrice@arr");
-        assert_eq!(Topic::all_book_tickers().to_string(), "!bookTicker@arr");
-        assert_eq!(Topic::all_force_orders().to_string(), "!forceOrder@arr");
-    }
-
-    #[test]
-    fn test_into_string() {
-        let topic = Topic::agg_trade("BTC-USD");
-        let s: String = topic.into();
-        assert_eq!(s, "BTC-USD@aggTrade");
+    fn topic_wire_format() {
+        for (topic, want) in [
+            (Topic::agg_trade("BTC-USD"), "BTC-USD@aggTrade"),
+            (
+                Topic::depth("BTC-USD", OrderbookDepth::D5),
+                "BTC-USD@depth5",
+            ),
+            (
+                Topic::depth("BTC-USD", OrderbookDepth::D10),
+                "BTC-USD@depth10",
+            ),
+            (
+                Topic::depth("BTC-USD", OrderbookDepth::D20),
+                "BTC-USD@depth20",
+            ),
+            (Topic::book_ticker("ETH-USD"), "ETH-USD@bookTicker"),
+            (Topic::mark_price("SOL-USD"), "SOL-USD@markPrice"),
+            (
+                Topic::kline("BTC-USD", KlineInterval::M1),
+                "BTC-USD@kline_1m",
+            ),
+            (
+                Topic::kline("BTC-USD", KlineInterval::H4),
+                "BTC-USD@kline_4h",
+            ),
+            (
+                Topic::kline("BTC-USD", KlineInterval::D1),
+                "BTC-USD@kline_1d",
+            ),
+            (Topic::force_order("BTC-USD"), "BTC-USD@forceOrder"),
+            (Topic::user_orders("0xabc"), "0xabc@user.orders"),
+            (Topic::all_tickers(), "!ticker@arr"),
+            (Topic::all_mark_prices(), "!markPrice@arr"),
+            (Topic::all_market_statuses(), "!marketStatus@arr"),
+            (Topic::all_book_tickers(), "!bookTicker@arr"),
+            (Topic::all_force_orders(), "!forceOrder@arr"),
+        ] {
+            assert_eq!(topic.to_string(), want);
+            assert_eq!(String::from(topic), want);
+        }
     }
 }

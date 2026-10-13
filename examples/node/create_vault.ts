@@ -1,17 +1,11 @@
 /**
- * Create a vault on Bullet, then optionally whitelist depositors and delegate
- * trading to another key. Leader-only; everything routes through the trading API.
+ * Create a vault, then optionally whitelist depositors and delegate trading.
+ * The address is derived locally (`deriveVaultAddress`): the trading API has no
+ * vault lookup and CreateVault emits no address event.
  *
- * The vault address is derived locally from its name (`deriveVaultAddress`) —
- * the trading API has no vault lookup and CreateVault emits no address event.
- *
- * Usage:
- *   NETWORK=testnet node create_vault.ts <leader-keypair.json> [delegate-address]
- *
- * <leader-keypair.json> is a JSON array of 32 or 64 bytes (Solana style). The
- * leader signs and must already hold USDC to cover the creation fee.
- *
- * Requires Node >= 23.6 (native TypeScript).
+ * Usage: NETWORK=testnet node create_vault.ts <leader-keypair.json> [delegate-address]
+ * The keypair is a 32- or 64-byte JSON array; the leader pays the USDC creation
+ * fee. Requires Node >= 23.6 (native TypeScript).
  */
 
 import { readFileSync } from "node:fs";

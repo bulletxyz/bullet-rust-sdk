@@ -9,7 +9,6 @@ use codegen::progenitor::TypeInfo;
 fn main() {
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
 
-    // ── CallMessage factories (bullet_schema) ───────────────────────────────
     let call_msg_path = Path::new(&out_dir).join("call_message_factories.rs");
 
     let info = codegen::walk::extract_schema_info();
@@ -25,7 +24,6 @@ fn main() {
         info.enums.len(),
     );
 
-    // ── Progenitor type/client wrappers ─────────────────────────────────────
     let codegen_path = std::env::var("DEP_BULLET_RUST_CODEGEN_CODEGEN_PATH")
         .expect("DEP_BULLET_RUST_CODEGEN_CODEGEN_PATH not set — is bullet-rust-sdk a dependency?");
 
@@ -35,7 +33,6 @@ fn main() {
     let progenitor_path = Path::new(&out_dir).join("progenitor_wrappers.rs");
     fs::write(&progenitor_path, &progenitor_code).expect("failed to write progenitor wrappers");
 
-    // Count items for the build summary.
     let (mut structs, mut enums, mut methods) = (0, 0, 0);
     for (name, item) in &code_model.items {
         match item {

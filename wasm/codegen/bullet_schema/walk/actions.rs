@@ -20,7 +20,7 @@ pub struct RawVariantInfo {
     pub fields: Vec<FieldInfo>,
 }
 
-/// Find the `CallMessage` enum in the schema by name and extract all action groups.
+/// Find `CallMessage` in the schema and extract all action groups.
 pub fn extract_action_groups(types: &Types) -> Vec<RawActionGroup> {
     let action_names = call_message_action_names();
     let call_message_enum = types
@@ -71,8 +71,7 @@ fn extract_action_group_variant(
         ),
     };
 
-    // Unwrap the Tuple wrapper to get the action enum index. Skip variants that
-    // don't follow the Tuple(ActionEnum) pattern, e.g. bank TransferWithMemo.
+    // Skip variants that aren't `Tuple(ActionEnum)`, e.g. bank TransferWithMemo.
     let action_enum_index = match &types[tuple_index] {
         Ty::Tuple(t) => {
             assert_eq!(t.fields.len(), 1);

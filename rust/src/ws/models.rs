@@ -1,14 +1,7 @@
 //! WebSocket message models for the Trading SDK.
 //!
-//! Re-exports server-message types from `bullet-ws-interface`, and stitches
-//! them into the `TaggedMessage` / `ServerMessage` enums used by the SDK's
-//! WS client. As of `bullet-ws-interface = "0.2"`, response envelope types
-//! (`MethodResult`, `ListSubscriptionsMessage`, `OrderResultMessage`) all
-//! derive both `Serialize` and `Deserialize` upstream, so the local
-//! deserialization-only duplicates of the past are no longer needed.
-//!
-//! IMPORTANT: When new message types are added to the server, they must be
-//! manually added to the `ServerMessage` enum below.
+//! Re-exports `bullet-ws-interface` server messages and wraps them in the `TaggedMessage` /
+//! `ServerMessage` enums. New server message types must be added to `ServerMessage` by hand.
 
 pub use bullet_ws_interface::{
     ListSubscriptionsMessage, MethodResult, OrderResultMessage, OrderResultPayload, TxStatus,
@@ -17,8 +10,62 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::{
     AggTradeMessage, BookTickerMessage, DepthUpdate, ErrorMessage, ForceOrderMessage,
-    MarkPriceMessage, OrderUpdateMessage, PongMessage, RequestId, StatusMessage,
+    MarkPriceMessage, MessageType, OrderUpdateMessage, PongMessage, RequestId, StatusMessage,
 };
+
+/// Event type of a market status message.
+///
+/// A unit enum rather than a `String` so that untagged deserialization of
+/// [`ServerMessage`] cannot accept a message that merely happens to carry the
+/// same field names with a different `e`.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MarketStatusEventType {
+    #[serde(rename = "marketStatusUpdate")]
+    MarketStatusUpdate,
+}
+
+/// One market in a [`MarketStatusMessage`].
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MarketStatusEntry {
+    /// Symbol.
+    #[serde(rename = "s")]
+    pub symbol: String,
+    /// Market id.
+    #[serde(rename = "i")]
+    pub market_id: u16,
+    /// Status, in the vocabulary of `GET /fapi/v1/exchangeInfo`'s `status`
+    /// field: `TRADING`, `POST_ONLY`, `CANCEL_ONLY`, `HALT` or `CLOSE`. Left
+    /// as a string so a status added server-side does not fail the whole
+    /// message; an unrecognized status should be treated as not tradable.
+    #[serde(rename = "st")]
+    pub status: String,
+    /// Status before this change; only set when `change` is `status`.
+    #[serde(rename = "ps", skip_serializing_if = "Option::is_none")]
+    pub previous_status: Option<String>,
+    /// What changed: `listed`, `status` or `delisted`. Absent in snapshots,
+    /// where every market is simply reported as-is.
+    #[serde(rename = "ch", skip_serializing_if = "Option::is_none")]
+    pub change: Option<String>,
+}
+
+/// Market status feed (`!marketStatus@arr`): a full snapshot on subscribe,
+/// deltas afterwards. The deltas are idempotent set-operations, so replaying
+/// one is harmless.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MarketStatusMessage {
+    /// Event type.
+    #[serde(rename = "e")]
+    pub event_type: MarketStatusEventType,
+    /// Event time (us).
+    #[serde(rename = "E")]
+    pub event_time: u64,
+    /// Snapshot (every market) or update (only the changed ones).
+    #[serde(rename = "mt")]
+    pub msg_type: MessageType,
+    /// The markets reported in this message.
+    #[serde(rename = "m")]
+    pub markets: Vec<MarketStatusEntry>,
+}
 
 /// Tagged messages from the server (have an "e" event type field)
 #[derive(Serialize, Deserialize, Clone, Debug, strum::AsRefStr)]
@@ -31,9 +78,8 @@ pub enum TaggedMessage {
     Subscribe(MethodResult),
     Unsubscribe(MethodResult),
     ListSubscriptions(ListSubscriptionsMessage),
-    // Order RPC acks. The four `e` tags are dotted, not snake_case, so we
-    // override the default rename. Aliases match the WS spec's
-    // case-insensitive `ORDER.PLACE` form just like client.rs does.
+    // Order RPC `e` tags are dotted, not snake_case; aliases accept the spec's case-insensitive
+    // `ORDER.PLACE` form, as client.rs does.
     #[serde(rename = "order.place", alias = "ORDER.PLACE")]
     OrderPlace(OrderResultMessage),
     #[serde(rename = "order.cancel", alias = "ORDER.CANCEL")]
@@ -51,8 +97,7 @@ pub enum TaggedMessage {
 
 /// All possible server messages.
 ///
-/// Uses untagged deserialization - serde tries each variant in order until one matches.
-/// The `Unknown` variant captures any message that doesn't match known types.
+/// Untagged: serde tries variants in order; `Unknown` catches anything unmatched.
 #[derive(Serialize, Deserialize, Clone, Debug, strum::AsRefStr)]
 #[strum(serialize_all = "camelCase")]
 #[serde(untagged)]
@@ -67,6 +112,7 @@ pub enum ServerMessage {
     MarkPrice(MarkPriceMessage),
     ForceOrder(ForceOrderMessage),
     OrderUpdate(OrderUpdateMessage),
+    MarketStatus(MarketStatusMessage),
 
     // Untagged error response (e.g., order errors without "e" field)
     Error(ErrorMessage),
@@ -109,6 +155,63 @@ impl ServerMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn market_status_snapshot_and_update_parse() {
+        let snapshot = r#"{
+            "e": "marketStatusUpdate",
+            "E": 1706745600000000,
+            "mt": "s",
+            "m": [{"s": "BTC-USD", "i": 1, "st": "TRADING"}]
+        }"#;
+        let msg: ServerMessage = serde_json::from_str(snapshot).unwrap();
+        let ServerMessage::MarketStatus(status) = msg else {
+            panic!("expected a market status message, got {msg:?}");
+        };
+        assert!(matches!(status.msg_type, MessageType::Snapshot));
+        assert_eq!(status.markets[0].symbol, "BTC-USD");
+        assert_eq!(status.markets[0].market_id, 1);
+        assert_eq!(status.markets[0].status, "TRADING");
+        assert!(status.markets[0].change.is_none());
+
+        let update = r#"{
+            "e": "marketStatusUpdate",
+            "E": 1706745600000000,
+            "mt": "u",
+            "m": [
+                {"s": "BTC-USD", "i": 1, "st": "HALT", "ps": "TRADING", "ch": "status"},
+                {"s": "SOL-USD", "i": 3, "st": "POST_ONLY", "ch": "listed"}
+            ]
+        }"#;
+        let msg: ServerMessage = serde_json::from_str(update).unwrap();
+        let ServerMessage::MarketStatus(status) = msg else {
+            panic!("expected a market status message, got {msg:?}");
+        };
+        assert!(matches!(status.msg_type, MessageType::Update));
+        assert_eq!(
+            status.markets[0].previous_status.as_deref(),
+            Some("TRADING")
+        );
+        assert_eq!(status.markets[0].change.as_deref(), Some("status"));
+        assert_eq!(status.markets[1].change.as_deref(), Some("listed"));
+    }
+
+    /// The `e` tag is a unit enum, so a message carrying the same field names
+    /// under a different event type must not be accepted as a market status.
+    #[test]
+    fn a_foreign_event_type_is_not_a_market_status() {
+        let json = r#"{
+            "e": "somethingElse",
+            "E": 1706745600000000,
+            "mt": "s",
+            "m": [{"s": "BTC-USD", "i": 1, "st": "TRADING"}]
+        }"#;
+        let msg: Result<ServerMessage, _> = serde_json::from_str(json);
+        assert!(
+            !matches!(msg, Ok(ServerMessage::MarketStatus(_))),
+            "foreign event type parsed as a market status"
+        );
+    }
 
     #[test]
     fn test_depth_update() {

@@ -6,10 +6,8 @@ impl SubmitTxResponse {
     /// Return the Hyperlane message id emitted by a bridge withdrawal, when the
     /// trading API includes it in the transaction events.
     ///
-    /// The OpenAPI response shape carries arbitrary event JSON rather than a
-    /// dedicated message-id field, so this scans event values for common
-    /// `messageId` / `message_id` spellings and returns a normalized `0x`-
-    /// prefixed bytes32 hex string.
+    /// Events are arbitrary JSON, so this scans for `messageId`/`message_id` and returns a
+    /// `0x`-prefixed bytes32 hex string.
     pub fn message_id(&self) -> Option<String> {
         self.events.iter().find_map(|event| {
             find_message_id_in_map(&event.value, MessageIdSearchContext::default())

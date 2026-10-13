@@ -1,5 +1,6 @@
 mod client;
 mod keypair;
+mod memo;
 mod metadata;
 mod multisig;
 mod receipts;
@@ -8,6 +9,7 @@ mod trading;
 mod transaction_builder;
 mod vault;
 
+pub use memo::encode_fast_bridge_memo;
 pub use sub_account::derive_sub_account_address;
 pub use trading::NewOrderExt;
 pub use vault::derive_vault_address;
@@ -15,7 +17,6 @@ pub use vault::derive_vault_address;
 /// Error types for the SDK.
 pub mod errors;
 
-// Re-export main types at crate root for ergonomic imports
 pub use bullet_exchange_interface::transaction::{
     Amount as WarpAmount, RuntimeCall, Transaction as SignedTransaction, WarpBytes32 as HexBytes32,
     WarpCall,
@@ -25,44 +26,28 @@ pub use errors::{SDKError, SDKResult, WSErrors};
 pub use generated::types::ApiErrorResponse;
 pub use keypair::Keypair;
 pub use multisig::{MAX_MULTISIG_SIGNERS, MultisigConfig, SolanaLedgerMultisigTransaction};
-// Re-export WebSocket close code for pattern matching
 pub use reqwest_websocket::CloseCode;
 pub use transaction_builder::{
     SolanaLedgerTransaction, SolanaOffchainTransaction, Transaction, UnsignedTransaction,
 };
 pub use types::CallMessage;
 
-// Re-export WebSocket module and types
 pub mod ws;
 pub use ws::client::{WebsocketConfig, WebsocketHandle};
 pub use ws::managed::{ManagedWebsocket, ManagedWsConfig, ManagedWsError, WsEvent};
 pub use ws::models::ServerMessage;
 pub use ws::topics::{KlineInterval, OrderbookDepth, Topic};
 
-/// Re-export the generated Progenitor client and types.
-///
-/// Use this module to access specific generated types if needed.
-/// Most users should just use `Client` which provides access
-/// to client methods via `Deref`.
 mod generated;
+/// Generated REST client and types, also exposed through [`Client`]'s `Deref`.
 pub mod codegen {
     pub use crate::generated::*;
 }
 
-// Re-export generated response type returned by transaction submission.
-/// A decimal value that must be positive. Wraps `rust_decimal::Decimal`.
-///
-/// ```ignore
-/// use rust_decimal::Decimal;
-/// use bullet_rust_sdk::PositiveDecimal;
-///
-/// let price = PositiveDecimal::try_from(Decimal::from(50000))?;
-/// let qty = PositiveDecimal::try_from(Decimal::new(1, 3))?; // 0.001
-/// ```
+/// A non-negative decimal value.
 pub use bullet_exchange_interface::decimals::PositiveDecimal;
 /// User action discriminants for schema validation filtering.
 pub use bullet_exchange_interface::message::UserActionDiscriminants;
-// Order argument structs
 pub use bullet_exchange_interface::message::{
     AmendOrderArgs, BackstopLiquidatePerpPositionArgsV1, CancelOrderArgs, NewOrderArgs,
     NewTriggerOrderArgs, NewTwapOrderArgs, PendingTpslPair, Tpsl, TpslPair,
@@ -74,37 +59,18 @@ pub use bullet_exchange_interface::message::{
 pub use bullet_exchange_interface::transaction::UniquenessData;
 /// Client-assigned order identifier. Wraps a `u64`.
 pub use bullet_exchange_interface::types::ClientOrderId;
-/// Numeric market identifier. Wraps a `u16`.
-///
-/// Resolve a symbol string to a `MarketId` via [`Client::market_id()`]:
-/// ```ignore
-/// let market_id = client.market_id("BTC-USD").expect("unknown symbol");
-/// ```
+/// Numeric market identifier; resolve symbols with [`Client::market_id`].
 pub use bullet_exchange_interface::types::MarketId;
 /// Exchange-assigned order identifier. Wraps a `u64`.
 pub use bullet_exchange_interface::types::OrderId;
-/// Order execution type.
-///
-/// - `Limit` — standard limit order
-/// - `PostOnly` — maker-only, rejected if it would cross the book
-/// - `ImmediateOrCancel` — **use this for market orders** (fill what you can, cancel the rest)
-/// - `FillOrKill` — fill entirely or cancel
+/// Order execution type; immediate-or-cancel orders retain a price limit.
 pub use bullet_exchange_interface::types::OrderType;
-// ── On-chain trading types ──────────────────────────────────────────────────
-//
-// These re-exports let users write `use bullet_rust_sdk::{Side, MarketId, ...}`
-// instead of reaching into `bullet_exchange_interface` directly.
-/// Order side. `Bid` = buy, `Ask` = sell.
-///
-/// Follows exchange-internal convention. When integrating:
-/// - `Side::Bid` corresponds to a **buy** order
-/// - `Side::Ask` corresponds to a **sell** order
+/// Order side: `Bid` means buy, `Ask` means sell.
 pub use bullet_exchange_interface::types::Side;
 pub use generated::types::SubmitTxResponse;
-// Re-export metadata types for symbol lookups.
 pub use metadata::SymbolInfo;
 
-/// Re-export bullet_rollup types commonly used with the SDK.
+/// Exchange call messages and WebSocket types.
 pub mod types {
     pub use bullet_exchange_interface;
     pub type CallMessage = bullet_exchange_interface::message::CallMessage<

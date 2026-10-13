@@ -3,10 +3,6 @@
 use bullet_rust_sdk::{Client, Network};
 
 /// Test fixture that provides a configured client and handles cleanup
-///
-/// This struct uses RAII (Resource Acquisition Is Initialization) pattern:
-/// - Setup happens in `new()`
-/// - Teardown happens in `Drop::drop()`
 struct TestFixture {
     client: Client,
     test_name: &'static str,

@@ -1,7 +1,4 @@
-//! Walk the Transaction schema and resolve all types for codegen.
-//!
-//! Extracts action groups, structs, and enums from the schema,
-//! then maps all fields to wasm-bindgen-compatible param types.
+//! Walk the Transaction schema and map every field to a wasm-bindgen param type.
 
 mod actions;
 mod enums;
@@ -24,7 +21,6 @@ pub fn extract_schema_info() -> SchemaInfo {
     let types = schema.types();
     let serde_metadata = schema.serde_metadata();
 
-    // Phase 1: Extract raw action groups and discover structs/enums.
     let raw_groups = actions::extract_action_groups(types);
     let seeds: Vec<usize> = raw_groups
         .iter()
@@ -38,15 +34,12 @@ pub fn extract_schema_info() -> SchemaInfo {
     let raw_structs = structs::discover_structs(&seeds, types, &mut visited, &mut queue);
     let enums = enums::discover_enums(&visited, types);
 
-    // Which structs and enums will have wasm-bindgen wrappers generated?
-    // The map phase needs to know this so it can decide per-field whether to
-    // accept a typed wrapper (e.g. `WasmNewOrderArgs`) or fall back to a
-    // JSON string. We build these sets once and pass them through.
+    // Lets the map phase choose per field between a typed wrapper (e.g. `WasmNewOrderArgs`)
+    // and a JSON string fallback.
     let wrapper_indices = raw_structs.iter().map(|s| s.schema_index).collect();
 
     let enum_indices = enums.iter().map(|e| e.schema_index).collect();
 
-    // Phase 3: Resolve all raw fields from the schema to fields mapped to the WASM bindgen types.
     let action_groups = raw_groups
         .into_iter()
         .map(|g| ActionGroup {
@@ -129,8 +122,6 @@ fn resolve_fields(
         })
         .collect()
 }
-
-// ── Shared helpers ───────────────────────────────────────────────────────────
 
 fn field_info_from_link(name: &str, link: &Link) -> FieldInfo {
     match link {

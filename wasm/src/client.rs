@@ -6,20 +6,7 @@ use wasm_bindgen::prelude::*;
 use crate::errors::WasmResult;
 use crate::keypair::WasmKeypair;
 
-/// Known network constants for connecting to Bullet environments.
-///
-/// Use these with `Client.builder().network(Network.Testnet)`,
-/// or pass any custom URL string directly.
-///
-/// # Example
-///
-/// ```js
-/// // Known network
-/// const client = await Client.builder().network(Network.Testnet).build();
-///
-/// // Custom URL
-/// const client = await Client.builder().network("https://custom.example.com").build();
-/// ```
+/// Network names for `Client.builder().network(...)`; custom URL strings are also accepted.
 #[wasm_bindgen(js_name = Network)]
 pub struct WasmNetwork;
 
@@ -36,25 +23,8 @@ impl WasmNetwork {
     }
 }
 
-/// Full Bullet trading API client (REST + WebSocket).
-///
-/// REST responses are returned as typed wrapper objects (use `.toJSON()` for
-/// raw JSON). Errors are thrown as JavaScript `Error` objects with a `.message`
-/// property.
-///
-/// # Example
-///
-/// ```js
-/// // Simple connection
-/// const client = await Client.mainnet();
-///
-/// // With defaults for transactions
-/// const client = await Client.builder()
-///     .network(Network.Testnet)
-///     .keypair(myKeypair)
-///     .maxFee(10_000_000n)
-///     .build();
-/// ```
+/// REST and WebSocket client. Typed REST responses expose `toJSON()`;
+/// fallible calls throw `BulletSdkError`.
 #[wasm_bindgen(js_name = Client)]
 pub struct WasmTradingApi {
     pub(crate) inner: Client,
@@ -62,19 +32,7 @@ pub struct WasmTradingApi {
 
 #[wasm_bindgen(js_class = Client)]
 impl WasmTradingApi {
-    // ── Constructors ──────────────────────────────────────────────────────────
-
     /// Create a new client builder for configuring connection options.
-    ///
-    /// # Example
-    ///
-    /// ```js
-    /// const client = await Client.builder()
-    ///     .network(Network.Testnet)
-    ///     .keypair(myKeypair)
-    ///     .maxFee(10_000_000n)
-    ///     .build();
-    /// ```
     pub fn builder() -> WasmClientBuilder {
         WasmClientBuilder::new()
     }
@@ -97,8 +55,6 @@ impl WasmTradingApi {
                 .await?,
         })
     }
-
-    // ── Metadata ──────────────────────────────────────────────────────────────
 
     /// Chain ID for the connected network.
     #[wasm_bindgen(js_name = chainId)]
@@ -154,8 +110,6 @@ impl WasmTradingApi {
         self.inner.keypair().is_some()
     }
 
-    // ── Symbol / Market Lookups ──────────────────────────────────────────
-
     /// Resolve a symbol string to its numeric MarketId.
     /// @param {string} symbol - The trading pair (e.g. "BTC-USD").
     /// @returns {number | undefined}
@@ -210,8 +164,6 @@ impl WasmTradingApi {
     pub async fn refresh_metadata(&mut self) -> WasmResult<()> {
         Ok(self.inner.refresh_metadata().await?)
     }
-
-    // ── Trading Convenience Methods ──────────────────────────────────────
 
     /// Query open orders for the client's own account.
     /// @param {string} symbol - Trading pair symbol.

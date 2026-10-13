@@ -8,10 +8,8 @@ use crate::generated::types::{ApiErrorDetail, ApiErrorResponse};
 
 /// Render each variant for human consumption.
 ///
-/// `JsonValidationErrorDetail` surfaces its `rule` + `message` inline — what
-/// you actually want to see in a log line. The catch-all `Object` variant
-/// is free-form upstream data we don't try to interpret, so it falls back
-/// to a compact JSON dump.
+/// `JsonValidationErrorDetail` shows `rule` + `message`; free-form `Object` falls back to compact
+/// JSON.
 impl std::fmt::Display for ApiErrorDetail {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -46,13 +44,9 @@ impl ApiErrorResponse {
 
     /// Whether the HTTP status code was lost during error conversion.
     ///
-    /// This happens when the server returns a non-JSON body (e.g. HTML from a
-    /// load balancer) that progenitor can't deserialize. The raw body is
-    /// preserved in `message`, but the status code is unavailable.
-    ///
-    /// Callers may want to treat these as retryable (usually transient proxy
-    /// errors) but should be aware that a 4xx with a non-JSON body would also
-    /// produce `status == 0`.
+    /// Happens when the server returns a non-JSON body (e.g. load-balancer HTML) that progenitor
+    /// can't deserialize; the raw body is kept in `message`. Usually a transient proxy error, but a
+    /// non-JSON 4xx also yields `status == 0`.
     pub fn is_status_unknown(&self) -> bool {
         self.status == 0
     }
@@ -80,11 +74,7 @@ pub enum SDKError {
 
     /// Structured API error from the trading API.
     ///
-    /// Boxed because `ApiErrorResponse` carries optional details + error_id
-    /// strings and a nested enum, making the variant large enough to bloat
-    /// every `SDKResult<T>` on the stack (clippy::result_large_err). Boxing
-    /// pushes the cost to error-construction time (negligible — happy paths
-    /// don't allocate) and keeps Result types cheap to pass around.
+    /// Boxed to keep `SDKResult<T>` small (clippy::result_large_err).
     #[error("API error: {0}")]
     ApiError(Box<ApiErrorResponse>),
 
@@ -136,6 +126,14 @@ pub enum SDKError {
 
     #[error("Invalid multisig: {0}")]
     InvalidMultisig(String),
+
+    /// An address string that is not valid base58, or not 32 bytes.
+    #[error("Invalid address: {0}")]
+    InvalidAddress(String),
+
+    /// A fast-bridge memo that cannot be built as described.
+    #[error("Invalid memo: {0}")]
+    InvalidMemo(String),
 
     /// Sub-account index out of range. The runtime tracks sub-account
     /// existence in a `u32` bitmask, so valid indices are `0..=31`. Carries the
@@ -236,9 +234,8 @@ impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
             progenitor_client::Error::CommunicationError(e) => SDKError::HttpError(e),
             progenitor_client::Error::ResponseBodyError(e) => SDKError::HttpError(e),
             progenitor_client::Error::InvalidUpgrade(e) => SDKError::HttpError(e),
-            // With 4XX/5XX ranges injected in build.rs, UnexpectedResponse only
-            // fires for truly exotic status codes (1xx, 3xx). Body can't be read
-            // synchronously so we only preserve the status code.
+            // build.rs injects 4XX/5XX ranges, so this only fires for 1xx/3xx; the body can't be
+            // read synchronously.
             progenitor_client::Error::UnexpectedResponse(resp) => {
                 let status = resp.status().as_u16();
                 SDKError::ApiError(Box::new(ApiErrorResponse {
@@ -248,10 +245,8 @@ impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
                     error_id: None,
                 }))
             }
-            // Server returned 4XX/5XX but the body couldn't be deserialized as
-            // ApiErrorResponse (e.g., HTML from a load balancer, plain text, etc).
-            // Progenitor doesn't preserve the status code on this variant so we
-            // can't determine retryability. We surface the raw body as the message.
+            // 4XX/5XX with a non-`ApiErrorResponse` body. Progenitor drops the status here, so
+            // retryability is unknown; surface the raw body.
             progenitor_client::Error::InvalidResponsePayload(bytes, _) => {
                 let body = String::from_utf8_lossy(&bytes);
                 SDKError::ApiError(Box::new(ApiErrorResponse {
@@ -261,8 +256,6 @@ impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
                     error_id: None,
                 }))
             }
-            // Client-side errors (InvalidRequest, PreHookError) that aren't HTTP
-            // responses at all.
             other => SDKError::RequestError(format!("{other}")),
         }
     }
@@ -364,9 +357,7 @@ mod tests {
         let resp = err.api_error().expect("should be ApiError");
         assert_eq!(resp.status, 0);
         assert!(resp.message.contains("Bad Gateway"));
-        // status=0 means the status code was lost (progenitor limitation).
-        // is_retryable() returns false since we can't be sure it's a 5xx.
-        // Callers can use is_status_unknown() to decide for themselves.
+        // status=0: unknown, so not retryable; callers can check is_status_unknown().
         assert!(!err.is_retryable());
         assert!(resp.is_status_unknown());
     }

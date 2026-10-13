@@ -34,98 +34,65 @@ const PYTH_PRIMARY_WITHOUT_QUOTE = textEncoder.encode('pyth-primary-no-quote-v1'
 const PYTH_PRIMARY_WITH_QUOTE = textEncoder.encode('pyth-primary-with-quote-v1');
 const PYTH_QUOTE = textEncoder.encode('pyth-quote-v1');
 
-// ── Namespace existence ──────────────────────────────────────────────────────
+const ADDRESS = '11111111111111111111111111111111';
+
+const tp = () => new Tpsl('55000.0', '54000.0', TriggerPriceCondition.Mark, OrderType.Limit);
+const sl = () => new Tpsl(
+  '45000.0', '46000.0',
+  TriggerPriceCondition.Oracle, OrderType.ImmediateOrCancel,
+);
+const limitBuy = () => new NewOrderArgs('51000.0', '0.1', Side.Bid, OrderType.Limit, false);
+const amendArgs = () => new AmendOrderArgs(new CancelOrderArgs(100n), limitBuy());
+const nowMicros = () => BigInt(Date.now()) * 1000n;
 
 describe('namespace modules exist', () => {
-  test('User namespace has trading methods', () => {
-    expect(typeof User.deposit).toBe('function');
-    expect(typeof User.withdraw).toBe('function');
-    expect(typeof User.placeOrders).toBe('function');
-    expect(typeof User.cancelOrders).toBe('function');
-    expect(typeof User.amendOrders).toBe('function');
-    expect(typeof User.createTriggerOrders).toBe('function');
-    expect(typeof User.createTwapOrder).toBe('function');
-    expect(typeof User.cancelTwapOrder).toBe('function');
-    expect(typeof User.createPositionTpsl).toBe('function');
-    expect(typeof User.delegateUser).toBe('function');
-    expect(typeof User.createVault).toBe('function');
-    expect(typeof User.depositToVault).toBe('function');
-    expect(typeof User.delegateUserV2).toBe('function');
-    expect(typeof User.revokeDelegationV1).toBe('function');
-  });
-
-  test('Public namespace has permissionless methods', () => {
-    expect(typeof Public.applyFunding).toBe('function');
-    expect(typeof Public.liquidatePerpPositions).toBe('function');
-    expect(typeof Public.executeTriggerOrders).toBe('function');
-    expect(typeof Public.accrueBorrowLendInterest).toBe('function');
-    expect(typeof Public.executeTwapOrders).toBe('function');
-    expect(typeof Public.activateTwapOrders).toBe('function');
-  });
-
-  test('Admin namespace has admin methods', () => {
-    expect(typeof Admin.initPerpMarket).toBe('function');
-    expect(typeof Admin.updatePerpMarket).toBe('function');
-    expect(typeof Admin.initAssetInfoV1).toBe('function');
-    expect(typeof Admin.updateAssetInfoV1).toBe('function');
-    expect(typeof Admin.haltPerpMarket).toBe('function');
-    expect(typeof Admin.cancelOrders).toBe('function');
-    expect(typeof Admin.cancelTriggerOrders).toBe('function');
-    expect(typeof Admin.updateGlobalConfigV1).toBe('function');
-    expect(typeof Admin.updateAdmin).toBe('function');
-    expect(typeof Admin.deposit).toBe('function');
-  });
-
-  test('Keeper namespace has keeper methods', () => {
-    expect(typeof Keeper.updateOraclePrices).toBe('function');
-    expect(typeof Keeper.updateOraclePricesWithPythProofs).toBe('function');
-    expect(typeof Keeper.updateMarkPrices).toBe('function');
-    expect(typeof Keeper.updateFunding).toBe('function');
-    expect(typeof Keeper.updateUserFeeTier).toBe('function');
-  });
-
-  test('Vault namespace has vault methods', () => {
-    expect(typeof Vault.updateVaultConfig).toBe('function');
-    expect(typeof Vault.updateVaultConfigV1).toBe('function');
-    expect(typeof Vault.processWithdrawalQueue).toBe('function');
-    expect(typeof Vault.whitelistDepositor).toBe('function');
-    expect(typeof Vault.delegateVaultUser).toBe('function');
-    expect(typeof Vault.setDepositPolicy).toBe('function');
-  });
-
-  test('Warp namespace has bridge methods', () => {
-    expect(typeof Warp.transferRemote).toBe('function');
+  test.each<[string, object, string[]]>([
+    ['User', User, [
+      'deposit', 'withdraw', 'placeOrders', 'cancelOrders', 'amendOrders',
+      'createTriggerOrders', 'createTwapOrder', 'cancelTwapOrder', 'createPositionTpsl',
+      'delegateUser', 'createVault', 'depositToVault', 'delegateUserV2', 'revokeDelegationV1',
+    ]],
+    ['Public', Public, [
+      'applyFunding', 'liquidatePerpPositions', 'executeTriggerOrders',
+      'accrueBorrowLendInterest', 'executeTwapOrders', 'activateTwapOrders',
+    ]],
+    ['Admin', Admin, [
+      'initPerpMarket', 'updatePerpMarket', 'initAssetInfoV1', 'updateAssetInfoV1',
+      'haltPerpMarket', 'cancelOrders', 'cancelTriggerOrders', 'updateGlobalConfigV1',
+      'updateAdmin', 'deposit',
+    ]],
+    ['Keeper', Keeper, [
+      'updateOraclePrices', 'updateOraclePricesWithPythProofs', 'updateMarkPrices',
+      'updateFunding', 'updateUserFeeTier',
+    ]],
+    ['Vault', Vault, [
+      'updateVaultConfig', 'updateVaultConfigV1', 'processWithdrawalQueue',
+      'whitelistDepositor', 'delegateVaultUser', 'setDepositPolicy',
+    ]],
+    ['Warp', Warp, ['transferRemote']],
+  ])('%s namespace has its methods', (_name, namespace, methods) => {
+    for (const method of methods) {
+      expect(typeof (namespace as Record<string, unknown>)[method], method).toBe('function');
+    }
   });
 });
 
-// ── Enums ────────────────────────────────────────────────────────────────────
-
 describe('enum types', () => {
-  test('Side enum', () => {
-    expect(Side.Bid).toBeDefined();
-    expect(Side.Ask).toBeDefined();
+  test.each<[string, object, string[]]>([
+    ['Side', Side, ['Bid', 'Ask']],
+    ['OrderType', OrderType, [
+      'Limit', 'PostOnly', 'FillOrKill', 'ImmediateOrCancel', 'PostOnlySlide', 'PostOnlyFront',
+    ]],
+    ['TriggerDirection', TriggerDirection, ['GreaterThanOrEqual', 'LessThanOrEqual']],
+    ['TriggerPriceCondition', TriggerPriceCondition, ['Mark', 'Oracle', 'LastTrade']],
+  ])('%s variants are defined and distinct', (_name, enumObj, variants) => {
+    const values = variants.map((v) => (enumObj as Record<string, unknown>)[v]);
+    values.forEach((value, i) => expect(value, variants[i]).toBeDefined());
+    expect(new Set(values).size).toBe(variants.length);
+  });
+
+  test('Side variants are numbers', () => {
     expect(typeof Side.Bid).toBe('number');
-    expect(Side.Bid).not.toBe(Side.Ask);
-  });
-
-  test('OrderType enum', () => {
-    expect(OrderType.Limit).toBeDefined();
-    expect(OrderType.PostOnly).toBeDefined();
-    expect(OrderType.FillOrKill).toBeDefined();
-    expect(OrderType.ImmediateOrCancel).toBeDefined();
-    expect(OrderType.PostOnlySlide).toBeDefined();
-    expect(OrderType.PostOnlyFront).toBeDefined();
-  });
-
-  test('TriggerDirection enum', () => {
-    expect(TriggerDirection.GreaterThanOrEqual).toBeDefined();
-    expect(TriggerDirection.LessThanOrEqual).toBeDefined();
-  });
-
-  test('TriggerPriceCondition enum', () => {
-    expect(TriggerPriceCondition.Mark).toBeDefined();
-    expect(TriggerPriceCondition.Oracle).toBeDefined();
-    expect(TriggerPriceCondition.LastTrade).toBeDefined();
   });
 });
 
@@ -144,73 +111,151 @@ describe('DegenAction', () => {
   });
 });
 
-// ── Simple factory methods ───────────────────────────────────────────────────
-
-describe('simple factory methods', () => {
-  test('User.deposit', () => {
-    const msg = User.deposit(0, '100.0');
-    expect(msg).toBeDefined();
-  });
-
-  test('User.withdraw', () => {
-    const msg = User.withdraw(0, '50.5');
-    expect(msg).toBeDefined();
-  });
-
-  test('User.createSubAccount', () => {
-    const msg = User.createSubAccount(1);
-    expect(msg).toBeDefined();
-  });
-
-  test('User.cancelMarketOrders', () => {
-    const msg = User.cancelMarketOrders(0);
-    expect(msg).toBeDefined();
-  });
-
-  test('User.cancelAllOrders', () => {
-    const msg = User.cancelAllOrders();
-    expect(msg).toBeDefined();
-  });
-
-  test('User.delegateUser', () => {
-    const msg = User.delegateUser(
-      '11111111111111111111111111111111',
-      'my-delegate',
-    );
-    expect(msg).toBeDefined();
-  });
-
-  test('User.delegateUserV2', () => {
-    const msg = User.delegateUserV2(
-      '11111111111111111111111111111111',
-      'my-delegate',
-      7,
-      2,
-      1_700_000_000_000_000n,
-    );
-    expect(msg).toBeDefined();
-  });
-
-  test('User.revokeDelegationV1', () => {
-    const msg = User.revokeDelegationV1(
-      '11111111111111111111111111111111',
-      2,
-    );
-    expect(msg).toBeDefined();
-  });
-
-  test('Warp.transferRemote', () => {
-    const msg = Warp.transferRemote({
+// Each row must cross the wasm boundary without throwing.
+describe('factories and struct wrappers build', () => {
+  test.each<[string, () => unknown]>([
+    // Simple factory methods.
+    ['User.deposit', () => User.deposit(0, '100.0')],
+    ['User.withdraw', () => User.withdraw(0, '50.5')],
+    ['User.createSubAccount', () => User.createSubAccount(1)],
+    ['User.cancelMarketOrders', () => User.cancelMarketOrders(0)],
+    ['User.cancelAllOrders', () => User.cancelAllOrders()],
+    ['User.delegateUser', () => User.delegateUser(ADDRESS, 'my-delegate')],
+    ['User.delegateUserV2', () => User.delegateUserV2(
+      ADDRESS, 'my-delegate', 7, 2, 1_700_000_000_000_000n,
+    )],
+    ['User.revokeDelegationV1', () => User.revokeDelegationV1(ADDRESS, 2)],
+    ['User.cancelQueuedWithdrawalV1 — one', () => User.cancelQueuedWithdrawalV1(
+      ADDRESS, 1_700_000_000_000_000n,
+    )],
+    ['User.cancelQueuedWithdrawalV1 — all', () => User.cancelQueuedWithdrawalV1(ADDRESS)],
+    ['Warp.transferRemote', () => Warp.transferRemote({
       warpRoute: `0x${'11'.repeat(32)}`,
       amount: '12345678901234567890',
       destinationDomain: 1234,
       gasPaymentLimit: '400000',
       recipient: `0x${'22'.repeat(32)}`,
-      relayer: '11111111111111111111111111111111',
-    });
-    expect(msg).toBeDefined();
+      relayer: ADDRESS,
+    })],
+    ['Public.applyFunding', () => Public.applyFunding([])],
+    ['Public.accrueBorrowLendInterest', () => Public.accrueBorrowLendInterest()],
+    ['Public.executeTriggerOrders', () => Public.executeTriggerOrders(0)],
+    ['Admin.haltPerpMarket', () => Admin.haltPerpMarket(0, '50000.0')],
+    ['Admin.unhaltPerpMarket', () => Admin.unhaltPerpMarket(0)],
+    ['Keeper.updateFunding', () => Keeper.updateFunding(new Uint16Array([0, 1, 2]))],
+    // Struct wrapper constructors.
+    ['NewOrderArgs — limit buy', () => new NewOrderArgs(
+      '50000.0', '0.1', Side.Bid, OrderType.Limit, false,
+    )],
+    ['NewOrderArgs — with optional client_order_id', () => new NewOrderArgs(
+      '49000.0', '0.2', Side.Ask, OrderType.PostOnly, true, 42n,
+    )],
+    ['CancelOrderArgs — by order_id', () => new CancelOrderArgs(123n)],
+    ['CancelOrderArgs — by client_order_id', () => new CancelOrderArgs(undefined, 456n)],
+    ['AmendOrderArgs — cancel + place', amendArgs],
+    ['Tpsl', tp],
+    ['TpslPair — tp and sl', () => new TpslPair(tp(), sl())],
+    ['TpslPair — tp only', () => new TpslPair(tp())],
+    ['NewTriggerOrderArgs', () => new NewTriggerOrderArgs(
+      Side.Bid, '50000.0', '49000.0',
+      TriggerDirection.LessThanOrEqual, TriggerPriceCondition.Mark,
+      OrderType.Limit, '0.5',
+    )],
+    ['NewTwapOrderArgs', () => new NewTwapOrderArgs(Side.Bid, '100.0', false, 3600n)],
+    ['OraclePriceUpdateArgs', () => new OraclePriceUpdateArgs(0, '50000.0')],
+    ['OraclePriceUpdateWithPythProofArgs', () => new OraclePriceUpdateWithPythProofArgs(
+      0, PYTH_PRIMARY_WITH_QUOTE, PYTH_QUOTE,
+    )],
+    ['OraclePriceUpdateWithPythProofArgs — without quote', () => (
+      new OraclePriceUpdateWithPythProofArgs(0, PYTH_PRIMARY_WITHOUT_QUOTE)
+    )],
+    ['MarkPriceUpdateArgs', () => new MarkPriceUpdateArgs(0, '50000.0', '0.001')],
+    ['BackstopLiquidatePerpPositionArgs', () => new BackstopLiquidatePerpPositionArgs(0, '1.0')],
+    ['User.backstopLiquidatePerpPositionsV1', () => User.backstopLiquidatePerpPositionsV1(
+      ADDRESS, [new BackstopLiquidatePerpPositionArgsV1(0, '1.0', Side.Bid, '99.5')], 2,
+    )],
+    ['Admin.initAssetInfoV1', () => Admin.initAssetInfoV1(
+      new InitAssetInfoArgsV1(1, 'USDC', 6, '0.01', 'USDC', 101, 102),
+    )],
+    ['Admin.updateAssetInfoV1', () => Admin.updateAssetInfoV1(
+      new UpdateAssetInfoArgsV1(1, '0.02', 201, 202),
+    )],
+    ['Admin.updateGlobalConfigV1 with trusted signers JSON', () => {
+      const signer = Array.from({ length: 32 }, (_, i) => i);
+      return Admin.updateGlobalConfigV1(new UpdateGlobalConfigArgsV1(
+        undefined, undefined, undefined, undefined, undefined,
+        undefined, undefined, undefined, undefined,
+        JSON.stringify([signer]),
+      ));
+    }],
+    // Array params (Vec<Struct> via TryFromJsValue).
+    ['User.placeOrders — array of NewOrderArgs', () => User.placeOrders(0, [
+      new NewOrderArgs('50000.0', '0.1', Side.Bid, OrderType.Limit, false),
+      new NewOrderArgs('49000.0', '0.2', Side.Ask, OrderType.PostOnly, true),
+    ], false)],
+    ['User.placeOrders — empty array', () => User.placeOrders(0, [], false)],
+    ['User.cancelOrders — array of CancelOrderArgs', () => User.cancelOrders(0, [
+      new CancelOrderArgs(100n),
+      new CancelOrderArgs(undefined, 200n),
+    ])],
+    ['User.amendOrders — array of AmendOrderArgs', () => User.amendOrders(0, [amendArgs()])],
+    ['User.createTriggerOrders — array of NewTriggerOrderArgs', () => User.createTriggerOrders(0, [
+      new NewTriggerOrderArgs(
+        Side.Bid, '50000.0', '49000.0',
+        TriggerDirection.LessThanOrEqual, TriggerPriceCondition.Mark,
+        OrderType.Limit,
+      ),
+    ])],
+    ['Keeper.updateOraclePrices — array of OraclePriceUpdateArgs', () => Keeper.updateOraclePrices([
+      new OraclePriceUpdateArgs(0, '50000.0'),
+      new OraclePriceUpdateArgs(1, '3000.0'),
+    ], nowMicros())],
+    ['Keeper.updateOraclePricesWithPythProofs — array of proof args', () => (
+      Keeper.updateOraclePricesWithPythProofs([
+        new OraclePriceUpdateWithPythProofArgs(0, PYTH_PRIMARY_WITHOUT_QUOTE),
+      ], nowMicros())
+    )],
+    ['Keeper.updateOraclePricesWithPythProofs — quote proof path', () => (
+      Keeper.updateOraclePricesWithPythProofs([
+        new OraclePriceUpdateWithPythProofArgs(1, PYTH_PRIMARY_WITH_QUOTE, PYTH_QUOTE),
+      ], nowMicros())
+    )],
+    ['Keeper.updateMarkPrices — array of MarkPriceUpdateArgs', () => Keeper.updateMarkPrices([
+      new MarkPriceUpdateArgs(0, '50000.0', '0.001'),
+    ], nowMicros())],
+    // Direct struct params.
+    ['User.createPositionTpsl', () => User.createPositionTpsl(0, new TpslPair(tp()))],
+    ['User.createTwapOrder', () => User.createTwapOrder(
+      0, new NewTwapOrderArgs(Side.Bid, '100.0', false, 3600n),
+    )],
+    ['Vault.updateVaultConfig', () => Vault.updateVaultConfig(
+      ADDRESS, new UpdateVaultConfigArgs('1000.0', 24, 10),
+    )],
+    ['Vault.updateVaultConfigV1 with a withdrawal fee', () => Vault.updateVaultConfigV1(
+      ADDRESS, new UpdateVaultConfigArgsV1('1000.0', 24, 10, 5),
+    )],
+    ['Vault.updateVaultConfigV1 with all fields omitted', () => Vault.updateVaultConfigV1(
+      ADDRESS, new UpdateVaultConfigArgsV1(undefined, undefined, undefined, undefined),
+    )],
+    ['Vault.setDepositPolicy with a deposit policy', () => Vault.setDepositPolicy(
+      ADDRESS, new VaultDepositPolicyArgs('1000.0', []),
+    )],
+    ['Vault.setDepositPolicy with strategic caps', () => Vault.setDepositPolicy(
+      ADDRESS,
+      new VaultDepositPolicyArgs('1000.0', [new StrategicDepositorCap(ADDRESS, '50000.0')]),
+    )],
+    ['Vault.setDepositPolicy clearing the policy', () => Vault.setDepositPolicy(ADDRESS, undefined)],
+    // Same method names in different namespaces, with different signatures.
+    ['Admin.deposit', () => Admin.deposit(ADDRESS, 0, '100.0')],
+    ['User.cancelOrders', () => User.cancelOrders(0, [new CancelOrderArgs(1n)])],
+    ['Admin.cancelOrders', () => Admin.cancelOrders(`[[0, 1, "${ADDRESS}"]]`)],
+    ['Admin.cancelTriggerOrders', () => Admin.cancelTriggerOrders(`[[0, 1, "${ADDRESS}"]]`)],
+  ])('%s', (_name, build) => {
+    expect(build()).toBeDefined();
   });
+});
 
+describe('invalid inputs reject', () => {
   test('Warp.transferRemote rejects ambiguous relayer tags', () => {
     expect(() => Warp.transferRemote({
       warpRoute: `0x${'11'.repeat(32)}`,
@@ -219,40 +264,10 @@ describe('simple factory methods', () => {
       gasPaymentLimit: '400000',
       recipient: `0x${'22'.repeat(32)}`,
       relayer: {
-        Standard: '11111111111111111111111111111111',
+        Standard: ADDRESS,
         Vm: `0x${'33'.repeat(32)}`,
       },
     })).toThrow(/either Standard or Vm/i);
-  });
-
-  test('Public.applyFunding', () => {
-    const msg = Public.applyFunding([]);
-    expect(msg).toBeDefined();
-  });
-
-  test('Public.accrueBorrowLendInterest', () => {
-    const msg = Public.accrueBorrowLendInterest();
-    expect(msg).toBeDefined();
-  });
-
-  test('Public.executeTriggerOrders', () => {
-    const msg = Public.executeTriggerOrders(0);
-    expect(msg).toBeDefined();
-  });
-
-  test('Admin.haltPerpMarket', () => {
-    const msg = Admin.haltPerpMarket(0, '50000.0');
-    expect(msg).toBeDefined();
-  });
-
-  test('Admin.unhaltPerpMarket', () => {
-    const msg = Admin.unhaltPerpMarket(0);
-    expect(msg).toBeDefined();
-  });
-
-  test('Keeper.updateFunding', () => {
-    const msg = Keeper.updateFunding(new Uint16Array([0, 1, 2]));
-    expect(msg).toBeDefined();
   });
 
   test('invalid decimal rejects', () => {
@@ -261,364 +276,5 @@ describe('simple factory methods', () => {
 
   test('invalid address rejects', () => {
     expect(() => User.delegateUser('bad-addr', 'test')).toThrow();
-  });
-});
-
-// ── Struct wrapper constructors ──────────────────────────────────────────────
-
-describe('struct wrapper constructors', () => {
-  test('NewOrderArgs — limit buy', () => {
-    const order = new NewOrderArgs(
-      '50000.0',
-      '0.1',
-      Side.Bid,
-      OrderType.Limit,
-      false,
-    );
-    expect(order).toBeDefined();
-  });
-
-  test('NewOrderArgs — with optional client_order_id', () => {
-    const order = new NewOrderArgs(
-      '49000.0', '0.2',
-      Side.Ask, OrderType.PostOnly,
-      true,
-      42n,
-    );
-    expect(order).toBeDefined();
-  });
-
-  test('CancelOrderArgs — by order_id', () => {
-    const cancel = new CancelOrderArgs(123n);
-    expect(cancel).toBeDefined();
-  });
-
-  test('CancelOrderArgs — by client_order_id', () => {
-    const cancel = new CancelOrderArgs(undefined, 456n);
-    expect(cancel).toBeDefined();
-  });
-
-  test('AmendOrderArgs — cancel + place', () => {
-    const cancel = new CancelOrderArgs(100n);
-    const place = new NewOrderArgs(
-      '51000.0', '0.1', Side.Bid, OrderType.Limit, false,
-    );
-    const amend = new AmendOrderArgs(cancel, place);
-    expect(amend).toBeDefined();
-  });
-
-  test('Tpsl', () => {
-    const tp = new Tpsl(
-      '55000.0', '54000.0',
-      TriggerPriceCondition.Mark, OrderType.Limit,
-    );
-    expect(tp).toBeDefined();
-  });
-
-  test('TpslPair — tp and sl', () => {
-    const tp = new Tpsl(
-      '55000.0', '54000.0',
-      TriggerPriceCondition.Mark, OrderType.Limit,
-    );
-    const sl = new Tpsl(
-      '45000.0', '46000.0',
-      TriggerPriceCondition.Oracle, OrderType.ImmediateOrCancel,
-    );
-    const pair = new TpslPair(tp, sl);
-    expect(pair).toBeDefined();
-  });
-
-  test('TpslPair — tp only', () => {
-    const tp = new Tpsl(
-      '55000.0', '54000.0',
-      TriggerPriceCondition.Mark, OrderType.Limit,
-    );
-    const pair = new TpslPair(tp);
-    expect(pair).toBeDefined();
-  });
-
-  test('NewTriggerOrderArgs', () => {
-    const trigger = new NewTriggerOrderArgs(
-      Side.Bid,
-      '50000.0',
-      '49000.0',
-      TriggerDirection.LessThanOrEqual,
-      TriggerPriceCondition.Mark,
-      OrderType.Limit,
-      '0.5',
-    );
-    expect(trigger).toBeDefined();
-  });
-
-  test('NewTwapOrderArgs', () => {
-    const twap = new NewTwapOrderArgs(Side.Bid, '100.0', false, 3600n);
-    expect(twap).toBeDefined();
-  });
-
-  test('OraclePriceUpdateArgs', () => {
-    const update = new OraclePriceUpdateArgs(0, '50000.0');
-    expect(update).toBeDefined();
-  });
-
-  test('OraclePriceUpdateWithPythProofArgs', () => {
-    const update = new OraclePriceUpdateWithPythProofArgs(
-      0,
-      PYTH_PRIMARY_WITH_QUOTE,
-      PYTH_QUOTE,
-    );
-    expect(update).toBeDefined();
-  });
-
-  test('OraclePriceUpdateWithPythProofArgs — without quote', () => {
-    const update = new OraclePriceUpdateWithPythProofArgs(
-      0,
-      PYTH_PRIMARY_WITHOUT_QUOTE,
-    );
-    expect(update).toBeDefined();
-  });
-
-  test('MarkPriceUpdateArgs', () => {
-    const update = new MarkPriceUpdateArgs(0, '50000.0', '0.001');
-    expect(update).toBeDefined();
-  });
-
-  test('BackstopLiquidatePerpPositionArgs', () => {
-    const args = new BackstopLiquidatePerpPositionArgs(0, '1.0');
-    expect(args).toBeDefined();
-  });
-
-  test('priced backstop V1 args and factories', () => {
-    const address = '11111111111111111111111111111111';
-    const position = new BackstopLiquidatePerpPositionArgsV1(
-      0, '1.0', Side.Bid, '99.5',
-    );
-
-    expect(User.backstopLiquidatePerpPositionsV1(
-      address, [position], 2,
-    )).toBeDefined();
-  });
-
-  test('Admin V1 asset args', () => {
-    const init = new InitAssetInfoArgsV1(
-      1,
-      'USDC',
-      6,
-      '0.01',
-      'USDC',
-      101,
-      102,
-    );
-    const update = new UpdateAssetInfoArgsV1(1, '0.02', 201, 202);
-
-    expect(Admin.initAssetInfoV1(init)).toBeDefined();
-    expect(Admin.updateAssetInfoV1(update)).toBeDefined();
-  });
-
-  test('UpdateGlobalConfigArgsV1 accepts trusted signers JSON', () => {
-    const signer = Array.from({ length: 32 }, (_, i) => i);
-    const config = new UpdateGlobalConfigArgsV1(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      JSON.stringify([signer]),
-    );
-
-    expect(Admin.updateGlobalConfigV1(config)).toBeDefined();
-  });
-});
-
-// ── Array params (Vec<Struct> via TryFromJsValue) ────────────────────────────
-
-describe('array params with struct wrappers', () => {
-  test('User.placeOrders — array of NewOrderArgs', () => {
-    const order1 = new NewOrderArgs(
-      '50000.0', '0.1', Side.Bid, OrderType.Limit, false,
-    );
-    const order2 = new NewOrderArgs(
-      '49000.0', '0.2', Side.Ask, OrderType.PostOnly, true,
-    );
-    const msg = User.placeOrders(0, [order1, order2], false);
-    expect(msg).toBeDefined();
-  });
-
-  test('User.placeOrders — empty array', () => {
-    const msg = User.placeOrders(0, [], false);
-    expect(msg).toBeDefined();
-  });
-
-  test('User.cancelOrders — array of CancelOrderArgs', () => {
-    const c1 = new CancelOrderArgs(100n);
-    const c2 = new CancelOrderArgs(undefined, 200n);
-    const msg = User.cancelOrders(0, [c1, c2]);
-    expect(msg).toBeDefined();
-  });
-
-  test('User.amendOrders — array of AmendOrderArgs', () => {
-    const cancel = new CancelOrderArgs(100n);
-    const place = new NewOrderArgs(
-      '51000.0', '0.1', Side.Bid, OrderType.Limit, false,
-    );
-    const amend = new AmendOrderArgs(cancel, place);
-    const msg = User.amendOrders(0, [amend]);
-    expect(msg).toBeDefined();
-  });
-
-  test('User.createTriggerOrders — array of NewTriggerOrderArgs', () => {
-    const t = new NewTriggerOrderArgs(
-      Side.Bid, '50000.0', '49000.0',
-      TriggerDirection.LessThanOrEqual, TriggerPriceCondition.Mark,
-      OrderType.Limit,
-    );
-    const msg = User.createTriggerOrders(0, [t]);
-    expect(msg).toBeDefined();
-  });
-
-  test('Keeper.updateOraclePrices — array of OraclePriceUpdateArgs', () => {
-    const p1 = new OraclePriceUpdateArgs(0, '50000.0');
-    const p2 = new OraclePriceUpdateArgs(1, '3000.0');
-    const msg = Keeper.updateOraclePrices([p1, p2], BigInt(Date.now()) * 1000n);
-    expect(msg).toBeDefined();
-  });
-
-  test('Keeper.updateOraclePricesWithPythProofs — array of proof args', () => {
-    const p = new OraclePriceUpdateWithPythProofArgs(
-      0,
-      PYTH_PRIMARY_WITHOUT_QUOTE,
-    );
-    const msg = Keeper.updateOraclePricesWithPythProofs(
-      [p],
-      BigInt(Date.now()) * 1000n,
-    );
-    expect(msg).toBeDefined();
-  });
-
-  test('Keeper.updateOraclePricesWithPythProofs — quote proof path', () => {
-    const p = new OraclePriceUpdateWithPythProofArgs(
-      1,
-      PYTH_PRIMARY_WITH_QUOTE,
-      PYTH_QUOTE,
-    );
-    const msg = Keeper.updateOraclePricesWithPythProofs(
-      [p],
-      BigInt(Date.now()) * 1000n,
-    );
-    expect(msg).toBeDefined();
-  });
-
-  test('Keeper.updateMarkPrices — array of MarkPriceUpdateArgs', () => {
-    const m = new MarkPriceUpdateArgs(0, '50000.0', '0.001');
-    const msg = Keeper.updateMarkPrices([m], BigInt(Date.now()) * 1000n);
-    expect(msg).toBeDefined();
-  });
-});
-
-// ── Direct struct params ─────────────────────────────────────────────────────
-
-describe('direct struct params', () => {
-  test('User.createPositionTpsl', () => {
-    const tp = new Tpsl(
-      '55000.0', '54000.0',
-      TriggerPriceCondition.Mark, OrderType.Limit,
-    );
-    const pair = new TpslPair(tp);
-    const msg = User.createPositionTpsl(0, pair);
-    expect(msg).toBeDefined();
-  });
-
-  test('User.createTwapOrder', () => {
-    const twap = new NewTwapOrderArgs(Side.Bid, '100.0', false, 3600n);
-    const msg = User.createTwapOrder(0, twap);
-    expect(msg).toBeDefined();
-  });
-
-  test('Vault.updateVaultConfig', () => {
-    const config = new UpdateVaultConfigArgs('1000.0', 24, 10);
-    const msg = Vault.updateVaultConfig(
-      '11111111111111111111111111111111',
-      config,
-    );
-    expect(msg).toBeDefined();
-  });
-
-  test('Vault.updateVaultConfigV1 accepts a withdrawal fee', () => {
-    const config = new UpdateVaultConfigArgsV1('1000.0', 24, 10, 5);
-    const msg = Vault.updateVaultConfigV1(
-      '11111111111111111111111111111111',
-      config,
-    );
-    expect(msg).toBeDefined();
-  });
-
-  test('Vault.updateVaultConfigV1 fields are optional', () => {
-    const config = new UpdateVaultConfigArgsV1(undefined, undefined, undefined, undefined);
-    const msg = Vault.updateVaultConfigV1(
-      '11111111111111111111111111111111',
-      config,
-    );
-    expect(msg).toBeDefined();
-  });
-
-  test('Vault.setDepositPolicy accepts a deposit policy', () => {
-    const policy = new VaultDepositPolicyArgs('1000.0', []);
-    const msg = Vault.setDepositPolicy(
-      '11111111111111111111111111111111',
-      policy,
-    );
-    expect(msg).toBeDefined();
-  });
-
-  test('Vault.setDepositPolicy accepts strategic caps', () => {
-    const policy = new VaultDepositPolicyArgs('1000.0', [
-      new StrategicDepositorCap('11111111111111111111111111111111', '50000.0'),
-    ]);
-    const msg = Vault.setDepositPolicy(
-      '11111111111111111111111111111111',
-      policy,
-    );
-    expect(msg).toBeDefined();
-  });
-
-  test('Vault.setDepositPolicy clears the policy when omitted', () => {
-    const msg = Vault.setDepositPolicy(
-      '11111111111111111111111111111111',
-      undefined,
-    );
-    expect(msg).toBeDefined();
-  });
-});
-
-// ── No collision between namespaces ──────────────────────────────────────────
-
-describe('no name collisions across namespaces', () => {
-  test('User.deposit and Admin.deposit coexist', () => {
-    const userMsg = User.deposit(0, '100.0');
-    const adminMsg = Admin.deposit(
-      '11111111111111111111111111111111', 0, '100.0',
-    );
-    expect(userMsg).toBeDefined();
-    expect(adminMsg).toBeDefined();
-  });
-
-  test('User.cancelOrders and Admin.cancelOrders have different sigs', () => {
-    const c = new CancelOrderArgs(1n);
-    const userMsg = User.cancelOrders(0, [c]);
-    const adminMsg = Admin.cancelOrders(
-      '[[0, 1, "11111111111111111111111111111111"]]',
-    );
-    expect(userMsg).toBeDefined();
-    expect(adminMsg).toBeDefined();
-  });
-
-  test('Admin.cancelTriggerOrders accepts trigger order ids', () => {
-    const msg = Admin.cancelTriggerOrders(
-      '[[0, 1, "11111111111111111111111111111111"]]',
-    );
-    expect(msg).toBeDefined();
   });
 });

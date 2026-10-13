@@ -172,6 +172,15 @@ impl WasmTopic {
         }
     }
 
+    /// Subscribe to the trading status of all markets.
+    /// @returns {Topic}
+    #[wasm_bindgen(js_name = allMarketStatuses)]
+    pub fn all_market_statuses() -> WasmTopic {
+        WasmTopic {
+            inner: SdkTopic::all_market_statuses().to_string(),
+        }
+    }
+
     /// Wire-format string, e.g. `"BTC-USD@depth10"`.
     /// @returns {string}
     #[wasm_bindgen(js_name = toString)]

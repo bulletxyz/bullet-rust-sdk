@@ -1,24 +1,4 @@
-//! Exchange metadata: symbol lookups and market info.
-//!
-//! Metadata is fetched from the exchange during [`Client`] construction and
-//! cached for the lifetime of the client. Use [`Client::refresh_metadata`] to
-//! update it for long-running processes.
-//!
-//! # Example
-//!
-//! ```ignore
-//! use bullet_rust_sdk::{Client, MarketId};
-//!
-//! let client = Client::mainnet().await?;
-//!
-//! // Resolve symbol string to numeric MarketId
-//! let market_id = client.market_id("BTC-USD").expect("unknown symbol");
-//!
-//! // Get all symbols
-//! for sym in client.symbols() {
-//!     println!("{}: MarketId({})", sym.symbol, sym.market_id.0);
-//! }
-//! ```
+//! Symbol metadata cached at client construction; refresh with [`Client::refresh_metadata`].
 
 use std::collections::HashMap;
 
@@ -26,13 +6,10 @@ use bullet_exchange_interface::types::MarketId;
 
 use crate::generated::types::Symbol;
 
-/// Cached exchange metadata for fast symbol lookups.
 #[derive(Debug, Clone)]
 pub(crate) struct ExchangeMetadata {
     symbols: Vec<SymbolInfo>,
-    /// symbol string -> index into `symbols`
     by_name: HashMap<String, usize>,
-    /// market_id.0 -> index into `symbols`
     by_id: HashMap<u16, usize>,
 }
 
