@@ -1,6 +1,6 @@
 [package]
 name = "bullet-rust-sdk"
-version = "0.0.42"
+version = "0.0.43"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/bulletxyz/bullet-rust-sdk"
@@ -18,7 +18,7 @@ all-features = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bullet-exchange-interface = { version = "=0.15.1", features = ["schema"] }
+bullet-exchange-interface = { version = "=0.15.2", features = ["schema"] }
 bullet-ws-interface = "0.2"
 
 
@@ -65,7 +65,7 @@ serde_json = "1.0"
 reqwest = { version = "0.13", features = ["blocking"] }
 openapiv3 = "2"
 schemars = "0.8"
-syn = "2.0"
+syn = { version = "2.0", features = ["full", "extra-traits"] }
 prettyplease = "0.2"
 
 [dev-dependencies]
@@ -81,3 +81,6 @@ integration = []
 # Declared to enable a feature rather than imported.
 [package.metadata.cargo-shear]
 ignored = ["getrandom"]
+
+[lints]
+workspace = true

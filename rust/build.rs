@@ -4,6 +4,10 @@ use std::path::PathBuf;
 use schemars::schema::{InstanceType, SchemaObject};
 use serde_json::Value;
 
+use codegen::merge_response_arms;
+
+mod codegen;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=openapi.json");
     println!("cargo:rerun-if-env-changed=BULLET_REFRESH_SPEC");
@@ -52,7 +56,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         format!("Failed to parse OpenAPI spec: {e}. Saved debug output to openapi-debug.json")
     })?;
     let tokens = generator.generate_tokens(&spec)?;
-    let ast = syn::parse2(tokens)?;
+    let mut ast = syn::parse2(tokens)?;
+    merge_response_arms(&mut ast);
     let content = prettyplease::unparse(&ast);
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("codegen.rs");

@@ -701,16 +701,19 @@ async fn reconnect(
             return Err(ReconnectError::HandleDropped);
         }
 
-        attempts += 1;
-        if let Some(max) = config.max_retries
-            && attempts > max
-        {
-            return Err(ReconnectError::RetriesExhausted(max));
-        }
+        attempts = next_reconnect_attempt(attempts, config.max_retries)?;
 
         // Jitter: add 0..50% of backoff to avoid thundering herd.
-        let jitter_ms = rand::random::<u64>() % (state.backoff.as_millis() as u64 / 2 + 1);
-        let delay = state.backoff + Duration::from_millis(jitter_ms);
+        let bound = (state.backoff.as_millis() as u64 / 2)
+            .checked_add(1)
+            .expect("halved jitter bound fits");
+        let jitter_ms = rand::random::<u64>()
+            .checked_rem(bound)
+            .expect("jitter bound is nonzero");
+        let delay = state
+            .backoff
+            .checked_add(Duration::from_millis(jitter_ms))
+            .expect("reconnect delay fits");
 
         info!(attempt = attempts, delay = ?delay, backoff = ?state.backoff, "attempting reconnect");
 
@@ -733,7 +736,11 @@ async fn reconnect(
                     if let Err(e) = ws.send(ClientMessage::Subscribe { id: None, params }).await {
                         if matches!(&e, WSErrors::WsStreamEnded | WSErrors::WsClosed { .. }) {
                             warn!(?e, "replay send lost connection, retrying");
-                            state.backoff = (state.backoff * 2).min(max_backoff);
+                            state.backoff = state
+                                .backoff
+                                .checked_mul(2)
+                                .expect("reconnect backoff fits")
+                                .min(max_backoff);
                             continue;
                         }
                         return Err(ReconnectError::ReplayFailed(e));
@@ -743,7 +750,11 @@ async fn reconnect(
             }
             Err(e) => {
                 warn!(?e, attempt = attempts, "reconnect failed");
-                state.backoff = (state.backoff * 2).min(max_backoff);
+                state.backoff = state
+                    .backoff
+                    .checked_mul(2)
+                    .expect("reconnect backoff fits")
+                    .min(max_backoff);
             }
         }
     }
@@ -753,4 +764,41 @@ async fn reconnect(
 /// receiver is otherwise resolved).
 fn shutdown_observed(rx: &mut oneshot::Receiver<()>) -> bool {
     !matches!(rx.try_recv(), Ok(None))
+}
+
+fn next_reconnect_attempt(attempts: u32, max_retries: Option<u32>) -> Result<u32, ReconnectError> {
+    if let Some(max) = max_retries
+        && attempts >= max
+    {
+        return Err(ReconnectError::RetriesExhausted(max));
+    }
+    Ok(attempts.saturating_add(1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retry_budget_stops_before_an_extra_attempt_and_unlimited_never_exhausts() {
+        for (attempts, limit, expected) in [
+            (0, Some(0), None),
+            (0, Some(2), Some(1)),
+            (1, Some(2), Some(2)),
+            (2, Some(2), None),
+            (u32::MAX - 1, Some(u32::MAX), Some(u32::MAX)),
+            (u32::MAX, Some(u32::MAX), None),
+            (u32::MAX, None, Some(u32::MAX)),
+        ] {
+            match (next_reconnect_attempt(attempts, limit), expected) {
+                (Ok(actual), Some(expected)) => assert_eq!(actual, expected),
+                (Err(ReconnectError::RetriesExhausted(actual)), None) => {
+                    assert_eq!(Some(actual), limit);
+                }
+                (actual, expected) => {
+                    panic!("{attempts}, {limit:?}: {actual:?}, expected {expected:?}")
+                }
+            }
+        }
+    }
 }

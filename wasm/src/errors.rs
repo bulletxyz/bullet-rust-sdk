@@ -122,9 +122,6 @@ impl From<SDKError> for WasmError {
             SDKError::HttpError(_) => WasmErrorKind::Http,
             SDKError::ApiError(_) => WasmErrorKind::Api,
             SDKError::WebsocketError(_) => WasmErrorKind::Websocket,
-            SDKError::ChainIdCastError(_)
-            | SDKError::SystemTimeError
-            | SDKError::SchemaOutdated => WasmErrorKind::Unknown,
             _ => WasmErrorKind::Unknown,
         };
 

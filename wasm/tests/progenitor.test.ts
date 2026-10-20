@@ -160,7 +160,7 @@ describe('client methods exist', () => {
     'commissionRate', 'symbolConfig', 'rateLimitOrder',
     'queryOpenOrder', 'queryOpenOrders', 'leverageBracket',
     'insuranceBalance', 'borrowLendPools',
-    'constants', 'schema', 'submitTx',
+    'constants', 'schema', 'submitTx', 'submitDegenTx',
   ];
 
   test.each(expectedMethods)('Client.prototype.%s exists', (method) => {

@@ -8,7 +8,8 @@
     clippy::map_identity,
     clippy::clone_on_copy,
     dead_code,
-    unused_variables
+    unused_variables,
+    reason = "generated Progenitor wrappers"
 )]
 mod inner {
     use crate::utils::decimal::WasmDecimal;

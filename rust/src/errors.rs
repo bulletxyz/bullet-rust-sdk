@@ -231,11 +231,10 @@ impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
             progenitor_client::Error::ErrorResponse(resp) => {
                 SDKError::ApiError(Box::new(resp.into_inner()))
             }
-            progenitor_client::Error::CommunicationError(e) => SDKError::HttpError(e),
-            progenitor_client::Error::ResponseBodyError(e) => SDKError::HttpError(e),
-            progenitor_client::Error::InvalidUpgrade(e) => SDKError::HttpError(e),
-            // build.rs injects 4XX/5XX ranges, so this only fires for 1xx/3xx; the body can't be
-            // read synchronously.
+            progenitor_client::Error::CommunicationError(e)
+            | progenitor_client::Error::ResponseBodyError(e)
+            | progenitor_client::Error::InvalidUpgrade(e) => SDKError::HttpError(e),
+            // An unspecified status retains the response; its body cannot be read synchronously.
             progenitor_client::Error::UnexpectedResponse(resp) => {
                 let status = resp.status().as_u16();
                 SDKError::ApiError(Box::new(ApiErrorResponse {
@@ -263,6 +262,11 @@ impl From<progenitor_client::Error<ApiErrorResponse>> for SDKError {
 
 #[cfg(test)]
 mod tests {
+    use progenitor_client::Error as ResponseError;
+    use serde_json::json;
+
+    use crate::generated::Client;
+
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -285,6 +289,49 @@ mod tests {
             .await;
 
         (server, result.unwrap_err().into())
+    }
+
+    #[tokio::test]
+    async fn generated_response_arms_preserve_explicit_statuses_and_range_edges() {
+        for (endpoint, status, typed) in [
+            ("/api/v1/account", 400, true),
+            ("/api/v1/account", 500, true),
+            ("/api/v1/account", 502, true),
+            ("/api/v1/account", 401, false),
+            ("/fapi/v1/ping", 400, true),
+            ("/fapi/v1/ping", 499, true),
+            ("/fapi/v1/ping", 500, true),
+            ("/fapi/v1/ping", 599, true),
+            ("/fapi/v1/ping", 399, false),
+            ("/fapi/v1/ping", 600, false),
+        ] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path(endpoint))
+                .respond_with(ResponseTemplate::new(status).set_body_json(json!({
+                    "status": status, "message": "typed body", "error_id": "test-error"
+                })))
+                .mount(&server)
+                .await;
+            let client = Client::new(&server.uri());
+            let error = if endpoint == "/api/v1/account" {
+                client.account("test-address").await.unwrap_err()
+            } else {
+                client.ping().await.unwrap_err()
+            };
+            match error {
+                ResponseError::ErrorResponse(response) if typed => {
+                    let body = response.into_inner();
+                    assert_eq!(body.status, status);
+                    assert_eq!(body.message, "typed body");
+                    assert_eq!(body.error_id.as_deref(), Some("test-error"));
+                }
+                ResponseError::UnexpectedResponse(response) if !typed => {
+                    assert_eq!(response.status().as_u16(), status);
+                }
+                error => panic!("{endpoint} {status}: {error:?}"),
+            }
+        }
     }
 
     #[tokio::test]

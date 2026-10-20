@@ -437,6 +437,10 @@ a required argument can follow a nullable one — pass `null` or `undefined` for
 the ones you do not need (for example `client.orderBook(null, 'BTC-USD')`).
 Arguments marked `?` may be omitted entirely.
 
+`vaultEquity(address)` returns the user's active positions across vaults plus
+`totalEquity`. Each position includes `vaultAddress`, `shares`, `equity`, and a
+nullable `percentageReturn`.
+
 Each item returned by `vaultDepositors` includes held, queued, and total shares
 plus equity including the main vault account and its vault-owned sub-accounts.
 All pages and pricing come from one committed rollup state version, reported as
@@ -445,17 +449,20 @@ microseconds, refreshed every 30 seconds by default), not the block time.
 `vaultEquity` returns HTTP 503 if the last successful collection is over 90
 seconds old; `vaultDepositors` keeps serving last-good rows.
 
-History fields (`initialDepositAmount`, `initialDepositTimestamp`,
-`remainingCostBasis`, `historyUpdatedAt`, `historyLastTxNumber`,
-`historyShares`) come from an optional historical projection and are null (or
-undefined in the bindings) when unavailable; stale history does not block
-current shares or equity. `historyComplete` means the projection has complete, valid history,
-not that it has caught up with the live position.
+On `vaultDepositors`, history fields (`initialDepositAmount`,
+`initialDepositTimestamp`, `remainingCostBasis`, `historyUpdatedAt`,
+`historyLastTxNumber`, `historyShares`) come from an optional historical
+projection and are null (or undefined in the bindings) when unavailable; stale
+history does not block current shares or equity. `historyComplete` means the
+projection has complete, valid history, not that it has caught up with the live
+position.
 
-`percentageReturn` must be displayed as an **estimated unrealized return**
-(`percentageReturnIsEstimate` is true whenever it is non-null). It is null when
-the state is older than 90 seconds, history is older than 30 minutes, shares
-differ, basis is zero, or arithmetic overflows. It is not lifetime cash-flow
+`percentageReturn` must be displayed as an **estimated unrealized return**. On
+`vaultDepositors`, `percentageReturnIsEstimate` is true whenever it is non-null.
+`percentageReturn` is null when history is older than 30 minutes, live and
+historical shares differ, remaining cost basis is zero, or arithmetic overflows.
+On `vaultDepositors`, it is also null when the state collection is older than 90
+seconds; `vaultEquity` returns HTTP 503 instead. It is not lifetime cash-flow
 return and excludes realized withdrawals.
 
 ## Platform Support

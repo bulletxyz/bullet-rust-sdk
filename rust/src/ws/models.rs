@@ -137,8 +137,7 @@ impl ServerMessage {
             ServerMessage::Tagged(msg) => match msg {
                 TaggedMessage::Pong(m) => m.id,
                 TaggedMessage::Error(m) => m.id,
-                TaggedMessage::Subscribe(m) => m.id,
-                TaggedMessage::Unsubscribe(m) => m.id,
+                TaggedMessage::Subscribe(m) | TaggedMessage::Unsubscribe(m) => m.id,
                 TaggedMessage::ListSubscriptions(m) => m.id,
                 TaggedMessage::OrderPlace(m)
                 | TaggedMessage::OrderCancel(m)

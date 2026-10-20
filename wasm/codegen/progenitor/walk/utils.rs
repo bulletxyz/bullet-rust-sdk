@@ -35,8 +35,7 @@ fn parse_type_path(tp: &syn::TypePath) -> Option<RustType> {
 
     match ident.as_str() {
         "bool" => Some(RustType::Bool),
-        "String" => Some(RustType::String),
-        "str" => Some(RustType::String), // &str reference will wrap this
+        "String" | "str" => Some(RustType::String), // &str reference will wrap this
         "i8" => Some(RustType::Primitive(Primitive::I8)),
         "i16" => Some(RustType::Primitive(Primitive::I16)),
         "i32" => Some(RustType::Primitive(Primitive::I32)),

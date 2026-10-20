@@ -29,7 +29,7 @@ pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
     let mut code_map = BTreeMap::new();
 
     for item in &file.items {
-        item_walk(item, &[], &mut code_map)
+        item_walk(item, &[], &mut code_map);
     }
 
     CodeModel { items: code_map }

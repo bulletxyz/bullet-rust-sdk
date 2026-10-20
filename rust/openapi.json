@@ -551,7 +551,7 @@
                     "API"
                 ],
                 "summary": "Submit Solana off-chain signed transaction",
-                "description": "Accepts the JSON envelope produced by the SDK's `solana` / `solanaSimple`\nauthenticator (Phantom, Solflare, Ledger), where the body is signed with\na Solana off-chain message signature rather than a Sovereign credential.\nThe rollup verifies the signature and constructs the inner tx; this route\nis a pass-through proxy and intentionally skips the borsh tx validator.",
+                "description": "Accepts the JSON envelope produced by the SDK's `solana` / `solanaSimple`\nauthenticator (Phantom, Solflare, Ledger), where the body is signed with\na Solana off-chain message signature rather than a Sovereign credential.\nThe rollup verifies the signature and constructs the inner tx; this route\nis a pass-through proxy and intentionally skips the borsh tx validator; the\ncall whitelist still applies.",
                 "operationId": "submit_solana_offchain_tx",
                 "requestBody": {
                     "content": {
@@ -899,7 +899,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Vault equity per vault, plus the total",
+                        "description": "User vault positions and returns, plus total equity",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1362,7 +1362,7 @@
                     {
                         "name": "limit",
                         "in": "query",
-                        "description": "Limit (default 20, max 25)",
+                        "description": "Limit (default 20, max 1000)",
                         "required": false,
                         "schema": {
                             "type": "integer",
@@ -3319,6 +3319,18 @@
                         }
                     },
                     {
+                        "name": "isDegen",
+                        "in": "query",
+                        "description": "Restrict results to Degen (`true`) or non-Degen (`false`) fills; omit for both",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "boolean",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
                         "name": "startTime",
                         "in": "query",
                         "description": "Start time in microseconds (optional filter)",
@@ -3342,18 +3354,6 @@
                                 "null"
                             ],
                             "format": "int64"
-                        }
-                    },
-                    {
-                        "name": "isDegen",
-                        "in": "query",
-                        "description": "Restrict results to Degen (`true`) or non-Degen (`false`) fills; omit for both",
-                        "required": false,
-                        "schema": {
-                            "type": [
-                                "boolean",
-                                "null"
-                            ]
                         }
                     },
                     {
@@ -3992,7 +3992,7 @@
                     "Trading"
                 ],
                 "summary": "Submit a transaction to the rollup.",
-                "description": "Accepts the JSON envelope containing the base64 encoded and borsh serialized transaction.",
+                "description": "Accepts the JSON envelope containing the base64 encoded and borsh serialized transaction.\nA `User/DegenTrade` call message is also accepted on `/tx/submitDegen`.",
                 "operationId": "submit_tx",
                 "requestBody": {
                     "content": {
@@ -4017,6 +4017,88 @@
                     },
                     "400": {
                         "description": "Invalid transaction format or validation failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid signature or public key",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Call message not relayed by this API",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Validation service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/tx/submitDegen": {
+            "post": {
+                "tags": [
+                    "Trading"
+                ],
+                "summary": "Submit a Degen trade to the rollup.",
+                "description": "Takes the same envelope as `/tx/submit` and returns the same sequencer response; the signed\ncall message must be `User/DegenTrade`.",
+                "operationId": "submit_degen_tx",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SubmitTxRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Transaction submitted successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubmitTxResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid transaction format, validation failed, or not a DegenTrade call message (use /tx/submit)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -4453,7 +4535,7 @@
                         "type": "object"
                     }
                 ],
-                "description": "Typed details body. Variant order is important for untagged\ndeserialization: keep the more-specific shape (`JsonValidation`)\nbefore more-permissive ones. `Upstream` holds the upstream payload\nverbatim (object, string, array, number, etc.) so pre-PR clients\nreading `details.error` (or `details` directly) keep working."
+                "description": "Typed details body. Variant order matters for untagged deserialization: keep the more\nspecific shape (`JsonValidation`) first. `Upstream` holds the upstream payload verbatim so\nclients reading `details.error` (or `details` directly) keep working."
             },
             "ApiErrorResponse": {
                 "type": "object",
@@ -5522,6 +5604,7 @@
                     "assetId",
                     "balance",
                     "unsettledPerpProfit",
+                    "tradingCredits",
                     "maxWithdrawAmount",
                     "updateTime"
                 ],
@@ -5549,6 +5632,10 @@
                     },
                     "symbol": {
                         "type": "string"
+                    },
+                    "tradingCredits": {
+                        "type": "string",
+                        "format": "decimal"
                     },
                     "unsettledPerpProfit": {
                         "type": "string",
@@ -6294,6 +6381,7 @@
                                 "symbol",
                                 "marketId",
                                 "fundingApplied",
+                                "fee",
                                 "txHash",
                                 "eventNumber",
                                 "time"
@@ -6304,9 +6392,15 @@
                                     "format": "uint64",
                                     "minimum": 0
                                 },
+                                "fee": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "Treasury cut. Zero for payments that predate the funding fee."
+                                },
                                 "fundingApplied": {
                                     "type": "string",
-                                    "format": "decimal"
+                                    "format": "decimal",
+                                    "description": "Gross payment, positive when received. The balance moves by `fundingApplied - fee`."
                                 },
                                 "marketId": {
                                     "type": "integer",
@@ -6518,6 +6612,7 @@
                                 "positionSide",
                                 "buyer",
                                 "maker",
+                                "isDegen",
                                 "address",
                                 "txHash"
                             ],
@@ -6547,6 +6642,9 @@
                                     "type": "integer",
                                     "format": "uint64",
                                     "minimum": 0
+                                },
+                                "isDegen": {
+                                    "type": "boolean"
                                 },
                                 "maker": {
                                     "type": "boolean"
@@ -7994,6 +8092,7 @@
                     "symbol",
                     "marketId",
                     "fundingApplied",
+                    "fee",
                     "txHash",
                     "eventNumber",
                     "time"
@@ -8004,9 +8103,15 @@
                         "format": "uint64",
                         "minimum": 0
                     },
+                    "fee": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Treasury cut. Zero for payments that predate the funding fee."
+                    },
                     "fundingApplied": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "Gross payment, positive when received. The balance moves by `fundingApplied - fee`."
                     },
                     "marketId": {
                         "type": "integer",
@@ -8692,12 +8797,21 @@
                 "required": [
                     "vaultAddress",
                     "shares",
-                    "equity"
+                    "equity",
+                    "percentageReturn"
                 ],
                 "properties": {
                     "equity": {
                         "type": "string",
                         "format": "decimal"
+                    },
+                    "percentageReturn": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Estimated unrealized return: (equity - historical remaining cost basis) /\nhistorical remaining cost basis * 100. A value of \"12.5\" means 12.5 percent.\nCombines independently refreshed sources; matching shares do not prove alignment.\nNull when history is over 30 minutes old, live and historical shares differ by\nmore than 0.000000000000000001, basis is zero, or arithmetic overflows. This\nendpoint returns HTTP 503 when state collection is over 90 seconds old.\nExcludes realized returns on previous withdrawals."
                     },
                     "shares": {
                         "type": "string",

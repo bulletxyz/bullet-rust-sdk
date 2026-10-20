@@ -17,7 +17,7 @@ use crate::codegen::Error::ErrorResponse;
 use crate::generated::types::{
     ApiErrorResponse, SubmitSolanaOffchainTxRequest, SubmitTxRequest, SubmitTxResponse,
 };
-use crate::types::CallMessage;
+use crate::types::{CallMessage, UserAction};
 use crate::{Client, Keypair, SDKError, SDKResult};
 
 const SIGNING_PAYLOAD_VERSION_V0: u8 = 0;
@@ -248,7 +248,7 @@ pub(crate) fn make_solana_preamble(
     chain_hash: &[u8; 32],
     message_length: u16,
 ) -> Vec<u8> {
-    let mut preamble = Vec::with_capacity(53 + 32 * pubkeys.len());
+    let mut preamble = Vec::with_capacity(pubkeys.len().saturating_mul(32).saturating_add(53));
     preamble.extend_from_slice(&SOLANA_SIGNING_DOMAIN);
     preamble.push(0); // header_version
     preamble.extend_from_slice(chain_hash);
@@ -347,7 +347,7 @@ impl SolanaLedgerTransaction {
     ///
     /// Layout: `[u32 LE: message_len][signed_message][signature]`
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(4 + self.signed_message.len() + 64);
+        let mut buf = Vec::with_capacity(self.signed_message.len().saturating_add(68));
         buf.extend_from_slice(&(self.signed_message.len() as u32).to_le_bytes());
         buf.extend_from_slice(&self.signed_message);
         buf.extend_from_slice(&self.signature);
@@ -483,6 +483,17 @@ impl Transaction {
     }
 }
 
+/// Whether the signed call is a `DegenTrade`, which has its own trading API route.
+fn is_degen_trade(signed: &SignedTransaction) -> bool {
+    let SignedTransaction::V0(v0) = signed else {
+        return false;
+    };
+    matches!(
+        v0.runtime_call,
+        RuntimeCall::Exchange(CallMessage::User(UserAction::DegenTrade { .. }))
+    )
+}
+
 impl Client {
     /// Send a signed transaction to the network.
     ///
@@ -492,7 +503,13 @@ impl Client {
         signed: &SignedTransaction,
     ) -> SDKResult<SubmitTxResponse> {
         let body = Transaction::to_base64(signed)?;
-        let response = self.client().submit_tx(&SubmitTxRequest { body }).await;
+        let request = SubmitTxRequest { body };
+        // /tx/submit still carries DegenTrade, but /tx/submitDegen is where it is going.
+        let response = if is_degen_trade(signed) {
+            self.client().submit_degen_tx(&request).await
+        } else {
+            self.client().submit_tx(&request).await
+        };
         match response {
             Err(ErrorResponse(response)) if response.status() == 401 => {
                 let inner = response.into_inner();
@@ -586,7 +603,13 @@ impl Client {
                     self,
                 )?;
                 let body = Transaction::to_base64(&signed)?;
-                match self.client().submit_tx(&SubmitTxRequest { body }).await {
+                let request = SubmitTxRequest { body };
+                let retried = if is_degen_trade(&signed) {
+                    self.client().submit_degen_tx(&request).await
+                } else {
+                    self.client().submit_tx(&request).await
+                };
+                match retried {
                     Ok(r) => Ok(r.into_inner()),
                     Err(ErrorResponse(r)) => Err(SDKError::ApiError(Box::new(r.into_inner()))),
                     Err(e) => Err(e.into()),
@@ -635,7 +658,9 @@ fn stringify_offchain_max_fee(
 
 #[cfg(test)]
 mod tests {
-    use bullet_exchange_interface::message::{CancelOrderArgs, PublicAction, UserAction};
+    use bullet_exchange_interface::message::{
+        CancelOrderArgs, DegenAction, PublicAction, UserAction,
+    };
     use bullet_exchange_interface::schema::Schema;
     use bullet_exchange_interface::transaction::{
         Amount, PriorityFeeBips, RuntimeCall, Transaction as InterfaceTransaction, TxDetails,
@@ -733,6 +758,68 @@ mod tests {
             .unwrap();
 
         (server, client)
+    }
+
+    /// A `DegenTrade` goes to the route dedicated to it, every other call to `/tx/submit`.
+    #[tokio::test]
+    async fn the_submission_route_follows_the_signed_call_message() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rollup/schema"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(schema_response(7)))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/fapi/v1/exchangeInfo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(exchange_info_response()))
+            .mount(&server)
+            .await;
+        // each route answers with its own path, so the response names the one that was called
+        for route in ["/tx/submit", "/tx/submitDegen"] {
+            Mock::given(method("POST"))
+                .and(path(route))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "id": route,
+                    "status": "submitted",
+                })))
+                .mount(&server)
+                .await;
+        }
+
+        let client = Client::builder()
+            .network(server.uri())
+            .build()
+            .await
+            .unwrap();
+        let keypair = Keypair::generate();
+
+        let cases = [
+            (
+                CallMessage::User(UserAction::DegenTrade {
+                    market_id: MarketId(1),
+                    action: DegenAction::Close,
+                    sub_account_index: None,
+                }),
+                "/tx/submitDegen",
+            ),
+            (
+                CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] }),
+                "/tx/submit",
+            ),
+        ];
+
+        for (call_message, expected_route) in cases {
+            let signed = Transaction::builder()
+                .call_message(call_message)
+                .max_fee(10_000_000)
+                .signer(&keypair)
+                .client(&client)
+                .build()
+                .unwrap();
+
+            let response = client.send_transaction(&signed).await.unwrap();
+            assert_eq!(response.id, expected_route);
+        }
     }
 
     fn test_solana_offchain_transaction() -> SolanaOffchainTransaction {

@@ -1,3 +1,5 @@
+use std::ops::Neg;
+
 use rust_decimal::Decimal;
 use rust_decimal::prelude::*;
 use wasm_bindgen::prelude::*;
@@ -55,15 +57,19 @@ impl WasmDecimal {
     }
 
     pub fn add(&self, other: &WasmDecimal) -> WasmDecimal {
-        WasmDecimal(self.0 + other.0)
+        WasmDecimal(self.0.checked_add(other.0).expect("Addition overflowed"))
     }
 
     pub fn sub(&self, other: &WasmDecimal) -> WasmDecimal {
-        WasmDecimal(self.0 - other.0)
+        WasmDecimal(self.0.checked_sub(other.0).expect("Subtraction overflowed"))
     }
 
     pub fn mul(&self, other: &WasmDecimal) -> WasmDecimal {
-        WasmDecimal(self.0 * other.0)
+        WasmDecimal(
+            self.0
+                .checked_mul(other.0)
+                .expect("Multiplication overflowed"),
+        )
     }
 
     pub fn div(&self, other: &WasmDecimal) -> WasmResult<WasmDecimal> {
@@ -81,7 +87,7 @@ impl WasmDecimal {
     }
 
     pub fn neg(&self) -> WasmDecimal {
-        WasmDecimal(-self.0)
+        WasmDecimal(self.0.neg())
     }
 
     pub fn abs(&self) -> WasmDecimal {

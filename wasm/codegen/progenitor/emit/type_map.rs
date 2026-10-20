@@ -96,10 +96,8 @@ fn primitive_type(p: &Primitive) -> TokenStream {
 /// Map a `RustType` to its wasm-bindgen-compatible type tokens.
 fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
     match ty {
-        RustType::String => quote! { String },
         RustType::Bool => quote! { bool },
         RustType::Primitive(p) => primitive_type(p),
-        RustType::Map(_, _) => quote! { String },
         RustType::Named { name, .. } if name == "Value" => quote! { String },
         RustType::Named { name, .. } if enums.contains(name.as_str()) => quote! { String },
         RustType::Named { name, .. } => {
@@ -125,7 +123,6 @@ fn value_conversion(ty: &RustType, expr: &TokenStream, enums: &HashSet<&str>) ->
     match ty {
         RustType::String => quote! { #expr.clone() },
         RustType::Bool | RustType::Primitive(_) => quote! { #expr },
-        RustType::Map(_, _) => quote! { to_json(&#expr) },
         RustType::Named { name, .. } if name == "Value" => quote! { to_json(&#expr) },
         RustType::Named { name, .. } if enums.contains(name.as_str()) => {
             quote! { #expr.to_string() }
@@ -167,11 +164,17 @@ fn option_getter(
 
     let body = match inner {
         RustType::Bool | RustType::Primitive(_) => quote! { self.0.#field },
-        RustType::String => quote! { self.0.#field.clone() },
-        RustType::Option(_) => quote! { self.0.#field.clone() },
+        RustType::String | RustType::Option(_) => quote! { self.0.#field.clone() },
         RustType::Vec(inner_vec) => {
-            let conv = value_conversion(inner_vec, &quote! { v.clone() }, enums);
-            quote! { self.0.#field.as_ref().map(|v| v.iter().map(|v| #conv).collect()) }
+            if matches!(
+                inner_vec.as_ref(),
+                RustType::Bool | RustType::Primitive(_) | RustType::String
+            ) {
+                quote! { self.0.#field.as_ref().map(|v| v.to_vec()) }
+            } else {
+                let conv = value_conversion(inner_vec, &quote! { v }, enums);
+                quote! { self.0.#field.as_ref().map(|v| v.iter().map(|v| #conv).collect()) }
+            }
         }
         _ => {
             let conv = value_conversion(inner, &quote! { v }, enums);
@@ -373,4 +376,36 @@ fn json_fallback(method: &Ident, call_args: &[TokenStream]) -> (TokenStream, Tok
             Ok(serde_json::to_string(&self.inner.#method(#(#call_args),*).await?.into_inner())?)
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use prettyplease::unparse;
+    use syn::{File, parse2};
+
+    use super::*;
+
+    #[test]
+    fn optional_scalar_arrays_emit_owned_elements() {
+        for (element, name) in [
+            (RustType::Primitive(Primitive::U32), "u32"),
+            (RustType::Bool, "bool"),
+            (RustType::String, "String"),
+        ] {
+            let ty = RustType::Option(Box::new(RustType::Vec(Box::new(element))));
+            let (return_type, body) = getter_mapping(&ty, &quote! { values }, &HashSet::new());
+            assert_eq!(
+                return_type.to_string(),
+                format!("Option < Vec < {name} > >")
+            );
+            let canonical = |body: TokenStream| {
+                let file: File = parse2(quote! { fn getter() { #body } }).unwrap();
+                unparse(&file)
+            };
+            assert_eq!(
+                canonical(body),
+                canonical(quote! { self.0.values.as_ref().map(|v| v.to_vec()) })
+            );
+        }
+    }
 }
