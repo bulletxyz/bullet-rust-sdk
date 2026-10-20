@@ -69,7 +69,7 @@ syn = { version = "2.0", features = ["full", "extra-traits"] }
 prettyplease = "0.2"
 
 [dev-dependencies]
-tokio = { version = "=1.53.1", features = ["rt", "macros", "io-std", "io-util"] }
+tokio = { version = "=1.53.3", features = ["rt", "macros", "io-std", "io-util"] }
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
 wiremock = "=0.6.5"
 
