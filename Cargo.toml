@@ -9,8 +9,30 @@ license = "MIT"
 repository = "https://github.com/bulletxyz/bullet-rust-sdk"
 
 [workspace.dependencies]
-bullet-exchange-interface = { version = "=0.15.2" }
+bullet-exchange-interface = { version = "=0.15.3" }
 bullet-rust-sdk = { path = "rust", version = "0.0.43", default-features = false }
+
+[workspace.lints.rust]
+warnings = "deny"
+linker_messages = "deny"
+dead_code = "deny"
+non_ascii_idents = "deny"
+
+[workspace.lints.clippy]
+debug_assert_with_mut_call = "deny"
+inefficient_to_string = "deny"
+map_flatten = "deny"
+manual_ok_or = "deny"
+doc_link_with_quotes = "deny"
+match_same_arms = "deny"
+semicolon_if_nothing_returned = "deny"
+or_fun_call = "warn"
+unnecessary_lazy_evaluations = "warn"
+redundant_clone = "warn"
+trivial_regex = "warn"
+needless_collect = "warn"
+arithmetic_side_effects = "warn"
+perf = { level = "warn", priority = -1 }
 
 [profile.release]
 lto = true
