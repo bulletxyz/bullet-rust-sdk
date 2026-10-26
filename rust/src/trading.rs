@@ -26,7 +26,8 @@
 
 use bullet_exchange_interface::decimals::PositiveDecimal;
 use bullet_exchange_interface::message::{AmendOrderArgs, CancelOrderArgs, NewOrderArgs};
-use bullet_exchange_interface::types::{MarketId, OrderType, Side};
+use bullet_exchange_interface::time::UnixTimestampMicros;
+use bullet_exchange_interface::types::{MarketId, OrderIdKind, OrderType, Side};
 
 use crate::generated::types::SubmitTxResponse;
 use crate::types::{CallMessage, UserAction};
@@ -288,6 +289,29 @@ impl Client {
     ) -> SDKResult<SubmitTxResponse> {
         let call_msg =
             CallMessage::User(UserAction::AmendOrders { market_id, orders, sub_account_index });
+        self.send_call_message(call_msg).await
+    }
+
+    /// Cancel orders and place new ones in a single signed transaction.
+    ///
+    /// `places` must not be empty: the venue rejects a batch with no places. For cancel-only,
+    /// use [`Client::cancel_orders`]. `expiry_timestamp` auto-cancels the placed orders at that
+    /// venue-clock time.
+    pub async fn cancel_and_place_orders(
+        &self,
+        market_id: MarketId,
+        cancels: Vec<OrderIdKind>,
+        places: Vec<NewOrderArgs>,
+        expiry_timestamp: Option<UnixTimestampMicros>,
+        sub_account_index: Option<u8>,
+    ) -> SDKResult<SubmitTxResponse> {
+        let call_msg = CallMessage::User(UserAction::CancelAndPlaceOrders {
+            market_id,
+            cancels,
+            places,
+            expiry_timestamp,
+            sub_account_index,
+        });
         self.send_call_message(call_msg).await
     }
 }
