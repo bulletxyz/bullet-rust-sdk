@@ -1,3 +1,5 @@
+use std::ops::Neg;
+
 use rust_decimal::Decimal;
 use rust_decimal::prelude::*;
 use wasm_bindgen::prelude::*;
@@ -17,8 +19,6 @@ pub struct WasmDecimal(pub(crate) Decimal);
 
 #[wasm_bindgen(js_class = "Decimal")]
 impl WasmDecimal {
-    // ── Constructors ─────────────────────────────────────────────────────
-
     /// Parse a decimal from a string (e.g. `"1.23456"`).
     #[wasm_bindgen(constructor)]
     pub fn new(value: &str) -> WasmResult<WasmDecimal> {
@@ -56,18 +56,20 @@ impl WasmDecimal {
         Ok(Decimal::from_scientific(value).map(WasmDecimal)?)
     }
 
-    // ── Arithmetic ───────────────────────────────────────────────────────
-
     pub fn add(&self, other: &WasmDecimal) -> WasmDecimal {
-        WasmDecimal(self.0 + other.0)
+        WasmDecimal(self.0.checked_add(other.0).expect("Addition overflowed"))
     }
 
     pub fn sub(&self, other: &WasmDecimal) -> WasmDecimal {
-        WasmDecimal(self.0 - other.0)
+        WasmDecimal(self.0.checked_sub(other.0).expect("Subtraction overflowed"))
     }
 
     pub fn mul(&self, other: &WasmDecimal) -> WasmDecimal {
-        WasmDecimal(self.0 * other.0)
+        WasmDecimal(
+            self.0
+                .checked_mul(other.0)
+                .expect("Multiplication overflowed"),
+        )
     }
 
     pub fn div(&self, other: &WasmDecimal) -> WasmResult<WasmDecimal> {
@@ -85,7 +87,7 @@ impl WasmDecimal {
     }
 
     pub fn neg(&self) -> WasmDecimal {
-        WasmDecimal(-self.0)
+        WasmDecimal(self.0.neg())
     }
 
     pub fn abs(&self) -> WasmDecimal {
@@ -122,21 +124,28 @@ impl WasmDecimal {
         self.0.checked_rem(other.0).map(WasmDecimal)
     }
 
-    // ── Rounding ─────────────────────────────────────────────────────────
-
     /// Round to `dp` decimal places (half away from zero, i.e. 2.5 → 3, -2.5 → -3).
     pub fn round(&self, dp: u32) -> WasmDecimal {
-        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::MidpointAwayFromZero))
+        WasmDecimal(
+            self.0
+                .round_dp_with_strategy(dp, RoundingStrategy::MidpointAwayFromZero),
+        )
     }
 
     /// Round down (toward negative infinity) to `dp` decimal places.
     pub fn floor(&self, dp: u32) -> WasmDecimal {
-        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::ToNegativeInfinity))
+        WasmDecimal(
+            self.0
+                .round_dp_with_strategy(dp, RoundingStrategy::ToNegativeInfinity),
+        )
     }
 
     /// Round up (toward positive infinity) to `dp` decimal places.
     pub fn ceil(&self, dp: u32) -> WasmDecimal {
-        WasmDecimal(self.0.round_dp_with_strategy(dp, RoundingStrategy::ToPositiveInfinity))
+        WasmDecimal(
+            self.0
+                .round_dp_with_strategy(dp, RoundingStrategy::ToPositiveInfinity),
+        )
     }
 
     /// Truncate to `dp` decimal places without rounding.
@@ -153,8 +162,6 @@ impl WasmDecimal {
     pub fn normalize(&self) -> WasmDecimal {
         WasmDecimal(self.0.normalize())
     }
-
-    // ── Comparison ───────────────────────────────────────────────────────
 
     #[allow(clippy::should_implement_trait)]
     pub fn eq(&self, other: &WasmDecimal) -> bool {
@@ -195,8 +202,6 @@ impl WasmDecimal {
         WasmDecimal(self.0.max(other.0))
     }
 
-    // ── Predicates ───────────────────────────────────────────────────────
-
     #[wasm_bindgen(js_name = isZero)]
     pub fn is_zero(&self) -> bool {
         self.0.is_zero()
@@ -217,8 +222,6 @@ impl WasmDecimal {
     pub fn is_integer(&self) -> bool {
         self.0.is_integer()
     }
-
-    // ── Conversion ───────────────────────────────────────────────────────
 
     /// String representation (e.g. `"1.23"`).
     #[wasm_bindgen(js_name = toString)]

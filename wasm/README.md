@@ -13,61 +13,57 @@ npm install @bulletxyz/sdk-wasm
 ```typescript
 import { Client, Keypair, Transaction, User, NewOrderArgs, Side, OrderType } from '@bulletxyz/sdk-wasm';
 
-// Connect to mainnet
-const client = await Client.mainnet();
-
-// Or with defaults for signing
 const keypair = Keypair.fromHex('your-private-key');
 const client = await Client.builder()
     .network('mainnet')
     .keypair(keypair)
     .build();
 
-// Query market data
-const info = await client.exchangeInfo();
-const ticker = await client.tickerPrice('BTC-USD');
-
-// Place an order
+const marketId = client.marketId('BTC-USD');
+if (marketId === undefined) throw new Error('unknown market');
 const order = new NewOrderArgs('50000.0', '0.1', Side.Bid, OrderType.Limit, false);
 const response = await Transaction.builder()
-    .callMessage(User.placeOrders(0, [order], false))
-    .signer(keypair)
+    .callMessage(User.placeOrders(marketId, [order], false))
     .send(client);
+```
+
+For market data without a signer, use `await Client.mainnet()` and typed REST
+methods such as `client.tickerPrice('BTC-USD')`.
+
+### Degen trading
+
+Use the typed `DegenAction` factories to open or close a degen position. The
+action is passed directly into the generated call message without JSON
+serialization.
+
+`open` executes all-or-nothing at top-of-book: `Side.Bid` opens a long and
+`Side.Ask` opens a short. The size must be non-zero and aligned to the market's
+lot size. `amountToTransfer` funds the isolated balance from cross margin and is
+capped by the protocol at 10 USDC. `close` executes IOC and returns the remaining
+isolated balance to cross margin once the position is flat.
+
+```typescript
+import { DegenAction, Side, User } from '@bulletxyz/sdk-wasm';
+
+const open = User.degenTrade(
+    7,
+    DegenAction.open('5', Side.Bid, '10'),
+);
+
+const close = User.degenTrade(7, DegenAction.close(), 2);
 ```
 
 ## API Reference
 
 ### Client
 
-```typescript
-// Constructors
-const client = await Client.mainnet();
-const client = await Client.connect('https://tradingapi.bullet.xyz');
-const client = await Client.builder()
-    .network('mainnet')        // or 'testnet', or custom URL
-    .keypair(keypair)          // default signer
-    .maxPriorityFeeBips(100n)  // default priority fee
-    .userActions(['PlaceOrders', 'CancelOrders'])  // optional User-only schema pruning
-    .build();
+Use `Client.mainnet()`, `Client.connect(networkOrUrl)`, or the builder shown above.
+The installed package's TypeScript declarations describe all methods and parameters.
 
-// Metadata
-client.chainId()             // u64
-client.chainHash()           // Uint8Array (32 bytes)
-client.chainName()           // chain name used in Solana offchain messages
-client.url()                 // REST URL
-client.wsUrl()               // WebSocket URL
-client.maxFee()              // default max fee
-client.hasKeypair()          // whether a default keypair is set
-
-// Submission
-await client.sendTransaction(signedTx)       // SubmitTxResponse
-await client.sendOffChainTransaction(offchainTx)  // SubmitTxResponse
-```
-By default the client validates every exchange `CallMessage` group (`User`,
-`Vault`, `Keeper`, `Public`, and `Admin`) against the server schema when it
-connects. `.userActions(...)` intentionally narrows validation to only the
-listed `UserAction` variants; when enabled, non-`User` call messages and
-unlisted user actions are rejected before signing.
+By default the client validates every exchange call-message group against the
+server schema at connection. `.userActions(['PlaceOrders', 'CancelOrders'])`
+limits validation to those user actions and rejects other actions before signing.
+Builder settings supply signing defaults; transaction builders can override them.
 
 ### Errors
 
@@ -98,7 +94,7 @@ All transaction construction goes through the builder:
 ```typescript
 // Build and send in one step
 const response = await Transaction.builder()
-    .callMessage(User.deposit(0, '1000.0'))
+    .callMessage(User.cancelAllOrders())
     .signer(keypair)
     .send(client);
 
@@ -133,6 +129,23 @@ const tx = Transaction.builder()
     .send(client);
 ```
 
+### Executing as another account
+
+By default a transaction executes as the signer's own default address. Use
+`.addressOverride(address)` to execute as an account that explicitly authorised
+the signer's credential (e.g. a multisig or a delegated account). The override
+is signed as part of the transaction and included in both the Borsh payload
+(`toBytes()`) and the Solana offchain JSON (`toMessageBytes()`). It takes a
+base58 address and throws on an invalid one.
+
+```typescript
+const tx = Transaction.builder()
+    .callMessage(msg)
+    .addressOverride(multisigAddress) // base58 string
+    .signer(memberKeypair)
+    .build(client);
+```
+
 ### External Signing
 
 For hardware wallets or external signing services that can sign the standard
@@ -141,7 +154,7 @@ Borsh payload:
 ```typescript
 // Build unsigned (chain hash is baked in)
 const unsigned = Transaction.builder()
-    .callMessage(User.deposit(0, '1000.0'))
+    .callMessage(User.cancelAllOrders())
     .buildUnsigned(client);
 
 // Get signable bytes and sign externally
@@ -160,7 +173,7 @@ Returned by `Transaction.builder().buildUnsigned(client)`. Contains the
 chain hash so signable bytes can be produced without a client reference.
 
 ```typescript
-unsigned.toBytes()  // Uint8Array — borsh-serialized tx + chain hash (signable bytes)
+unsigned.toBytes()  // Uint8Array — borsh signing payload: version byte, tx, chain hash (signable bytes)
 unsigned.toDisplayMessage() // string — human-readable unsigned payload for display only
 unsigned.toMessageBytes() // Uint8Array — readable JSON bytes for Solana wallets
 
@@ -174,6 +187,13 @@ as its exact signable bytes and rebuilds it later for display and submission —
 the rebuilt bytes are byte-identical to what was signed, so the stored bytes are
 the source of truth rather than a separate JSON representation.
 
+`fromBytes` only accepts bytes produced by this signing format. Bytes persisted
+by a pre-fork SDK — which had no leading version byte — cannot be rebuilt and
+are rejected with a serialization error. The network may still admit a
+transaction signed over them while the environment's legacy cutoff is open
+(single-signer transactions only), but rebuild those transactions from their
+inputs and re-sign them to be safe.
+
 Some external wallets display `signMessage` bytes as raw UTF-8, so `toBytes()`
 can look garbled in the wallet confirmation. That is expected: those bytes are
 what the network verifies. Use `toDisplayMessage()` in your app UI to show the
@@ -181,13 +201,14 @@ transaction contents before asking the wallet to sign `toBytes()`.
 
 For external Solana wallets where the wallet confirmation should show readable
 JSON, use the Solana offchain path instead. `toMessageBytes()` returns the
-readable JSON payload with `chain_name` and `chain_id` as the domain fields.
+readable JSON payload with `chain_name`, `details.chain_hash_fragment` and
+`version` as the domain fields.
 `SolanaOffchainTransaction.fromParts(...)` also carries the chain hash required
 by the current sequencer offchain authenticator envelope:
 
 ```typescript
 const unsigned = Transaction.builder()
-    .callMessage(User.deposit(0, '1000.0'))
+    .callMessage(User.cancelAllOrders())
     .buildUnsigned(client);
 
 const message = unsigned.toMessageBytes();
@@ -198,36 +219,15 @@ const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
 await client.sendOffChainTransaction(tx);
 ```
 
-### SignedTransaction
+### Signed transactions
 
-Returned by `Transaction.builder().build(client)` or assembled from parts.
+`Transaction.builder().build(client)` and `SignedTransaction.fromParts(...)`
+produce signed transactions. `toBytes()` serializes the Borsh envelope;
+`toBase64()` encodes it for WebSocket submission.
 
-```typescript
-// From builder
-const tx = Transaction.builder()
-    .callMessage(msg).maxFee(fee).signer(kp).build(client);
-
-// From external signing
-const tx = SignedTransaction.fromParts(unsigned, signature, pubKey);
-
-// Serialization
-tx.toBytes()   // Uint8Array (borsh)
-tx.toBase64()  // base64 string (for WebSocket submission)
-```
-
-### SolanaOffchainTransaction
-
-Assembled after signing `unsigned.toMessageBytes()` with a Solana
-wallet. Submit it with `client.sendOffChainTransaction(tx)`, which posts to
-the trading API's `/api/v1/solanaOffchainTx`.
-
-```typescript
-const pubKey = wallet.publicKey.toBytes(); // 32-byte Solana public key
-const tx = SolanaOffchainTransaction.fromParts(unsigned, signature, pubKey);
-
-tx.toBytes()   // Uint8Array (borsh offchain envelope)
-tx.toBase64()  // base64 string
-```
+`SolanaOffchainTransaction.fromParts(...)` wraps a signature over
+`unsigned.toMessageBytes()`. Submit it with `client.sendOffChainTransaction(tx)`;
+its `toBytes()` and `toBase64()` serialize the offchain envelope.
 
 ### Multisig
 
@@ -240,13 +240,8 @@ threshold is met the transaction can be submitted.
 // order never matters.
 const config = new MultisigConfig(2, [pubkeyA, pubkeyB, pubkeyC]);
 
-config.credentialId()  // Uint8Array — sha256(minSigners || borsh(sorted pubkeys))
-config.multisigId()    // string — base58 credential id (committed into the signed message)
-config.minSigners()    // number
-config.pubkeys()       // Uint8Array[] — canonical order
-
 const unsigned = Transaction.builder()
-    .callMessage(User.deposit(0, '1000.0'))
+    .callMessage(User.cancelAllOrders())
     .buildUnsigned(client);
 
 // Collect signatures — each signer signs the same signable bytes
@@ -255,9 +250,6 @@ const signature = await ledgerWallet.signMessage(tx.signableBytes());
 tx.addSignature(pubkeyA, signature);   // validates membership + signature
 // ... pass tx.signableBytes() to the other signers ...
 tx.addSignature(pubkeyB, signatureB);
-
-tx.signatureCount() // number
-tx.isComplete()     // true once minSigners signatures are collected
 
 // Submit (throws if below threshold)
 await client.sendLedgerMultisigTransaction(tx);
@@ -269,50 +261,31 @@ The signable bytes can also be produced without assembling a transaction:
 
 ### Keypair
 
-Ed25519 keypair for signing transactions:
-
-```typescript
-// Create
-const kp = Keypair.generate();
-const kp = Keypair.fromHex('0xdeadbeef...');
-const kp = Keypair.fromBytes(new Uint8Array(32));
-
-// Export
-kp.toHex()        // secret key as hex string
-kp.toBytes()       // secret key as Uint8Array (32 bytes)
-kp.publicKey()     // public key as Uint8Array (32 bytes)
-kp.publicKeyHex()  // public key as hex string
-
-// Sign arbitrary bytes
-kp.sign(message)   // returns 64-byte Ed25519 signature
-```
+Use `Keypair.generate()`, `Keypair.fromHex(secret)` or `Keypair.fromBytes(bytes)`.
+The secret is 32 bytes; `publicKey()` returns the 32-byte Ed25519 public key and
+`sign(bytes)` returns a 64-byte signature.
 
 ### CallMessage Factories
 
-Transaction actions are constructed via namespace modules:
+Generated namespaces (`User`, `Public`, `Keeper`, `Vault`, `Admin`, `Warp`)
+construct call messages. Permissionless actions still require a signed transaction.
+Use the installed TypeScript declarations for factory signatures.
+
+Use `User.transfer` for balance movement. `TransferEndpoint` takes a JSON-encoded
+balance bucket and an optional sub-account index:
 
 ```typescript
-// User actions
-User.deposit(assetId, amount)
-User.withdraw(assetId, amount)
-User.placeOrders(marketId, [order1, order2], replace)
-User.cancelOrders(marketId, [cancel1, cancel2])
-User.cancelAllOrders()
-User.delegateUserV2(delegate, 'session name', flags, subAccountIndex?, expiresAt?)
-User.revokeDelegationV1(delegate, subAccountIndex?)
+import { TransferEndpoint, User } from '@bulletxyz/sdk-wasm';
 
-// Public actions (no signing required, but still need a tx)
-Public.applyFunding(addresses)
-
-// Vault actions (User.createVault, plus Vault leader ops)
-User.createVault(args)
-Vault.delegateVaultUserV1(vault, delegate, 'bot', 0)
-
-// Order types
-const order = new NewOrderArgs(price, size, Side.Bid, OrderType.Limit, reduceOnly);
-const cancel = new CancelOrderArgs(orderId, clientOrderId);
-const amend = new AmendOrderArgs(cancel, newOrder);
+const deposit = User.transfer(
+    new TransferEndpoint(JSON.stringify('bank')),
+    new TransferEndpoint(JSON.stringify('cross')),
+    0, '1000.0', '',
+);
 ```
+
+The older `User.deposit`, `User.withdraw` and `User.createSubAccount` factories
+remain for wire compatibility, but the exchange rejects those actions.
 
 Delegate expiry is encoded as epoch microseconds. If your app stores epoch
 milliseconds, pass `BigInt(expiresAtMs) * 1000n` for `expiresAt`.
@@ -334,12 +307,18 @@ for (const delegate of config.delegates) {
 [`examples/node/create_vault.ts`](../examples/node/create_vault.ts) for a runnable
 vault example.
 
+`User.cancelQueuedWithdrawalV1(vault, withdrawalTimestamp?)` cancels the queued
+withdrawal whose `timestamp` (from `queuedWithdrawals` on `vault`/`vaults`)
+matches, or all of the sender's queued withdrawals from the vault when the
+timestamp is omitted. The older `User.cancelQueuedWithdrawal(vault)` cancels
+only the oldest one.
+
 `deriveSubAccountAddress(master, index)` computes a sub-account's address from
-its master address and index (`0-31`). Sub-accounts are created with
-`User.createSubAccount(index)` and traded by passing `index` as the trailing
-`sub_account_index` arg on order/cancel call messages; the derived address is
-only needed to read a sub-account (`client.accountInfo(sub)`). Throws on an
-out-of-range index.
+its master address and index (`0-31`). A transfer into a sub-account creates it;
+pass the index to the destination `TransferEndpoint`. To trade there, pass the
+index as the trailing `sub_account_index` argument on order/cancel factories.
+Use the derived address for reads such as `client.accountInfo(sub)`.
+Out-of-range indices throw.
 
 ### Warp Bridge Withdrawals
 
@@ -386,7 +365,6 @@ await ws.subscribe([
     Topic.depth('ETH-USD', OrderbookDepth.D10),
     Topic.bookTicker('SOL-USD'),
     Topic.kline('BTC-USD', KlineInterval.H1),
-    Topic.userOrders('0xabc'),
     Topic.allTickers(),
 ]);
 
@@ -400,96 +378,92 @@ const tx = Transaction.builder()
     .build(client);
 
 await ws.orderPlace(tx.toBase64());
-// also: ws.orderCancel(tx.toBase64()), ws.orderAmend(tx.toBase64()), ws.orderCancelAll(tx.toBase64())
-// or the convenience forms that take a Transaction directly:
-// ws.placeOrder(tx), ws.cancelOrder(tx), ws.amendOrder(tx), ws.cancelAllOrders(tx)
 ```
 
 ### Managed WebSocket (auto-reconnect)
 
 For long-running bots, prefer `connectWsManaged` — it handles reconnection with
-exponential backoff and replays your subscriptions automatically. It mirrors
-the Rust `ManagedWebsocket` 1:1.
+exponential backoff and replays your subscriptions automatically. Sends are queued;
+acknowledgements arrive as `message` events. Calls throw when the command queue
+is full or the background task has stopped.
+
+Protocol ping/pong keeps the raw socket alive but does not reset managed idle
+detection. For quiet subscriptions, send application pings, catch timer errors,
+and clear the interval when the receive loop ends. Pass a `ManagedWsConfig` to
+customize reconnect and idle settings; its parameters are in the type declarations:
 
 ```typescript
-const ws = await client.connectWsManaged(
-    // optional — all fields optional
-    new ManagedWsConfig(
-        /* initialBackoffMs */ 500,
-        /* maxBackoffMs */ 30_000,
-        /* maxRetries */ undefined,          // infinite
-        /* channelCapacity */ 10_000,
-        /* idleTimeoutMs */ 60_000,          // force reconnect on zombie connections
-        /* backoffResetAfterMs */ 30_000,    // reset backoff once connection is stable
-    ),
-);
+const ws = await client.connectWsManaged();
 
 ws.subscribe([Topic.depth('BTC-USD', OrderbookDepth.D20)]);
 
-while (true) {
-    const evt = await ws.recv();
-    if (!evt) break;
-    switch (evt.type) {
-        case 'message':       handleMessage(evt.message); break;
-        case 'reconnecting':  console.log('reconnecting...'); break;
-        case 'disconnected':  console.error(evt.reason); return;
+const keepalive = setInterval(() => {
+    try {
+        ws.ping();
+    } catch (err) {
+        console.error('keepalive ping failed:', err);
     }
-}
+}, 30_000);
 
-// Order submission — fire-and-forget; acks arrive as 'message' events
-ws.placeOrder(tx);
-ws.cancelOrder(cancelTx);
-ws.amendOrder(amendTx);
-ws.cancelAllOrders(cancelAllTx);
+try {
+    while (true) {
+        const evt = await ws.recv();
+        if (!evt) break;
+        switch (evt.type) {
+            case 'message':       handleMessage(evt.message); break;
+            case 'reconnecting':  console.log('reconnecting...'); break;
+            case 'disconnected':  console.error(evt.reason); return;
+        }
+    }
+} finally {
+    clearInterval(keepalive);
+}
 ```
 
 ### Decimal
 
-Arbitrary-precision decimal type for prices and quantities:
-
-```typescript
-const d = Decimal.fromScientific('1.5e2');
-const d = Decimal.fromF64(3.14);
-const d = Decimal.fromI64(100n);
-
-d.add(other)     d.sub(other)     d.mul(other)     d.div(other)
-d.gt(other)      d.lt(other)      d.eq(other)      d.cmp(other)
-d.abs()          d.neg()          d.floor(dp)      d.ceil(dp)
-d.round(dp)      d.trunc(dp)      d.normalize()    d.fract()
-d.min(other)     d.max(other)     d.rem(other)
-d.toString()
-
-// Checked arithmetic (returns undefined on overflow)
-d.checkedAdd(other)  d.checkedSub(other)  d.checkedMul(other)  d.checkedDiv(other)
-
-// Constants
-Decimal.zero()   Decimal.one()
-```
+Fixed-precision decimal arithmetic for prices and quantities. Prefer string
+inputs such as `Decimal.fromScientific('1.5e2')` to preserve decimal precision.
+Checked arithmetic (`checkedAdd`, `checkedSub`, `checkedMul`, `checkedDiv`)
+returns `undefined` on failure.
 
 ### REST API Methods
 
 The client exposes REST endpoints as typed async methods. Response objects have
 typed getters plus `toJSON()` for full JSON serialization.
 
-```typescript
-// Market data
-await client.exchangeInfo()
-await client.tickerPrice(symbol?)
-await client.orderBook(symbol)
-await client.recentTrades(symbol)
-await client.fundingRate(symbol)
+Arguments are generated in alphabetical order, not in "required first" order, so
+a required argument can follow a nullable one — pass `null` or `undefined` for
+the ones you do not need (for example `client.orderBook(null, 'BTC-USD')`).
+Arguments marked `?` may be omitted entirely.
 
-// Account
-await client.accountInfo(address)
-await client.accountBalance(address)
-await client.accountConfig(address)
-await client.queryOpenOrders(address, symbol?)
-await client.queryOpenOrder(address, orderId)
+`vaultEquity(address)` returns the user's active positions across vaults plus
+`totalEquity`. Each position includes `vaultAddress`, `shares`, `equity`, and a
+nullable `percentageReturn`.
 
-// System
-await client.health()
-await client.constants()
-```
+Each item returned by `vaultDepositors` includes held, queued, and total shares
+plus equity including the main vault account and its vault-owned sub-accounts.
+All pages and pricing come from one committed rollup state version, reported as
+`stateSlot`. `stateUpdatedAt` is when that state was collected (Unix
+microseconds, refreshed every 30 seconds by default), not the block time.
+`vaultEquity` returns HTTP 503 if the last successful collection is over 90
+seconds old; `vaultDepositors` keeps serving last-good rows.
+
+On `vaultDepositors`, history fields (`initialDepositAmount`,
+`initialDepositTimestamp`, `remainingCostBasis`, `historyUpdatedAt`,
+`historyLastTxNumber`, `historyShares`) come from an optional historical
+projection and are null (or undefined in the bindings) when unavailable; stale
+history does not block current shares or equity. `historyComplete` means the
+projection has complete, valid history, not that it has caught up with the live
+position.
+
+`percentageReturn` must be displayed as an **estimated unrealized return**. On
+`vaultDepositors`, `percentageReturnIsEstimate` is true whenever it is non-null.
+`percentageReturn` is null when history is older than 30 minutes, live and
+historical shares differ, remaining cost basis is zero, or arithmetic overflows.
+On `vaultDepositors`, it is also null when the state collection is older than 90
+seconds; `vaultEquity` returns HTTP 503 instead. It is not lifetime cash-flow
+return and excludes realized withdrawals.
 
 ## Platform Support
 

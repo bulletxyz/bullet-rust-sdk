@@ -1,21 +1,10 @@
-//! Type parsing and attribute extraction utilities.
-//!
-//! These are generic Rust syntax helpers used by the extraction modules.
-//! The one exception is `ResponseValue<T>` handling — see `parse_return_type`.
+//! Generic Rust syntax helpers for walk. Only `parse_return_type` is progenitor-aware.
 
 use syn::{GenericArgument, PathArguments, ReturnType, Type};
 
 use super::super::{Primitive, RustType};
 
-// ── Type Parsing ─────────────────────────────────────────────────────────────
-
-/// Parse any `syn::Type` into our `RustType` IR.
-///
-/// This is the core generic parser. It handles:
-/// - Primitives (bool, i32, String, etc.)
-/// - Structural types (Option, Vec, Map, tuples)
-/// - References (&T, &[T])
-/// - Named types with generics (falls through to `Named`)
+/// Parse any `syn::Type` into the `RustType` IR; unknown types become `Named`.
 pub fn parse_rust_type(ty: &Type) -> Option<RustType> {
     match ty {
         Type::Path(tp) => parse_type_path(tp),
@@ -45,10 +34,8 @@ fn parse_type_path(tp: &syn::TypePath) -> Option<RustType> {
     }
 
     match ident.as_str() {
-        // Primitives
         "bool" => Some(RustType::Bool),
-        "String" => Some(RustType::String),
-        "str" => Some(RustType::String), // &str reference will wrap this
+        "String" | "str" => Some(RustType::String), // &str reference will wrap this
         "i8" => Some(RustType::Primitive(Primitive::I8)),
         "i16" => Some(RustType::Primitive(Primitive::I16)),
         "i32" => Some(RustType::Primitive(Primitive::I32)),
@@ -60,7 +47,6 @@ fn parse_type_path(tp: &syn::TypePath) -> Option<RustType> {
         "f32" => Some(RustType::Primitive(Primitive::F32)),
         "f64" => Some(RustType::Primitive(Primitive::F64)),
 
-        // Structural types
         "Option" => {
             let inner = first_generic_arg(&seg.arguments)?;
             let inner_ty = parse_rust_type(inner)?;
@@ -77,13 +63,12 @@ fn parse_type_path(tp: &syn::TypePath) -> Option<RustType> {
             let v_ty = parse_rust_type(v)?;
             Some(RustType::Map(Box::new(k_ty), Box::new(v_ty)))
         }
-        // Cow<'_, T> → unwrap to T (e.g., Cow<'static, str> → String)
+        // Cow<'_, T> -> T (e.g. Cow<'static, str> -> String)
         "Cow" => {
             let inner = first_generic_arg(&seg.arguments)?;
             parse_rust_type(inner)
         }
 
-        // Everything else: Named with optional generic args
         _ => {
             let args = collect_generic_args(&seg.arguments);
             Some(RustType::Named { name: ident, args })
@@ -92,33 +77,26 @@ fn parse_type_path(tp: &syn::TypePath) -> Option<RustType> {
 }
 
 fn parse_reference(r: &syn::TypeReference) -> Option<RustType> {
-    // &[T] — reference to slice
     if let Type::Slice(s) = r.elem.as_ref() {
         let inner = parse_rust_type(&s.elem)?;
         return Some(RustType::Ref(Box::new(RustType::Slice(Box::new(inner)))));
     }
 
-    // &T
     let inner = parse_rust_type(&r.elem)?;
     Some(RustType::Ref(Box::new(inner)))
 }
 
 /// Parse a method return type, unwrapping `Result<ResponseValue<T>, Error<_>>`.
-///
-/// This is the one progenitor-aware function in walk. We promote `ResponseValue`
-/// because it appears on every client method return. See `RustType::ResponseValue` docs.
 pub fn parse_return_type(ret: &ReturnType) -> Option<RustType> {
     let ty = match ret {
         ReturnType::Type(_, ty) => ty.as_ref(),
         ReturnType::Default => return Some(RustType::Tuple(vec![])), // -> ()
     };
 
-    // Try to unwrap Result<ResponseValue<T>, Error<_>> → ResponseValue(T)
     if let Some(response_value_inner) = try_unwrap_progenitor_return(ty) {
         return Some(RustType::ResponseValue(Box::new(response_value_inner)));
     }
 
-    // Fallback: parse as-is
     parse_rust_type(ty)
 }
 
@@ -127,7 +105,6 @@ fn try_unwrap_progenitor_return(ty: &Type) -> Option<RustType> {
     let Type::Path(tp) = ty else { return None };
     let seg = tp.path.segments.last()?;
 
-    // Must be Result<_, _>
     if seg.ident != "Result" {
         return None;
     }
@@ -138,7 +115,6 @@ fn try_unwrap_progenitor_return(ty: &Type) -> Option<RustType> {
     };
     let rv_seg = rv_path.path.segments.last()?;
 
-    // Must be ResponseValue<T>
     if rv_seg.ident != "ResponseValue" {
         return None;
     }
@@ -146,8 +122,6 @@ fn try_unwrap_progenitor_return(ty: &Type) -> Option<RustType> {
     let inner = first_generic_arg(&rv_seg.arguments)?;
     parse_rust_type(inner)
 }
-
-// ── Generic Argument Helpers ─────────────────────────────────────────────────
 
 pub fn first_generic_arg(args: &PathArguments) -> Option<&Type> {
     if let PathArguments::AngleBracketed(ab) = args {
@@ -162,10 +136,13 @@ pub fn first_generic_arg(args: &PathArguments) -> Option<&Type> {
 
 fn first_two_generic_args(args: &PathArguments) -> Option<(&Type, &Type)> {
     if let PathArguments::AngleBracketed(ab) = args {
-        let mut types = ab
-            .args
-            .iter()
-            .filter_map(|arg| if let GenericArgument::Type(ty) = arg { Some(ty) } else { None });
+        let mut types = ab.args.iter().filter_map(|arg| {
+            if let GenericArgument::Type(ty) = arg {
+                Some(ty)
+            } else {
+                None
+            }
+        });
         let first = types.next()?;
         let second = types.next()?;
         return Some((first, second));
@@ -178,7 +155,11 @@ fn collect_generic_args(args: &PathArguments) -> Vec<RustType> {
         ab.args
             .iter()
             .filter_map(|arg| {
-                if let GenericArgument::Type(ty) = arg { parse_rust_type(ty) } else { None }
+                if let GenericArgument::Type(ty) = arg {
+                    parse_rust_type(ty)
+                } else {
+                    None
+                }
             })
             .collect()
     } else {
@@ -187,10 +168,12 @@ fn collect_generic_args(args: &PathArguments) -> Vec<RustType> {
 }
 
 fn path_to_string(path: &syn::Path) -> String {
-    path.segments.iter().map(|s| s.ident.to_string()).collect::<Vec<_>>().join("::")
+    path.segments
+        .iter()
+        .map(|s| s.ident.to_string())
+        .collect::<Vec<_>>()
+        .join("::")
 }
-
-// ── Attribute Helpers ────────────────────────────────────────────────────────
 
 pub fn has_serde_transparent(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
@@ -206,8 +189,7 @@ pub fn has_serde_transparent(attrs: &[syn::Attribute]) -> bool {
 
 /// Extract derive macro names from attributes.
 ///
-/// Parses `#[derive(Serialize, Deserialize, Clone)]` → `["Serialize", "Deserialize", "Clone"]`.
-/// Also handles paths like `serde::Serialize` or `::serde::Serialize` → `["serde::Serialize"]`.
+/// Paths are kept, e.g. `serde::Serialize`.
 pub fn extract_derives(attrs: &[syn::Attribute]) -> Vec<String> {
     let mut derives = Vec::new();
     for attr in attrs {
@@ -216,7 +198,6 @@ pub fn extract_derives(attrs: &[syn::Attribute]) -> Vec<String> {
         }
         if let Ok(meta) = attr.meta.require_list() {
             meta.parse_nested_meta(|nested| {
-                // Collect the full path (e.g., `serde::Serialize` or just `Clone`)
                 let path_str = nested
                     .path
                     .segments
@@ -255,8 +236,6 @@ pub fn extract_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
     }
     None
 }
-
-// ── Impl Helpers ─────────────────────────────────────────────────────────────
 
 pub fn impl_target_name(imp: &syn::ItemImpl) -> String {
     if let Type::Path(tp) = imp.self_ty.as_ref()

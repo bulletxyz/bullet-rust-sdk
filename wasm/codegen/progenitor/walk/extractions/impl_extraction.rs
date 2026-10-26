@@ -7,14 +7,20 @@ pub fn extract_impl(imp: &ItemImpl, target: &str, module_path: &[String]) -> Imp
     let methods = imp
         .items
         .iter()
-        .filter_map(
-            |item| {
-                if let ImplItem::Fn(method) = item { extract_method(method) } else { None }
-            },
-        )
+        .filter_map(|item| {
+            if let ImplItem::Fn(method) = item {
+                extract_method(method)
+            } else {
+                None
+            }
+        })
         .collect();
 
-    ImplDetails { target: target.to_string(), methods, module_path: module_path.to_vec() }
+    ImplDetails {
+        target: target.to_string(),
+        methods,
+        module_path: module_path.to_vec(),
+    }
 }
 
 fn extract_method(method: &syn::ImplItemFn) -> Option<MethodDetails> {
@@ -32,7 +38,10 @@ fn extract_method(method: &syn::ImplItemFn) -> Option<MethodDetails> {
                     _ => return None,
                 };
                 let ty = parse_rust_type(&pat_ty.ty)?;
-                Some(ParamDetails { name: param_name, ty })
+                Some(ParamDetails {
+                    name: param_name,
+                    ty,
+                })
             } else {
                 None // Skip &self
             }
@@ -41,5 +50,10 @@ fn extract_method(method: &syn::ImplItemFn) -> Option<MethodDetails> {
 
     let return_type = parse_return_type(&sig.output);
 
-    Some(MethodDetails { name, is_async, params, return_type })
+    Some(MethodDetails {
+        name,
+        is_async,
+        params,
+        return_type,
+    })
 }

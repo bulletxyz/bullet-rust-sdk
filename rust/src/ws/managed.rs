@@ -1,37 +1,5 @@
-//! Auto-reconnecting WebSocket client.
-//!
-//! [`ManagedWebsocket`] wraps the raw [`WebsocketHandle`](super::client::WebsocketHandle)
-//! in a background task that handles reconnection with exponential backoff and
-//! replays subscriptions after each reconnect.
-//!
-//! Unlike `WebsocketHandle`, `ManagedWebsocket` is `Send + Sync` — it communicates
-//! with the background task via channels, so it can be shared across async tasks
-//! without a `Mutex`.
-//!
-//! This module is portable across native and wasm32 targets: the background
-//! task is spawned via [`tokio::spawn`] on native and
-//! [`wasm_bindgen_futures::spawn_local`] on wasm, and all time/channel
-//! primitives come from the `futures` crate.
-//!
-//! # Example
-//!
-//! ```ignore
-//! use bullet_rust_sdk::{Client, Topic, OrderbookDepth};
-//! use bullet_rust_sdk::ws::managed::{ManagedWebsocket, WsEvent};
-//!
-//! let client = Client::mainnet().await?;
-//! let mut ws = ManagedWebsocket::connect(&client).call().await?;
-//!
-//! ws.subscribe([Topic::depth("BTC-USD", OrderbookDepth::D20)], None)?;
-//!
-//! while let Some(event) = ws.recv().await {
-//!     match event {
-//!         WsEvent::Message(msg) => { /* process msg */ }
-//!         WsEvent::Reconnecting => { /* log reconnect */ }
-//!         WsEvent::Disconnected(err) => { /* permanent failure */ break; }
-//!     }
-//! }
-//! ```
+//! WebSocket reconnection with backoff and subscription replay.
+//! [`ManagedWebsocket`] owns the raw socket in a background task and is `Send + Sync`.
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -58,26 +26,17 @@ pub enum ManagedWsError {
     /// The background task has stopped (disconnected or the handle was dropped).
     #[error("managed websocket is stopped")]
     Stopped,
-    /// The command channel is full — the background task is not draining fast
-    /// enough. Indicates a stuck task or a pathological caller; treat as
-    /// backpressure.
+    /// The command channel is full: the background task is stuck or the caller is flooding it.
     #[error("managed websocket command channel is full")]
     Busy,
 }
 
-/// Why a reconnect attempt gave up.
 #[derive(Debug, Error)]
 enum ReconnectError {
-    /// The user-facing handle was dropped while reconnecting.
     #[error("managed websocket handle dropped")]
     HandleDropped,
-    /// Ran out of retry attempts.
     #[error("exhausted {0} reconnect attempts")]
     RetriesExhausted(u32),
-    /// Subscription replay failed after reconnect with a non-transport error.
-    /// The underlying [`WSErrors`] is preserved so callers can distinguish
-    /// transient network failures from protocol-level problems (bad topic,
-    /// too many topics).
     #[error("subscription replay failed: {0}")]
     ReplayFailed(#[source] WSErrors),
 }
@@ -94,14 +53,10 @@ pub enum WsEvent {
     Disconnected(String),
 }
 
-/// Minimum backoff floor. A zero `initial_backoff` would otherwise make
-/// `backoff * 2` stay zero forever, producing a tight reconnect spin loop.
+// Floor so a zero `initial_backoff` can't double to zero forever and spin.
 const MIN_BACKOFF: Duration = Duration::from_millis(10);
 
-/// Default command channel capacity. Commands (subscribe, unsubscribe, order
-/// send) are intrinsically low-rate; if you're queueing more than this, the
-/// background task is stuck and the right answer is to surface
-/// [`ManagedWsError::Busy`] rather than silently buffer.
+// Commands are low-rate; a full queue surfaces `ManagedWsError::Busy` rather than buffering.
 const CMD_CHANNEL_CAPACITY: usize = 256;
 
 /// Configuration for managed WebSocket reconnection behavior.
@@ -137,10 +92,8 @@ pub struct ManagedWsConfig {
     /// Default: `None` (infinite retries)
     pub max_retries: Option<u32>,
 
-    /// Event channel buffer size. When the buffer is full and the consumer
-    /// isn't keeping up, new events are dropped to keep the WebSocket
-    /// connection alive. A warning is logged when this happens.
-    ///
+    /// Event channel buffer size. When full, new events are dropped (with a warning) to keep the
+    /// connection alive.
     /// Default: 10_000
     #[builder(default = 10_000)]
     pub channel_capacity: usize,
@@ -150,25 +103,16 @@ pub struct ManagedWsConfig {
 
     /// Force a reconnect if no server message arrives within this window.
     ///
-    /// Protects against zombie connections — TCP keepalives and WebSocket
-    /// ping/pong keep the socket nominally alive, but the server can stop
-    /// sending data without closing. Without this, the handle sits on a dead
-    /// stream indefinitely.
-    ///
-    /// `Duration::ZERO` disables the timer. Cmd-path acks (subscribe, order
-    /// responses) DO count as server-pushed messages and reset the clock.
+    /// Guards against zombie connections that stay open but stop sending. Any server message,
+    /// including acks, resets the clock. `Duration::ZERO` disables it.
     ///
     /// Default: 60 seconds
     #[builder(default = Duration::from_secs(60))]
     pub idle_timeout: Duration,
 
-    /// How long a connection must stay up before the backoff state is
-    /// considered "stable" and the next disconnect starts from
-    /// [`initial_backoff`](Self::initial_backoff) again.
-    ///
-    /// Without this, a zombie that accepts connections and immediately drops
-    /// would be hammered at `initial_backoff` forever — the server never gets
-    /// the exponential-backoff relief.
+    /// Uptime after which the next disconnect restarts from
+    /// [`initial_backoff`](Self::initial_backoff). Without it, a server that accepts then drops
+    /// would be retried at `initial_backoff` forever.
     ///
     /// Default: 30 seconds
     #[builder(default = Duration::from_secs(30))]
@@ -181,12 +125,7 @@ impl Default for ManagedWsConfig {
     }
 }
 
-/// Command sent from the user handle to the background task.
-///
-/// Subscribe/unsubscribe commands carry already-serialized topic strings so
-/// the background task doesn't need to re-serialize, and callers that already
-/// have string topics (notably the WASM bindings) don't need to round-trip
-/// through a typed [`Topic`].
+// Serialized topics let WASM callers skip a typed `Topic` round-trip.
 enum WsCommand {
     Subscribe(Vec<String>, Option<RequestId>),
     Unsubscribe(Vec<String>, Option<RequestId>),
@@ -197,35 +136,22 @@ enum WsCommand {
 ///
 /// `Send + Sync` — safe to share across async tasks without a `Mutex`.
 ///
-/// Subscribe/unsubscribe/order sends are fire-and-forget: the call queues a
-/// command to the background task and returns. Server acknowledgements arrive
-/// as [`WsEvent::Message`] on the event stream, matching standard CEX WS
-/// conventions.
-///
-/// Dropping the handle (or calling [`stop`](Self::stop)) terminates the
-/// background task immediately — even if it is mid-reconnect — via a separate
-/// cancellation signal that bypasses the command queue.
+/// Subscribe/unsubscribe/order calls are fire-and-forget; server acks arrive as
+/// [`WsEvent::Message`]. Dropping the handle or calling [`stop`](Self::stop) ends the background
+/// task immediately, even mid-reconnect.
 pub struct ManagedWebsocket {
     event_rx: mpsc::Receiver<WsEvent>,
     cmd_tx: mpsc::Sender<WsCommand>,
-    /// Held, never sent on. Dropping signals shutdown to the background task.
+    // Held, never sent on. Dropping signals shutdown to the background task.
     _shutdown_tx: oneshot::Sender<()>,
 }
 
 impl ManagedWebsocket {
-    /// Open a managed (auto-reconnecting) WebSocket connection for the given
-    /// [`Client`].
-    ///
-    /// The returned handle manages reconnection with exponential backoff and
-    /// replays subscriptions automatically.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let mut ws = ManagedWebsocket::connect(&client).call().await?;
-    /// ws.subscribe([Topic::agg_trade("BTC-USD")], None)?;
-    /// ```
-    #[cfg_attr(not(target_arch = "wasm32"), doc = "Uses [`tokio::spawn`] on native targets.")]
+    /// Connect with default backoff and automatic subscription replay.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        doc = "Uses [`tokio::spawn`] on native targets."
+    )]
     #[cfg_attr(
         target_arch = "wasm32",
         doc = "Uses [`wasm_bindgen_futures::spawn_local`] on wasm targets."
@@ -239,7 +165,11 @@ impl ManagedWebsocket {
         client: &Client,
         config: ManagedWsConfig,
     ) -> Result<ManagedWebsocket, WSErrors> {
-        let ws = client.connect_ws().maybe_config(config.ws_config.clone()).call().await?;
+        let ws = client
+            .connect_ws()
+            .maybe_config(config.ws_config.clone())
+            .call()
+            .await?;
 
         let (event_tx, event_rx) = mpsc::channel(config.channel_capacity);
         let (cmd_tx, cmd_rx) = mpsc::channel(CMD_CHANNEL_CAPACITY);
@@ -251,7 +181,11 @@ impl ManagedWebsocket {
             run_managed_ws(inner, ws, config, event_tx, cmd_rx, shutdown_rx).await;
         });
 
-        Ok(ManagedWebsocket { event_rx, cmd_tx, _shutdown_tx: shutdown_tx })
+        Ok(ManagedWebsocket {
+            event_rx,
+            cmd_tx,
+            _shutdown_tx: shutdown_tx,
+        })
     }
 
     /// Receive the next event from the WebSocket.
@@ -264,8 +198,7 @@ impl ManagedWebsocket {
 
     /// Subscribe to topics. The subscription is tracked and replayed on reconnect.
     ///
-    /// This is fire-and-forget — it queues the command to the background task.
-    /// The server's subscribe acknowledgement arrives as a [`WsEvent::Message`].
+    /// Fire-and-forget; the server ack arrives as a [`WsEvent::Message`].
     pub fn subscribe(
         &self,
         topics: impl IntoIterator<Item = Topic>,
@@ -277,9 +210,8 @@ impl ManagedWebsocket {
 
     /// Subscribe using pre-serialized topic strings (e.g. `"BTC-USD@aggTrade"`).
     ///
-    /// Prefer [`subscribe`](Self::subscribe) with typed [`Topic`] values from
-    /// native Rust — this overload exists for binding layers (WASM/JS) that
-    /// already hold string topics.
+    /// For binding layers (WASM/JS) that already hold string topics; prefer
+    /// [`subscribe`](Self::subscribe) from Rust.
     pub fn subscribe_raw(
         &self,
         topics: impl IntoIterator<Item = String>,
@@ -287,6 +219,18 @@ impl ManagedWebsocket {
     ) -> Result<(), ManagedWsError> {
         let params: Vec<String> = topics.into_iter().collect();
         self.try_send_cmd(WsCommand::Subscribe(params, id))
+    }
+
+    /// Send an application-level ping.
+    ///
+    /// The server answers with a `Pong`, which arrives as a
+    /// [`WsEvent::Message`] and — unlike a protocol-level ping/pong, which is
+    /// handled inside the transport and never surfaces here — resets the
+    /// [`idle_timeout`](ManagedWsConfig::idle_timeout) clock. On a connection
+    /// whose subscriptions only speak when something changes, this is the
+    /// only way to tell a quiet server from a wedged one.
+    pub fn ping(&self, id: Option<RequestId>) -> Result<(), ManagedWsError> {
+        self.try_send_cmd(WsCommand::Send(ClientMessage::Ping { id }))
     }
 
     /// Unsubscribe from topics. Removes them from the replay list.
@@ -359,8 +303,7 @@ impl ManagedWebsocket {
 
     /// Place an order using a signed [`Transaction`]. Base64-encodes internally.
     ///
-    /// Returns a `SDKResult`-style error instead of `ManagedWsError` because
-    /// encoding can fail independently of the channel state.
+    /// Returns `SDKResult` rather than `ManagedWsError` because encoding can fail too.
     ///
     /// [`Transaction`]: crate::SignedTransaction
     pub fn place_order(
@@ -370,7 +313,8 @@ impl ManagedWebsocket {
     ) -> Result<(), WSErrors> {
         let base64 =
             crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
-        self.order_place(base64, id).map_err(|e| WSErrors::WsError(e.to_string()))
+        self.order_place(base64, id)
+            .map_err(|e| WSErrors::WsError(e.to_string()))
     }
 
     /// Cancel an order using a signed [`Transaction`]. Base64-encodes internally.
@@ -383,7 +327,8 @@ impl ManagedWebsocket {
     ) -> Result<(), WSErrors> {
         let base64 =
             crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
-        self.order_cancel(base64, id).map_err(|e| WSErrors::WsError(e.to_string()))
+        self.order_cancel(base64, id)
+            .map_err(|e| WSErrors::WsError(e.to_string()))
     }
 
     /// Amend an order using a signed [`Transaction`]. Base64-encodes internally.
@@ -396,7 +341,8 @@ impl ManagedWebsocket {
     ) -> Result<(), WSErrors> {
         let base64 =
             crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
-        self.order_amend(base64, id).map_err(|e| WSErrors::WsError(e.to_string()))
+        self.order_amend(base64, id)
+            .map_err(|e| WSErrors::WsError(e.to_string()))
     }
 
     /// Cancel all open orders using a signed [`Transaction`]. Base64-encodes internally.
@@ -409,36 +355,34 @@ impl ManagedWebsocket {
     ) -> Result<(), WSErrors> {
         let base64 =
             crate::Transaction::to_base64(signed).map_err(|e| WSErrors::WsError(e.to_string()))?;
-        self.order_cancel_all(base64, id).map_err(|e| WSErrors::WsError(e.to_string()))
+        self.order_cancel_all(base64, id)
+            .map_err(|e| WSErrors::WsError(e.to_string()))
     }
 
     /// Stop the managed WebSocket and its background task.
     ///
-    /// After this returns the background task has been signaled; it will
-    /// terminate at its next await point without draining pending commands.
-    /// The event stream will end (`recv()` returns `None`) shortly after.
+    /// The task exits at its next await point without draining pending commands; `recv()` then
+    /// returns `None`.
     pub fn stop(self) {
-        // Drop self — `_shutdown_tx` is dropped, closing the oneshot. Task sees
-        // the signal and exits without going through the cmd queue.
+        // Dropping `_shutdown_tx` closes the oneshot, bypassing the cmd queue.
     }
 
     fn try_send_cmd(&self, cmd: WsCommand) -> Result<(), ManagedWsError> {
-        // `Sender::clone` is an Arc bump, so try_send (which needs &mut self)
-        // can be called without requiring `&mut self` on the public API.
+        // `Sender::clone` is an Arc bump; lets `try_send` (needs `&mut`) work from `&self`.
         let mut tx = self.cmd_tx.clone();
-        tx.try_send(cmd)
-            .map_err(|e| if e.is_full() { ManagedWsError::Busy } else { ManagedWsError::Stopped })
+        tx.try_send(cmd).map_err(|e| {
+            if e.is_full() {
+                ManagedWsError::Busy
+            } else {
+                ManagedWsError::Stopped
+            }
+        })
     }
 }
 
-// `mpsc::Sender`/`Receiver` are `Send`, and `oneshot::Sender<()>` is `Send + Sync`.
-// The handle is explicitly `Send + Sync` on all targets so callers can share it
-// across async tasks without a `Mutex`.
+// Explicitly `Send + Sync` on all targets so callers can share it without a `Mutex`.
 
 /// Convenience wrapper on [`Client`] that forwards to [`ManagedWebsocket::connect`].
-///
-/// Kept as a thin helper so the common case (`client.connect_ws_managed()`) is
-/// discoverable; the real dependency still flows `managed → client`.
 #[bon]
 impl Client {
     #[builder]
@@ -454,9 +398,6 @@ impl Client {
 }
 
 /// Minimal client data needed by the background task for reconnection.
-///
-/// Constructed via [`ManagedWsClient::from_client`] so `Client` has no
-/// compile-time dependency on this struct.
 struct ManagedWsClient {
     ws_client: reqwest::Client,
     ws_url: String,
@@ -464,7 +405,10 @@ struct ManagedWsClient {
 
 impl ManagedWsClient {
     fn from_client(client: &Client) -> Self {
-        Self { ws_client: client.ws_client.clone(), ws_url: client.ws_url().to_string() }
+        Self {
+            ws_client: client.ws_client.clone(),
+            ws_url: client.ws_url().to_string(),
+        }
     }
 
     async fn connect(
@@ -481,9 +425,7 @@ impl ManagedWsClient {
 
 /// Spawn a background future on the target's executor.
 ///
-/// Native uses [`tokio::spawn`] (requires `Send`); wasm uses
-/// [`wasm_bindgen_futures::spawn_local`] (no `Send` required since JS is
-/// single-threaded).
+/// Native uses [`tokio::spawn`] (`Send`); wasm uses [`wasm_bindgen_futures::spawn_local`].
 #[cfg(not(target_arch = "wasm32"))]
 fn spawn<F>(fut: F)
 where
@@ -502,16 +444,11 @@ where
 
 /// Persistent state carried across reconnect cycles.
 ///
-/// The backoff duration persists across disconnect cycles so a zombie that
-/// accepts connections and immediately drops gets proper exponential relief
-/// instead of being hammered at `initial_backoff` forever. It resets to
-/// `initial_backoff` only after a connection has stayed up for
-/// `backoff_reset_after`.
+/// Backoff persists across disconnects and resets only after a connection stays up for
+/// `backoff_reset_after`, so accept-then-drop servers still get exponential relief.
 struct ReconnectState {
     backoff: Duration,
-    /// When the *current* connection was established. `None` only before the
-    /// very first successful reconnect (the initial connect sets this on
-    /// entry to [`run_managed_ws`]).
+    /// When the current connection was established; set by [`run_managed_ws`] on entry.
     connected_since: Option<Instant>,
 }
 
@@ -533,8 +470,7 @@ async fn run_managed_ws(
 
     /// One completed branch of the per-iteration select.
     ///
-    /// `Recv` boxes the server message so this enum stays small — `ServerMessage`
-    /// is ~340 bytes and sits on the stack every iteration otherwise.
+    /// `Recv` is boxed: `ServerMessage` is ~340 bytes.
     enum Branch {
         Shutdown,
         Recv(Result<Box<ServerMessage>, WSErrors>),
@@ -543,17 +479,13 @@ async fn run_managed_ws(
     }
 
     loop {
-        // Idle-timeout future: fires if no server-pushed message arrives within
-        // the window. `Duration::ZERO` disables the timer.
         let idle_remaining = if config.idle_timeout.is_zero() {
             None
         } else {
             Some(config.idle_timeout.saturating_sub(last_msg.elapsed()))
         };
 
-        // Run the select in its own scope so the fused recv/cmd futures (which
-        // hold `&mut ws` / `&mut cmd_rx`) are dropped before we touch those
-        // receivers again in the match arms below.
+        // Scoped so the fused futures borrowing `ws`/`cmd_rx` drop before the match arms.
         let branch = {
             let recv_fut = ws.recv().fuse();
             let cmd_fut = cmd_rx.next().fuse();
@@ -620,7 +552,10 @@ async fn run_managed_ws(
             }
             Branch::Idle => {
                 let elapsed = last_msg.elapsed();
-                warn!(?elapsed, "no server messages within idle timeout, forcing reconnect");
+                warn!(
+                    ?elapsed,
+                    "no server messages within idle timeout, forcing reconnect"
+                );
                 if do_reconnect(
                     &client,
                     &config,
@@ -637,27 +572,38 @@ async fn run_managed_ws(
                 last_msg = Instant::now();
             }
             Branch::Cmd(Some(WsCommand::Subscribe(params, id))) => {
-                // Dedup: only send for topics we aren't already subscribed to.
-                // The server may reject duplicates with an unhelpful error, and
-                // the topic set is the source of truth for replay.
-                let new_params: Vec<String> =
-                    params.into_iter().filter(|p| active_topics.insert(p.clone())).collect();
+                // Skip already-subscribed topics: the server may reject duplicates, and the set
+                // drives replay.
+                let new_params: Vec<String> = params
+                    .into_iter()
+                    .filter(|p| active_topics.insert(p.clone()))
+                    .collect();
                 if new_params.is_empty() {
                     debug!("subscribe: all topics already active, skipping wire send");
-                } else if let Err(e) =
-                    ws.send(ClientMessage::Subscribe { id, params: new_params }).await
+                } else if let Err(e) = ws
+                    .send(ClientMessage::Subscribe {
+                        id,
+                        params: new_params,
+                    })
+                    .await
                 {
                     debug!(?e, "subscribe send failed, will replay after reconnect");
                 }
             }
             Branch::Cmd(Some(WsCommand::Unsubscribe(params, id))) => {
                 // Dedup: only send for topics we're actually subscribed to.
-                let to_send: Vec<String> =
-                    params.into_iter().filter(|p| active_topics.remove(p)).collect();
+                let to_send: Vec<String> = params
+                    .into_iter()
+                    .filter(|p| active_topics.remove(p))
+                    .collect();
                 if to_send.is_empty() {
                     debug!("unsubscribe: no matching active topics, skipping wire send");
-                } else if let Err(e) =
-                    ws.send(ClientMessage::Unsubscribe { id, params: to_send }).await
+                } else if let Err(e) = ws
+                    .send(ClientMessage::Unsubscribe {
+                        id,
+                        params: to_send,
+                    })
+                    .await
                 {
                     debug!(?e, "unsubscribe send failed");
                 }
@@ -678,9 +624,7 @@ async fn run_managed_ws(
                     {
                         return;
                     }
-                    // Retry the message once on the new connection. If it fails
-                    // again the connection is still broken and do_reconnect will
-                    // run again on the next loop iteration.
+                    // Retry once; if it fails again, the next iteration reconnects.
                     if let Err(e) = ws.send(msg).await {
                         warn!(?e, "retry after reconnect also failed");
                     }
@@ -696,10 +640,6 @@ async fn run_managed_ws(
 }
 
 /// Handle reconnection. Returns `true` if the task should stop.
-///
-/// Emits `WsEvent::Reconnecting`, reuses/resets backoff per
-/// [`ReconnectState`], and on success updates `state.connected_since` and
-/// replaces `*ws` with the new handle.
 async fn do_reconnect(
     client: &ManagedWsClient,
     config: &ManagedWsConfig,
@@ -715,9 +655,7 @@ async fn do_reconnect(
         Err(_) => return true,
     }
 
-    // If the previous connection was stable for long enough, reset the
-    // exponential backoff. Otherwise carry it forward so we don't hammer a
-    // zombie that accepts-then-drops at `initial_backoff` forever.
+    // Reset backoff only after a stable connection (see `ReconnectState`).
     if let Some(t) = state.connected_since
         && t.elapsed() >= config.backoff_reset_after
     {
@@ -746,9 +684,7 @@ async fn do_reconnect(
 
 /// Reconnect with exponential backoff + jitter and replay subscriptions.
 ///
-/// Observes `shutdown_rx` during every sleep and between connect attempts so
-/// dropping the handle terminates the loop promptly. `state.backoff` is
-/// mutated in place so growth persists across calls (see [`do_reconnect`]).
+/// Watches `shutdown_rx` during sleeps and between attempts. `state.backoff` is mutated in place.
 async fn reconnect(
     client: &ManagedWsClient,
     config: &ManagedWsConfig,
@@ -765,16 +701,19 @@ async fn reconnect(
             return Err(ReconnectError::HandleDropped);
         }
 
-        attempts += 1;
-        if let Some(max) = config.max_retries
-            && attempts > max
-        {
-            return Err(ReconnectError::RetriesExhausted(max));
-        }
+        attempts = next_reconnect_attempt(attempts, config.max_retries)?;
 
         // Jitter: add 0..50% of backoff to avoid thundering herd.
-        let jitter_ms = rand::random::<u64>() % (state.backoff.as_millis() as u64 / 2 + 1);
-        let delay = state.backoff + Duration::from_millis(jitter_ms);
+        let bound = (state.backoff.as_millis() as u64 / 2)
+            .checked_add(1)
+            .expect("halved jitter bound fits");
+        let jitter_ms = rand::random::<u64>()
+            .checked_rem(bound)
+            .expect("jitter bound is nonzero");
+        let delay = state
+            .backoff
+            .checked_add(Duration::from_millis(jitter_ms))
+            .expect("reconnect delay fits");
 
         info!(attempt = attempts, delay = ?delay, backoff = ?state.backoff, "attempting reconnect");
 
@@ -795,11 +734,13 @@ async fn reconnect(
                     let params: Vec<String> = active_topics.iter().cloned().collect();
                     debug!(count = params.len(), "replaying subscriptions");
                     if let Err(e) = ws.send(ClientMessage::Subscribe { id: None, params }).await {
-                        // Distinguish protocol errors (bad topic, oversize) from
-                        // transport errors (connection died mid-replay).
                         if matches!(&e, WSErrors::WsStreamEnded | WSErrors::WsClosed { .. }) {
                             warn!(?e, "replay send lost connection, retrying");
-                            state.backoff = (state.backoff * 2).min(max_backoff);
+                            state.backoff = state
+                                .backoff
+                                .checked_mul(2)
+                                .expect("reconnect backoff fits")
+                                .min(max_backoff);
                             continue;
                         }
                         return Err(ReconnectError::ReplayFailed(e));
@@ -809,7 +750,11 @@ async fn reconnect(
             }
             Err(e) => {
                 warn!(?e, attempt = attempts, "reconnect failed");
-                state.backoff = (state.backoff * 2).min(max_backoff);
+                state.backoff = state
+                    .backoff
+                    .checked_mul(2)
+                    .expect("reconnect backoff fits")
+                    .min(max_backoff);
             }
         }
     }
@@ -819,4 +764,41 @@ async fn reconnect(
 /// receiver is otherwise resolved).
 fn shutdown_observed(rx: &mut oneshot::Receiver<()>) -> bool {
     !matches!(rx.try_recv(), Ok(None))
+}
+
+fn next_reconnect_attempt(attempts: u32, max_retries: Option<u32>) -> Result<u32, ReconnectError> {
+    if let Some(max) = max_retries
+        && attempts >= max
+    {
+        return Err(ReconnectError::RetriesExhausted(max));
+    }
+    Ok(attempts.saturating_add(1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retry_budget_stops_before_an_extra_attempt_and_unlimited_never_exhausts() {
+        for (attempts, limit, expected) in [
+            (0, Some(0), None),
+            (0, Some(2), Some(1)),
+            (1, Some(2), Some(2)),
+            (2, Some(2), None),
+            (u32::MAX - 1, Some(u32::MAX), Some(u32::MAX)),
+            (u32::MAX, Some(u32::MAX), None),
+            (u32::MAX, None, Some(u32::MAX)),
+        ] {
+            match (next_reconnect_attempt(attempts, limit), expected) {
+                (Ok(actual), Some(expected)) => assert_eq!(actual, expected),
+                (Err(ReconnectError::RetriesExhausted(actual)), None) => {
+                    assert_eq!(Some(actual), limit);
+                }
+                (actual, expected) => {
+                    panic!("{attempts}, {limit:?}: {actual:?}, expected {expected:?}")
+                }
+            }
+        }
+    }
 }

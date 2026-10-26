@@ -4,13 +4,16 @@ use std::path::PathBuf;
 use schemars::schema::{InstanceType, SchemaObject};
 use serde_json::Value;
 
+use codegen::merge_response_arms;
+
+mod codegen;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=openapi.json");
     println!("cargo:rerun-if-env-changed=BULLET_REFRESH_SPEC");
 
     // Read the committed openapi.json by default — no network access required.
-    // Set `BULLET_REFRESH_SPEC=1` to fetch the live spec instead; this is used
-    // by the `just refresh-spec` workflow when tracking upstream changes.
+    // `BULLET_REFRESH_SPEC=1` fetches the live spec instead (`just refresh-spec`).
     let spec_json = if std::env::var("BULLET_REFRESH_SPEC").is_ok() {
         fetch_spec().ok_or("BULLET_REFRESH_SPEC set but live fetch failed")?
     } else {
@@ -41,18 +44,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let mut generator = progenitor::Generator::new(&settings);
 
-    // Ensure error responses are defined so progenitor generates Error<types::ApiErrorResponse>.
-    // If the spec already includes ApiErrorResponse (from the trading API's utoipa annotations),
-    // this is a no-op. Otherwise, it injects them — needed for older spec versions.
+    // Make progenitor generate `Error<types::ApiErrorResponse>`; a no-op for current specs.
     ensure_error_responses(&mut spec);
 
     let spec: openapiv3::OpenAPI = serde_json::from_value(spec.clone()).map_err(|e| {
         // Save the problematic spec for debugging
-        let _ = std::fs::write("openapi-debug.json", serde_json::to_string_pretty(&spec).unwrap());
+        let _ = std::fs::write(
+            "openapi-debug.json",
+            serde_json::to_string_pretty(&spec).unwrap(),
+        );
         format!("Failed to parse OpenAPI spec: {e}. Saved debug output to openapi-debug.json")
     })?;
     let tokens = generator.generate_tokens(&spec)?;
-    let ast = syn::parse2(tokens)?;
+    let mut ast = syn::parse2(tokens)?;
+    merge_response_arms(&mut ast);
     let content = prettyplease::unparse(&ast);
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("codegen.rs");
@@ -143,10 +148,7 @@ fn convert_nullable_types(v: &mut Value) {
 /// Ensure all operations have error response definitions so progenitor generates
 /// `Error<types::ApiErrorResponse>` and auto-deserializes error bodies.
 ///
-/// If the spec already includes `ApiErrorResponse` in components/schemas (from the
-/// trading API's utoipa annotations), this only fills in missing error responses on
-/// operations that lack them. For older specs without any error schemas, it injects
-/// everything.
+/// Fills in missing error responses; injects the schema too for older specs that lack it.
 ///
 /// Note: `default` responses can't be used because progenitor treats `default` as both
 /// success and error, causing `assert!(response_types.len() <= 1)` in progenitor-impl.
@@ -180,7 +182,9 @@ fn ensure_error_responses(spec: &mut Value) {
         });
 
         if let Some(components) = spec.get_mut("components").and_then(|c| c.as_object_mut())
-            && let Some(schemas) = components.get_mut("schemas").and_then(|s| s.as_object_mut())
+            && let Some(schemas) = components
+                .get_mut("schemas")
+                .and_then(|s| s.as_object_mut())
         {
             schemas.insert("ApiErrorResponse".to_string(), error_schema);
         }
@@ -205,8 +209,9 @@ fn ensure_error_responses(spec: &mut Value) {
             if let Some(path_obj) = path_item.as_object_mut() {
                 for operation in path_obj.values_mut() {
                     if let Some(operation_obj) = operation.as_object_mut()
-                        && let Some(responses) =
-                            operation_obj.get_mut("responses").and_then(|r| r.as_object_mut())
+                        && let Some(responses) = operation_obj
+                            .get_mut("responses")
+                            .and_then(|r| r.as_object_mut())
                     {
                         // Check if this operation already has error responses referencing
                         // ApiErrorResponse via $ref (i.e., from the updated trading API spec).
@@ -246,7 +251,10 @@ fn fetch_spec() -> Option<String> {
     if response.status().is_success() {
         return response.text().ok();
     } else {
-        println!("cargo::warning=Spec fetch at '{url}' failed with: {}", response.status());
+        println!(
+            "cargo::warning=Spec fetch at '{url}' failed with: {}",
+            response.status()
+        );
     }
     None
 }

@@ -1,9 +1,4 @@
-//! Emit wasm-bindgen wrapper code from the CodeModel.
-//!
-//! This module orchestrates code generation:
-//! - `type_map.rs` defines type mappings (the single place to update for new types)
-//! - `types.rs` emits struct/enum wrappers using type_map
-//! - `client.rs` emits client method wrappers using type_map
+//! Emit wasm-bindgen wrappers from the `CodeModel`; all type mappings live in `type_map.rs`.
 
 pub mod client;
 pub mod type_map;
@@ -18,7 +13,6 @@ use super::{CodeModel, EnumDetails, MethodDetails, StructDetails, TypeInfo};
 
 /// Emit the complete generated source file for progenitor wrappers.
 pub fn emit_all(model: &CodeModel) -> String {
-    // Collect enums, structs, and Client methods from the model.
     let mut enums: Vec<&EnumDetails> = Vec::new();
     let mut structs: Vec<&StructDetails> = Vec::new();
     let mut client_methods: Vec<&MethodDetails> = Vec::new();
@@ -40,15 +34,13 @@ pub fn emit_all(model: &CodeModel) -> String {
         }
     }
 
-    // Unit-variant enums become wasm-bindgen C-style enums; data-carrying enums
-    // (e.g. `oneOf` types like `SimulateOutcome` or `Filter`) can't — they're
-    // wrapped as opaque `Wasm{name}` newtypes exposing `toJSON()` instead.
-    let (unit_enums, data_enums): (Vec<&&EnumDetails>, Vec<&&EnumDetails>) =
-        enums.iter().partition(|e| e.variants.iter().all(|v| v.fields.is_empty()));
+    // Unit enums become C-style wasm-bindgen enums; data-carrying enums (`oneOf`, e.g.
+    // `SimulateOutcome`) become opaque `Wasm{name}` newtypes with `toJSON()`.
+    let (unit_enums, data_enums): (Vec<&&EnumDetails>, Vec<&&EnumDetails>) = enums
+        .iter()
+        .partition(|e| e.variants.iter().all(|v| v.fields.is_empty()));
 
-    // Set of names that map to JS strings. Only *unit* enums qualify — a
-    // data-carrying enum field/return must route through its `Wasm{name}`
-    // wrapper (like a struct), not be stringified, so it stays out of this set.
+    // Only unit enums map to JS strings; data-carrying ones go through their wrapper.
     let enum_names: HashSet<&str> = unit_enums.iter().map(|e| e.name.as_str()).collect();
 
     let enum_tokens: Vec<TokenStream> = unit_enums
@@ -57,8 +49,10 @@ pub fn emit_all(model: &CodeModel) -> String {
         .chain(data_enums.iter().map(|e| types::emit_enum_json(e)))
         .collect();
 
-    let struct_tokens: Vec<TokenStream> =
-        structs.iter().map(|s| types::emit_struct(s, &enum_names)).collect();
+    let struct_tokens: Vec<TokenStream> = structs
+        .iter()
+        .map(|s| types::emit_struct(s, &enum_names))
+        .collect();
 
     let client_tokens = if client_methods.is_empty() {
         quote! {}

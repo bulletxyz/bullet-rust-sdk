@@ -9,15 +9,12 @@
  * 5. Uniqueness types on the transaction builder (nonce / window / generation)
  */
 
-import { jest } from '@jest/globals';
 
 import {
   Keypair, Transaction, MultisigConfig, SolanaLedgerMultisigTransaction,
   User,
 } from "../pkg/node";
 import { connectForUserActions } from './helpers';
-
-jest.setTimeout(30_000);
 
 // Real Ed25519 pubkeys derived from fixed seeds (matches the Rust test and the
 // JS reference golden), returned deliberately out of canonical order.

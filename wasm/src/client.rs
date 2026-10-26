@@ -6,20 +6,7 @@ use wasm_bindgen::prelude::*;
 use crate::errors::WasmResult;
 use crate::keypair::WasmKeypair;
 
-/// Known network constants for connecting to Bullet environments.
-///
-/// Use these with `Client.builder().network(Network.Testnet)`,
-/// or pass any custom URL string directly.
-///
-/// # Example
-///
-/// ```js
-/// // Known network
-/// const client = await Client.builder().network(Network.Testnet).build();
-///
-/// // Custom URL
-/// const client = await Client.builder().network("https://custom.example.com").build();
-/// ```
+/// Network names for `Client.builder().network(...)`; custom URL strings are also accepted.
 #[wasm_bindgen(js_name = Network)]
 pub struct WasmNetwork;
 
@@ -36,25 +23,8 @@ impl WasmNetwork {
     }
 }
 
-/// Full Bullet trading API client (REST + WebSocket).
-///
-/// REST responses are returned as typed wrapper objects (use `.toJSON()` for
-/// raw JSON). Errors are thrown as JavaScript `Error` objects with a `.message`
-/// property.
-///
-/// # Example
-///
-/// ```js
-/// // Simple connection
-/// const client = await Client.mainnet();
-///
-/// // With defaults for transactions
-/// const client = await Client.builder()
-///     .network(Network.Testnet)
-///     .keypair(myKeypair)
-///     .maxFee(10_000_000n)
-///     .build();
-/// ```
+/// REST and WebSocket client. Typed REST responses expose `toJSON()`;
+/// fallible calls throw `BulletSdkError`.
 #[wasm_bindgen(js_name = Client)]
 pub struct WasmTradingApi {
     pub(crate) inner: Client,
@@ -62,26 +32,16 @@ pub struct WasmTradingApi {
 
 #[wasm_bindgen(js_class = Client)]
 impl WasmTradingApi {
-    // ── Constructors ──────────────────────────────────────────────────────────
-
     /// Create a new client builder for configuring connection options.
-    ///
-    /// # Example
-    ///
-    /// ```js
-    /// const client = await Client.builder()
-    ///     .network(Network.Testnet)
-    ///     .keypair(myKeypair)
-    ///     .maxFee(10_000_000n)
-    ///     .build();
-    /// ```
     pub fn builder() -> WasmClientBuilder {
         WasmClientBuilder::new()
     }
 
     /// Connect to the mainnet REST endpoint and validate the remote schema.
     pub async fn mainnet() -> WasmResult<WasmTradingApi> {
-        Ok(WasmTradingApi { inner: Client::mainnet().await? })
+        Ok(WasmTradingApi {
+            inner: Client::mainnet().await?,
+        })
     }
 
     /// Connect to a network by name or custom URL.
@@ -89,11 +49,12 @@ impl WasmTradingApi {
     /// For more options, use `Client.builder()` instead.
     pub async fn connect(network: &str) -> WasmResult<WasmTradingApi> {
         Ok(WasmTradingApi {
-            inner: Client::builder().network(Network::from(network)).build().await?,
+            inner: Client::builder()
+                .network(Network::from(network))
+                .build()
+                .await?,
         })
     }
-
-    // ── Metadata ──────────────────────────────────────────────────────────────
 
     /// Chain ID for the connected network.
     #[wasm_bindgen(js_name = chainId)]
@@ -149,8 +110,6 @@ impl WasmTradingApi {
         self.inner.keypair().is_some()
     }
 
-    // ── Symbol / Market Lookups ──────────────────────────────────────────
-
     /// Resolve a symbol string to its numeric MarketId.
     /// @param {string} symbol - The trading pair (e.g. "BTC-USD").
     /// @returns {number | undefined}
@@ -162,7 +121,12 @@ impl WasmTradingApi {
     /// Get all available symbols as `SymbolInfo` objects.
     /// @returns {SymbolInfo[]}
     pub fn symbols(&self) -> Vec<crate::metadata::WasmSymbolInfo> {
-        self.inner.symbols().iter().cloned().map(crate::metadata::WasmSymbolInfo).collect()
+        self.inner
+            .symbols()
+            .iter()
+            .cloned()
+            .map(crate::metadata::WasmSymbolInfo)
+            .collect()
     }
 
     /// Look up symbol info by name.
@@ -170,7 +134,10 @@ impl WasmTradingApi {
     /// @returns {SymbolInfo | undefined}
     #[wasm_bindgen(js_name = symbolInfo)]
     pub fn symbol_info(&self, symbol: &str) -> Option<crate::metadata::WasmSymbolInfo> {
-        self.inner.symbol_info_by_name(symbol).cloned().map(crate::metadata::WasmSymbolInfo)
+        self.inner
+            .symbol_info_by_name(symbol)
+            .cloned()
+            .map(crate::metadata::WasmSymbolInfo)
     }
 
     /// Look up symbol info by numeric market ID.
@@ -198,8 +165,6 @@ impl WasmTradingApi {
         Ok(self.inner.refresh_metadata().await?)
     }
 
-    // ── Trading Convenience Methods ──────────────────────────────────────
-
     /// Query open orders for the client's own account.
     /// @param {string} symbol - Trading pair symbol.
     /// @returns {Promise<BinanceOrder[]>}
@@ -209,7 +174,10 @@ impl WasmTradingApi {
         symbol: &str,
     ) -> WasmResult<Vec<crate::generated::WasmBinanceOrder>> {
         let orders = self.inner.my_open_orders(symbol).await?;
-        Ok(orders.into_iter().map(crate::generated::WasmBinanceOrder).collect())
+        Ok(orders
+            .into_iter()
+            .map(crate::generated::WasmBinanceOrder)
+            .collect())
     }
 
     /// Query account info (positions, margins) for the client's own account.
@@ -225,7 +193,10 @@ impl WasmTradingApi {
     #[wasm_bindgen(js_name = myBalances)]
     pub async fn my_balances(&self) -> WasmResult<Vec<crate::generated::WasmBalance>> {
         let balances = self.inner.my_balances().await?;
-        Ok(balances.into_iter().map(crate::generated::WasmBalance).collect())
+        Ok(balances
+            .into_iter()
+            .map(crate::generated::WasmBalance)
+            .collect())
     }
 
     /// Cancel all orders on a specific market.

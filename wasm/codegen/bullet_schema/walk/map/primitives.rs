@@ -19,7 +19,12 @@ pub fn map_primitive(prim: &Primitive) -> ParamMapping {
         Primitive::String => ("&str".into(), "{v}.into()".into()),
     };
 
-    ParamMapping { param_type, conversion, is_optional: false }
+    ParamMapping {
+        param_type,
+        conversion,
+        jsdoc_type: None,
+        is_optional: false,
+    }
 }
 
 /// Map an immediate primitive from the raw schema `Primitive` type.
@@ -31,6 +36,7 @@ pub fn map_immediate(prim: &sov_universal_wallet::schema::Primitive) -> ParamMap
         return ParamMapping {
             param_type: "Vec<u8>".into(),
             conversion: byte_array_conversion(*len),
+            jsdoc_type: None,
             is_optional: false,
         };
     }
@@ -52,6 +58,7 @@ pub fn map_immediate(prim: &sov_universal_wallet::schema::Primitive) -> ParamMap
     ParamMapping {
         param_type: param_type.into(),
         conversion: conversion.into(),
+        jsdoc_type: None,
         is_optional: false,
     }
 }

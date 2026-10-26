@@ -1,28 +1,8 @@
-//! Transaction types, builder, and submission for WASM.
-//!
-//! All transaction construction goes through the builder pattern:
-//!
-//! ```js
-//! // Build and send with explicit signer
-//! const response = await Transaction.builder()
-//!     .callMessage(callMsg)
-//!     .maxFee(10_000_000n)
-//!     .signer(keypair)
-//!     .send(client);
-//!
-//! // External signing
-//! const unsigned = Transaction.builder()
-//!     .callMessage(callMsg)
-//!     .maxFee(10_000_000n)
-//!     .buildUnsigned(client);
-//!
-//! const signable = unsigned.toBytes();
-//! const signature = myExternalSigner(signable);
-//! const signed = SignedTransaction.fromParts(unsigned, signature, pubKey);
-//!
-//! // Submit later
-//! await client.sendTransaction(signed);
-//! ```
+//! Transaction building and signing for JavaScript; mirrors the Rust SDK.
+
+// Codegen emits factories for deprecated variants too (e.g. `UserAction::WithdrawIso`), which
+// must stay for wire compatibility.
+#![allow(deprecated)]
 
 use std::fmt;
 use std::str::FromStr;
@@ -36,8 +16,8 @@ use bullet_exchange_interface::transaction::{
 };
 use bullet_exchange_interface::types::{
     AdminType, AssetId, ClientOrderId, FeeTier, MarginDiscount, MarketId, MarketTradingStatus,
-    OrderId, OrderType, Side, SpotCollateralTransferDirection, TokenId, TradingMode,
-    TriggerDirection, TriggerOrderId, TriggerPriceCondition, TwapId,
+    OrderId, OrderType, Side, SpotCollateralTransferDirection, TokenId, TradingCreditsUpdateType,
+    TradingMode, TriggerDirection, TriggerOrderId, TriggerPriceCondition, TwapId,
 };
 use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{
@@ -54,14 +34,10 @@ use crate::errors::WasmResult;
 use crate::generated::WasmSubmitTxResponse;
 use crate::keypair::WasmKeypair;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/// Parse a base58 address string.
 fn parse_addr(s: &str) -> Result<Address, String> {
     s.parse()
 }
 
-/// Parse an address-like relayer value from either Bullet base58 or hex bytes32.
 fn parse_addr_like(s: &str) -> Result<Address, String> {
     s.parse::<Address>().or_else(|address_err| {
         parse_warp_bytes32(s)
@@ -70,9 +46,11 @@ fn parse_addr_like(s: &str) -> Result<Address, String> {
     })
 }
 
-/// Parse a 32-byte Warp value. Also accepts 20-byte EVM hex and left-pads it.
 fn parse_warp_bytes32(value: &str) -> Result<WarpBytes32, String> {
-    let raw = value.strip_prefix("0x").or_else(|| value.strip_prefix("0X")).unwrap_or(value);
+    let raw = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+        .unwrap_or(value);
     if !raw.chars().all(|c| c.is_ascii_hexdigit()) {
         return value
             .parse::<Address>()
@@ -96,12 +74,10 @@ fn parse_warp_bytes32(value: &str) -> Result<WarpBytes32, String> {
     }
 }
 
-/// Parse a decimal string into `PositiveDecimal`.
 fn parse_dec(s: &str) -> Result<PositiveDecimal, String> {
     PositiveDecimal::from_str(s).map_err(|e| format!("{e:?}"))
 }
 
-/// Parse a decimal string into `SurrogateDecimal` (used by funding/interest rate fields).
 fn parse_surrogate_dec(
     s: &str,
 ) -> Result<bullet_exchange_interface::decimals::SurrogateDecimal, String> {
@@ -109,30 +85,146 @@ fn parse_surrogate_dec(
     SurrogateDecimal::from_str(s).map_err(|e| format!("{e:?}"))
 }
 
-/// Parse a JSON string into a serde-deserializable type.
 fn from_json<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, String> {
     serde_json::from_str(json).map_err(|e| e.to_string())
 }
-
-// ── WasmCallMessage ───────────────────────────────────────────────────────────
 
 /// An opaque call message to be included in a transaction.
 ///
 /// Construct via the namespace modules: `User`, `Public`, `Admin`, `Keeper`,
 /// `Vault`, or `Warp`. Each module has static factory methods, e.g.
-/// `User.deposit(0, "100.0")` or `Warp.transferRemote({...})`.
+/// `User.cancelAllOrders()` or `Warp.transferRemote({...})`.
 #[wasm_bindgen(js_name = CallMessage)]
 pub struct WasmCallMessage {
     pub(crate) inner: RuntimeCall,
 }
 
-// ── Generated namespace structs (User, Public, Admin, Keeper, Vault) ─────────
-//
+/// A typed degen trade action.
+///
+/// Construct with the static `open` or `close` factory, then pass it to
+/// `User.degenTrade(...)`.
+#[wasm_bindgen(js_name = DegenAction)]
+pub struct WasmDegenAction {
+    pub(crate) inner: DegenAction,
+}
+
+#[wasm_bindgen(js_class = DegenAction)]
+impl WasmDegenAction {
+    /// Open an isolated degen position all-or-nothing at top-of-book.
+    /// @param {string} size - Non-zero, lot-size-aligned position size.
+    /// @param {Side} side - `Bid` opens a long; `Ask` opens a short.
+    /// @param {string} amountToTransfer - Cross-margin funds to transfer, capped at 10 USDC.
+    /// @returns {DegenAction}
+    /// @example
+    /// ```js
+    /// const action = DegenAction.open("5", Side.Bid, "10");
+    /// const message = User.degenTrade(7, action);
+    /// ```
+    pub fn open(
+        size: &str,
+        side: WasmSide,
+        amount_to_transfer: &str,
+    ) -> WasmResult<WasmDegenAction> {
+        let size = parse_dec(size)?;
+        if size.is_zero() {
+            return Err("degen open size must be non-zero".into());
+        }
+
+        Ok(WasmDegenAction {
+            inner: DegenAction::Open {
+                size,
+                side: side.into_domain(),
+                amount_to_transfer: parse_dec(amount_to_transfer)?,
+            },
+        })
+    }
+
+    /// Close the degen position IOC at top-of-book.
+    /// @returns {DegenAction}
+    pub fn close() -> WasmDegenAction {
+        WasmDegenAction {
+            inner: DegenAction::Close,
+        }
+    }
+}
+
 // Each struct is a JS namespace with static factory methods that return
 // `WasmCallMessage` instances. Generated from the Transaction schema by build.rs.
 include!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
 
-// ── Warp namespace ───────────────────────────────────────────────────────────
+#[cfg(test)]
+mod call_message_factory_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn generated_wrapper_array_docs_preserve_element_types() {
+        let generated = include_str!(concat!(env!("OUT_DIR"), "/call_message_factories.rs"));
+
+        assert!(generated.contains("///@param {Array<NewOrderArgs>} orders"));
+        assert!(
+            generated.contains("///@param {Array<BackstopLiquidatePerpPositionArgs>} [positions]")
+        );
+        assert!(!generated.contains("///@param {Array<any>}"));
+    }
+
+    #[test]
+    fn degen_trade_open_serializes_exact_runtime_call() {
+        let action = WasmDegenAction::open("2.5", WasmSide::Ask, "9.75")
+            .unwrap_or_else(|_| panic!("valid degen open action"));
+        let call = User::degen_trade(7, action, None)
+            .unwrap_or_else(|_| panic!("valid degen open message"));
+
+        assert_eq!(
+            serde_json::to_value(&call.inner).expect("serialize runtime call"),
+            json!({
+                "exchange": {
+                    "user": {
+                        "degen_trade": {
+                            "market_id": 7,
+                            "action": {
+                                "open": {
+                                    "size": "2.5",
+                                    "side": "ask",
+                                    "amount_to_transfer": "9.75",
+                                },
+                            },
+                            "sub_account_index": null,
+                        },
+                    },
+                },
+            })
+        );
+    }
+
+    #[test]
+    fn degen_trade_open_rejects_zero_size() {
+        assert!(WasmDegenAction::open("0", WasmSide::Bid, "10").is_err());
+        assert!(WasmDegenAction::open("0.0", WasmSide::Ask, "10").is_err());
+    }
+
+    #[test]
+    fn degen_trade_close_serializes_exact_runtime_call() {
+        let action = WasmDegenAction::close();
+        let call = User::degen_trade(7, action, Some(2))
+            .unwrap_or_else(|_| panic!("valid degen close message"));
+
+        assert_eq!(
+            serde_json::to_value(&call.inner).expect("serialize runtime call"),
+            json!({
+                "exchange": {
+                    "user": {
+                        "degen_trade": {
+                            "market_id": 7,
+                            "action": "close",
+                            "sub_account_index": 2,
+                        },
+                    },
+                },
+            })
+        );
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -174,7 +266,10 @@ impl<'de> Visitor<'de> for WasmWarpAmountVisitor {
     where
         E: de::Error,
     {
-        value.parse::<u128>().map(|value| WasmWarpAmount(Amount(value))).map_err(E::custom)
+        value
+            .parse::<u128>()
+            .map(|value| WasmWarpAmount(Amount(value)))
+            .map_err(E::custom)
     }
 
     fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
@@ -278,7 +373,8 @@ impl Warp {
     /// @param {{warpRoute: string, amount: string | number, destinationDomain: number,
     /// gasPaymentLimit: string | number, recipient: string, relayer?: {Standard: string} | {Vm:
     /// string} | string | null}} args - Transfer arguments. Use decimal strings for amounts
-    /// above `Number.MAX_SAFE_INTEGER`. @returns {CallMessage}
+    /// above `Number.MAX_SAFE_INTEGER`.
+    /// @returns {CallMessage}
     /// @example
     /// ```js
     /// const call = Warp.transferRemote({
@@ -295,7 +391,10 @@ impl Warp {
     pub fn transfer_remote(args: JsValue) -> WasmResult<WasmCallMessage> {
         let args: WasmWarpTransferRemoteArgs =
             serde_wasm_bindgen::from_value(args).map_err(|e| e.to_string())?;
-        let relayer = args.relayer.map(WasmRelayerInput::into_address).transpose()?;
+        let relayer = args
+            .relayer
+            .map(WasmRelayerInput::into_address)
+            .transpose()?;
 
         Ok(WasmCallMessage {
             inner: RuntimeCall::Warp(warp::CallMessage::TransferRemote {
@@ -312,8 +411,6 @@ impl Warp {
     }
 }
 
-// ── Submit response helpers ─────────────────────────────────────────────────
-
 #[wasm_bindgen(js_class = SubmitTxResponse)]
 impl WasmSubmitTxResponse {
     /// Hyperlane message id emitted by a bridge withdrawal, when present.
@@ -323,8 +420,6 @@ impl WasmSubmitTxResponse {
         self.0.message_id()
     }
 }
-
-// ── WasmRuntimeCall ─────────────────────────────────────────────────────────
 
 /// A whole runtime call — the single action a transaction carries.
 ///
@@ -371,9 +466,21 @@ impl WasmRuntimeCall {
             serde_json::from_str(json).map_err(|e| format!("invalid RuntimeCall JSON: {e}"))?;
         Ok(WasmRuntimeCall { inner })
     }
-}
 
-// ── WasmUnsignedTransaction ───────────────────────────────────────────────────
+    /// The `RuntimeCall` schema this SDK build supports, as JSON.
+    ///
+    /// Contains only the modules this SDK can build (Bank / Exchange / Warp), in the same wire
+    /// format as the rollup's `/rollup/schema`, so a module selector can use it unfiltered.
+    ///
+    /// @returns {string} JSON-serialized schema.
+    pub fn schema() -> WasmResult<String> {
+        use bullet_exchange_interface::schema::Schema;
+        let schema = Schema::of_single_type::<RuntimeCall>()
+            .map_err(|e| format!("failed to derive schema: {e:?}"))?;
+        Ok(serde_json::to_string(&schema)
+            .map_err(|e| format!("failed to serialize schema: {e}"))?)
+    }
+}
 
 /// An unsigned transaction ready for external signing.
 ///
@@ -395,8 +502,10 @@ pub struct WasmUnsignedTransaction {
 impl WasmUnsignedTransaction {
     /// Serialize into the bytes that must be signed.
     ///
-    /// Borsh-serializes the transaction and appends the chain hash (32 bytes)
-    /// as domain separator. Pass the resulting `Uint8Array` to your signing function.
+    /// These are the Borsh bytes of the rollup's V0 signing payload: a version
+    /// byte (`0`), the unsigned transaction, and the chain hash (32 bytes) as
+    /// domain separator. Pass the resulting `Uint8Array` to your signing function.
+    /// @returns {Uint8Array} The signable bytes.
     #[wasm_bindgen(js_name = toBytes)]
     pub fn to_bytes(&self) -> WasmResult<Vec<u8>> {
         Ok(self.inner.to_bytes()?)
@@ -405,12 +514,11 @@ impl WasmUnsignedTransaction {
     /// Reconstruct an `UnsignedTransaction` from the canonical bytes produced
     /// by `toBytes()` — the inverse of that method.
     ///
-    /// Lets a coordinator (e.g. a multisig UI) persist a proposal as its exact
-    /// signable bytes and rebuild the transaction later for display
-    /// (`toDisplayMessage()`) and submission, without re-deriving it from a
-    /// stored JSON representation. The rebuilt bytes are byte-identical to what
-    /// was signed. `client` supplies the chain name and validates that the
-    /// embedded chain hash matches the connected network.
+    /// Lets a coordinator (e.g. a multisig UI) persist a proposal as its exact signable bytes and
+    /// rebuild it later. `client` supplies the chain name and must match the embedded chain hash.
+    ///
+    /// Bytes from a pre-fork SDK (no leading version byte) are rejected; rebuild from the inputs
+    /// and re-sign.
     ///
     /// @param {Uint8Array} bytes - Bytes from a previous `toBytes()` call.
     /// @param {Client} client - The trading API client.
@@ -452,9 +560,10 @@ impl WasmUnsignedTransaction {
     /// Serialize into readable JSON bytes for offchain signing.
     ///
     /// External Solana wallets should sign these bytes when the backend uses
-    /// the `solanaSimple` authenticator. The JSON includes `chain_name` and
-    /// `chain_id`; the current sequencer offchain authenticator also requires
-    /// the envelope assembled by `SolanaOffchainTransaction.fromParts(...)`.
+    /// the `solanaSimple` authenticator. The JSON includes `chain_name`,
+    /// `details.chain_hash_fragment` and `version`; the current sequencer
+    /// offchain authenticator also requires the envelope assembled by
+    /// `SolanaOffchainTransaction.fromParts(...)`.
     /// Submit the result with `client.sendOffChainTransaction(...)`.
     ///
     /// @returns {Uint8Array} UTF-8 JSON bytes to pass to `wallet.signMessage`.
@@ -499,8 +608,6 @@ impl WasmUnsignedTransaction {
         Ok(self.inner.to_ledger_signable_bytes(&pub_key)?)
     }
 }
-
-// ── WasmSolanaLedgerTransaction ──────────────────────────────────────────────
 
 /// A Solana offchain transaction using the spec-compliant Ledger wire format.
 ///
@@ -552,8 +659,6 @@ impl WasmSolanaLedgerTransaction {
         self.inner.to_base64()
     }
 }
-
-// ── WasmSolanaOffchainTransaction ────────────────────────────────────────────
 
 /// A Solana offchain transaction ready for submission.
 ///
@@ -611,8 +716,6 @@ impl WasmSolanaOffchainTransaction {
     }
 }
 
-// ── WasmTransaction (SignedTransaction) ──────────────────────────────────────
-
 /// A signed transaction ready for submission.
 ///
 /// Passed directly to `Client.submitTransaction` or serialised to base64 via
@@ -663,8 +766,6 @@ impl WasmTransaction {
     }
 }
 
-// ── Transaction builder ──────────────────────────────────────────────────────
-
 /// Transaction builder entry point.
 ///
 /// Use `Transaction.builder()` to create a new builder, then chain
@@ -696,6 +797,7 @@ impl WasmTransactionEntry {
 /// - `gasLimit` - Optional gas limit [ref_time, proof_size]
 /// - `generation` - Uniqueness generation value (default: current unix timestamp in milliseconds)
 /// - `nonce` / `window` - Alternative uniqueness types (mutually exclusive with `generation`)
+/// - `addressOverride` - Account to execute as (default: the signer's own address)
 /// - `signer` - Keypair to sign the transaction (not required for `buildUnsigned`)
 #[wasm_bindgen(js_name = TransactionBuilder)]
 pub struct WasmTransactionBuilder {
@@ -704,6 +806,7 @@ pub struct WasmTransactionBuilder {
     priority_fee_bips: Option<u64>,
     gas_limit: Option<[u64; 2]>,
     uniqueness: Option<UniquenessData>,
+    address_override: Option<Address>,
     signer: Option<WasmKeypair>,
 }
 
@@ -715,6 +818,7 @@ impl WasmTransactionBuilder {
             priority_fee_bips: None,
             gas_limit: None,
             uniqueness: None,
+            address_override: None,
             signer: None,
         }
     }
@@ -800,6 +904,30 @@ impl WasmTransactionBuilder {
         self
     }
 
+    /// Execute the transaction as another account.
+    ///
+    /// By default a transaction executes as the signer's own default address.
+    /// Set this to execute as an account that explicitly authorised the
+    /// signer's credential (e.g. a multisig or a delegated account). The
+    /// override is signed as part of the transaction and included in both the
+    /// Borsh payload (`toBytes()`) and the Solana offchain JSON
+    /// (`toMessageBytes()`).
+    /// @param {string} address - Base58 address of the account to execute as.
+    /// @returns {TransactionBuilder}
+    /// @example
+    /// ```js
+    /// const tx = Transaction.builder()
+    ///     .callMessage(User.cancelAllOrders())
+    ///     .addressOverride(multisigAddress)
+    ///     .signer(memberKeypair)
+    ///     .build(client);
+    /// ```
+    #[wasm_bindgen(js_name = addressOverride)]
+    pub fn address_override(mut self, address: &str) -> WasmResult<WasmTransactionBuilder> {
+        self.address_override = Some(parse_addr(address)?);
+        Ok(self)
+    }
+
     /// Set the keypair used to sign this transaction.
     pub fn signer(mut self, keypair: WasmKeypair) -> WasmTransactionBuilder {
         self.signer = Some(keypair);
@@ -824,9 +952,13 @@ impl WasmTransactionBuilder {
     pub fn build_unsigned(self, client: &WasmTradingApi) -> WasmResult<WasmUnsignedTransaction> {
         let call = self.call.ok_or("call is required (set via .call(...))")?;
 
-        let max_fee = self.max_fee.map(|f| f as u128).unwrap_or_else(|| client.inner.max_fee().0);
-        let priority_fee_bips =
-            self.priority_fee_bips.unwrap_or_else(|| client.inner.max_priority_fee_bips().0);
+        let max_fee = self
+            .max_fee
+            .map(|f| f as u128)
+            .unwrap_or_else(|| client.inner.max_fee().0);
+        let priority_fee_bips = self
+            .priority_fee_bips
+            .unwrap_or_else(|| client.inner.max_priority_fee_bips().0);
         let gas_limit = self.gas_limit.map(Gas).or_else(|| client.inner.gas_limit());
 
         let unsigned = UnsignedTransaction::from_runtime_call(
@@ -835,6 +967,7 @@ impl WasmTransactionBuilder {
             priority_fee_bips,
             gas_limit,
             self.uniqueness,
+            self.address_override,
             &client.inner,
         )?;
 
@@ -855,6 +988,7 @@ impl WasmTransactionBuilder {
             self.priority_fee_bips,
             gas_limit,
             self.uniqueness,
+            self.address_override,
             signer_ref,
             &client.inner,
         )?;
@@ -879,8 +1013,6 @@ impl Default for WasmTransactionBuilder {
         Self::new()
     }
 }
-
-// ── Client convenience methods ───────────────────────────────────────────────
 
 #[wasm_bindgen(js_class = Client)]
 impl WasmTradingApi {
@@ -927,9 +1059,8 @@ impl WasmTradingApi {
 
     /// Sign and submit a call message in one step.
     ///
-    /// This is a convenience method that wraps
-    /// `Transaction.builder().callMessage(msg).send(client)` into a single call using the
-    /// client's default keypair, max fee, and gas settings.
+    /// Shorthand for `Transaction.builder().callMessage(msg).send(client)` with the client's
+    /// default keypair, max fee, and gas settings.
     ///
     /// @param {CallMessage} msg - A call message (e.g. from `User.placeOrders(...)`)
     /// @returns {Promise<SubmitTxResponse>}

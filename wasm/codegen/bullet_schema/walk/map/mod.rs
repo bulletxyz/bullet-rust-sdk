@@ -17,16 +17,16 @@ use super::super::{FieldInfo, SerdeMetadata, Types};
 /// The resolved parameter type and conversion expression for a field.
 #[derive(Debug, Clone)]
 pub struct ParamMapping {
-    /// The Rust type for the wasm-bindgen function parameter.
     pub param_type: String,
-    /// The expression to convert the parameter into the domain type.
-    /// Uses `{v}` as a placeholder for the parameter variable name.
+    /// Converts the param into the domain type; `{v}` is the param name.
     pub conversion: String,
-    /// Whether this parameter is optional (affects ordering — must be trailing).
+    /// JS-facing type override when `param_type` cannot preserve element types.
+    pub jsdoc_type: Option<String>,
+    /// Optional params must be trailing.
     pub is_optional: bool,
 }
 
-/// Resolve all field mappings. Returns a Vec parallel to the input fields.
+/// Returns a Vec parallel to `fields`.
 pub fn map_fields(
     context_name: &str,
     fields: &[FieldInfo],
@@ -37,11 +37,19 @@ pub fn map_fields(
 ) -> Vec<ParamMapping> {
     fields
         .iter()
-        .map(|f| map_field(context_name, f, types, serde_metadata, wrapper_indices, enum_indices))
+        .map(|f| {
+            map_field(
+                context_name,
+                f,
+                types,
+                serde_metadata,
+                wrapper_indices,
+                enum_indices,
+            )
+        })
         .collect()
 }
 
-/// Map a single field to its wasm param type and conversion expression.
 fn map_field(
     context_name: &str,
     field: &FieldInfo,
@@ -54,7 +62,9 @@ fn map_field(
         return primitives::map_primitive(prim);
     }
 
-    let idx = field.schema_index.expect("field must have schema_index or primitive");
+    let idx = field
+        .schema_index
+        .expect("field must have schema_index or primitive");
     map_by_index(
         context_name,
         &field.name,
@@ -66,7 +76,6 @@ fn map_field(
     )
 }
 
-/// Map a schema type by its index.
 pub fn map_by_index(
     context_name: &str,
     field_name: &str,
@@ -76,12 +85,10 @@ pub fn map_by_index(
     wrapper_indices: &HashSet<usize>,
     enum_indices: &HashSet<usize>,
 ) -> ParamMapping {
-    // Try known newtypes first.
     if let Some(m) = newtypes::try_map_newtype(field_name, idx, types, serde_metadata) {
         return m;
     }
 
-    // Dynamic dispatch on the schema type.
     let ty = &types[idx];
     match ty {
         Ty::Option { value } => {
@@ -97,9 +104,14 @@ pub fn map_by_index(
             options::map_option(inner)
         }
 
-        Ty::Vec { value } => {
-            vecs::map_vec(context_name, field_name, value, types, serde_metadata, wrapper_indices)
-        }
+        Ty::Vec { value } => vecs::map_vec(
+            context_name,
+            field_name,
+            value,
+            types,
+            serde_metadata,
+            wrapper_indices,
+        ),
 
         Ty::Struct(s) => structs::map_struct(&s.type_name, idx, wrapper_indices),
 
@@ -123,6 +135,7 @@ pub fn map_by_index(
                 ParamMapping {
                     param_type: "&str".into(),
                     conversion: "from_json({v})?".into(),
+                    jsdoc_type: None,
                     is_optional: false,
                 }
             }
@@ -131,6 +144,7 @@ pub fn map_by_index(
         Ty::Map { .. } | Ty::Array { .. } => ParamMapping {
             param_type: "&str".into(),
             conversion: "from_json({v})?".into(),
+            jsdoc_type: None,
             is_optional: false,
         },
 

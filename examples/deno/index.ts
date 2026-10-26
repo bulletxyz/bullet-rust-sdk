@@ -1,13 +1,6 @@
 /**
- * Bullet SDK — Deno example
- *
- * Demonstrates: connecting to the exchange, querying market data,
- * constructing orders, and building signed transactions.
- *
- * Usage:
- *   deno task start
- *
- * Set BULLET_API_ENDPOINT to override the default mainnet endpoint.
+ * Deno example: market data, orders and signed transactions.
+ * Run with `deno task start`; BULLET_API_ENDPOINT overrides the mainnet default.
  */
 
 import init, {

@@ -22,11 +22,6 @@ use crate::{Keypair, SDKError, SDKResult};
 /// Provides methods for building, signing, and submitting transactions,
 /// as well as access to all generated API methods via `Deref`.
 ///
-/// # WebSocket Support
-///
-/// For real-time market data and WebSocket order submission, use `WsClient`
-/// separately. See the `ws` module documentation for details.
-///
 /// # Example
 ///
 /// ```ignore
@@ -48,18 +43,9 @@ pub struct Client {
     chain_name: String,
     user_actions: Option<Vec<UserActionDiscriminants>>,
 
-    /// Monotonic counter for the default `Window` uniqueness. Each call raises
-    /// it to at least the current millisecond unix timestamp and then
-    /// increments, so values track the wall clock (independent clients with
-    /// synchronised clocks converge and don't collide unless they submit in the
-    /// very same millisecond) while staying unique within this client under
-    /// sub-millisecond bursts.
-    ///
-    /// The counter is in-memory: a client restarted *mid-burst* re-seeds from
-    /// the wall clock, so a sub-millisecond burst larger than the restart
-    /// latency could briefly reuse values (rejected as replays within the
-    /// rollup's window). Throughput-sensitive or multi-instance setups that
-    /// can't tolerate this should set an explicit `uniqueness` on the builder.
+    /// Monotonic counter for the default `Window` uniqueness, raised to at least the current
+    /// millisecond timestamp before each increment. In-memory only: a restart mid-burst could
+    /// briefly reuse values (rejected as replays); set an explicit `uniqueness` if that matters.
     window_nonce: AtomicU64,
 
     keypair: Option<Keypair>,
@@ -77,8 +63,7 @@ pub struct Client {
 
 /// Known network environments.
 ///
-/// Use with the Client builder to connect to a known network by name,
-/// or provide a custom URL.
+/// Pass to the Client builder, or provide a custom URL.
 ///
 /// # Example
 ///
@@ -142,9 +127,8 @@ impl Client {
         #[builder(into)] network: Network,
         /// Custom reqwest client for REST requests.
         ///
-        /// **Note:** WebSocket connections use a separate HTTP/1.1 client that does
-        /// not inherit settings from this client (e.g. proxy, TLS roots). This is a
-        /// reqwest limitation — existing clients can't be reconfigured after construction.
+        /// Note: WebSocket uses a separate HTTP/1.1 client that doesn't inherit this one's settings
+        /// (proxy, TLS roots); reqwest can't reconfigure an existing client.
         reqwest_client: Option<reqwest::Client>,
         max_priority_fee_bips: Option<PriorityFeeBips>,
         max_fee: Option<Amount>,
@@ -152,15 +136,10 @@ impl Client {
         keypair: Option<Keypair>,
         /// Restrict schema validation to specific `UserAction` variants.
         ///
-        /// By default (`None`), the client validates every exchange `CallMessage`
-        /// branch (`User`, `Vault`, `Keeper`, `Public`, and `Admin`) against the remote
-        /// schema and returns `SDKError::SchemaOutdated` if any is not backward compatible. If
-        /// you only use a subset of user actions (e.g. `PlaceOrders`), you can pass them
-        /// here to intentionally prune validation down to those `UserAction` variants.
-        ///
-        /// **Warning:** When this is set, non-`User` call messages and unlisted
-        /// `UserAction` variants are rejected before signing because their schema branch
-        /// was not validated at connect time.
+        /// By default every exchange `CallMessage` branch is validated against the remote schema
+        /// (`SDKError::SchemaOutdated` on incompatibility). Setting this prunes validation to the
+        /// listed `UserAction` variants; non-`User` messages and unlisted actions are then rejected
+        /// before signing.
         user_actions: Option<Vec<UserActionDiscriminants>>,
     ) -> SDKResult<Self> {
         let url = network.url();
@@ -175,14 +154,11 @@ impl Client {
         let generated_client = GeneratedClient::new_with_client(&rest_url, http_client.clone());
 
         // WebSocket requires HTTP/1.1 (HTTP/2 does not support the Upgrade mechanism).
-        // We always build a dedicated HTTP/1.1 client for WS, regardless of whether
-        // the caller supplied a custom reqwest client for REST.
         #[cfg(not(target_arch = "wasm32"))]
         let ws_client = reqwest::Client::builder().http1_only().build()?;
         #[cfg(target_arch = "wasm32")]
         let ws_client = reqwest::Client::new();
 
-        // fetch schema
         let chain_data = Self::fetch_schema(&generated_client, &user_actions).await?;
 
         let max_priority_fee_bips = max_priority_fee_bips.unwrap_or(*MAX_PRIORITY_FEE_BIPS);
@@ -211,14 +187,11 @@ impl Client {
 
     /// Return the next value for the default `Window` uniqueness and advance the
     /// counter.
-    ///
-    /// Raises the counter to at least the current millisecond unix timestamp
-    /// (so independent clients with synchronised clocks pick converging values)
-    /// and then increments, keeping each value unique and monotonic within this
-    /// client even under sub-millisecond bursts.
     pub(crate) fn next_window_nonce(&self) -> u64 {
-        let now =
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
         self.window_nonce.fetch_max(now, Ordering::Relaxed);
         self.window_nonce.fetch_add(1, Ordering::Relaxed)
     }
@@ -227,12 +200,11 @@ impl Client {
         generated_client: &GeneratedClient,
         user_actions: &Option<Vec<UserActionDiscriminants>>,
     ) -> SDKResult<ChainData> {
-        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim};
+        use bullet_exchange_interface::schema::{Schema, SchemaFile, trim_matching_variants};
         use bullet_exchange_interface::transaction::Transaction;
 
         let schema_obj = generated_client.schema().await?;
 
-        // validate the remote schema
         let obj = schema_obj.into_inner();
         let sobj = serde_json::to_string(&obj)
             .map_err(|_| SDKError::InvalidSchemaResponse("failed to serialize schema"))?;
@@ -243,13 +215,11 @@ impl Client {
         let filter = |name: &str, variant: &str| {
             Self::filter_variants(name, variant, user_actions.as_deref())
         };
-        let left = trim(&our_schema, &filter);
-        let right = trim(&schema_file.schema, &filter);
+        let (left, right) = trim_matching_variants(&our_schema, &schema_file.schema, &filter);
         if left != right {
             return Err(SDKError::SchemaOutdated);
         }
 
-        // get chain_hash
         let chain_hash_bytes = hex::decode(schema_file.chain_hash.replace("0x", ""))
             .map_err(|e| SDKError::InvalidChainHash(e.to_string()))?;
 
@@ -258,42 +228,31 @@ impl Client {
         })?;
         let chain_id = schema_file.schema.chain_data().chain_id;
         let chain_name = schema_file.schema.chain_data().chain_name.clone();
-        Ok(ChainData { chain_hash, chain_id, chain_name })
+        Ok(ChainData {
+            chain_hash,
+            chain_id,
+            chain_name,
+        })
     }
 
     pub async fn update_schema(&self) -> SDKResult<()> {
         let chain_data = Self::fetch_schema(self.client(), self.user_actions()).await?;
 
-        // The expect is fine here as we just read and write the
-        // object. We never hold a lock in code that can panic.
-        *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.") =
-            chain_data.chain_hash;
+        // The lock is never held across code that can panic.
+        *self
+            .chain_hash
+            .lock()
+            .expect("Taking the chain-hash lock can never fail.") = chain_data.chain_hash;
         Ok(())
     }
 
     /// Decides whether a given enum variant should be included in the schema
     /// comparison between our compiled types and the remote API.
     ///
-    /// Called by [`trim`] for every `(enum_name, variant_name)` pair in the
-    /// schema tree. Returning `true` keeps the variant; `false` prunes it
-    /// from both sides before diffing so that changes to pruned variants
-    /// don't trigger [`SDKError::SchemaOutdated`].
-    ///
-    /// The fixed rules pin the transaction envelope the SDK serializes:
-    ///   `Transaction::V0 → RuntimeCall::Exchange → CallMessage::*`
-    ///
-    /// By default, every exchange `CallMessage` group is kept that we
-    /// know about. When `user_actions` is set, validation is
-    /// intentionally pruned to: `CallMessage::User → selected
-    /// UserAction::*`
-    ///
-    /// For `UserAction`, the behaviour depends on `user_actions`:
-    /// - `None` — include every variant we know about
-    /// - `Some(&[PlaceOrders, CancelOrders])` — only include those two; schema changes to other
-    ///   actions (e.g. `Withdraw`) are ignored.
-    ///
-    /// Unknown enum names default to `true` so any new enums in the schema
-    /// are kept, ensuring the diff still catches unexpected additions.
+    /// Returning `false` prunes the variant from both sides before [`trim_matching_variants`]
+    /// diffs, so changes to it don't trigger [`SDKError::SchemaOutdated`]. Pins `Transaction::V0 ->
+    /// RuntimeCall::Exchange -> CallMessage::*`; with `user_actions` set, only `CallMessage::User
+    /// -> selected UserAction::*`. Unknown enum names are kept.
     fn filter_variants(
         name: &str,
         variant: &str,
@@ -381,9 +340,11 @@ impl Client {
 
     /// Get the current chain hash.
     pub fn chain_hash(&self) -> [u8; 32] {
-        // The expect is fine here as we just read and write the
-        // object. We never hold a lock in code that can panic.
-        *self.chain_hash.lock().expect("Taking the chain-hash lock can never fail.")
+        // The lock is never held across code that can panic.
+        *self
+            .chain_hash
+            .lock()
+            .expect("Taking the chain-hash lock can never fail.")
     }
 
     /// Get the chain name for this network.
@@ -423,8 +384,6 @@ impl Client {
     pub fn gas_limit(&self) -> Option<Gas> {
         self.gas_limit.clone()
     }
-
-    // ── Symbol / Market Lookups ─────────────────────────────────────────
 
     /// Resolve a symbol string to its [`MarketId`].
     ///
@@ -467,8 +426,6 @@ impl Client {
 
 /// Implement Deref to allow calling generated client methods directly.
 ///
-/// This enables ergonomic access to all API methods:
-///
 /// ```ignore
 /// let api = Client::new(url, None).await?;
 /// let info = api.exchange_info().await?;
@@ -492,7 +449,10 @@ mod tests {
     fn network_from_resolves_named_networks_and_custom_urls() {
         assert!(matches!(Network::from("mainnet"), Network::Mainnet));
         assert!(matches!(Network::from("testnet"), Network::Testnet));
-        assert!(matches!(Network::from("https://custom.example.com"), Network::Custom(_)));
+        assert!(matches!(
+            Network::from("https://custom.example.com"),
+            Network::Custom(_)
+        ));
     }
 
     #[test]
@@ -506,9 +466,17 @@ mod tests {
     fn selective_schema_filter_keeps_only_user_call_messages() {
         let selected = [UserActionDiscriminants::PlaceOrders];
 
-        assert!(Client::filter_variants("CallMessage", "User", Some(&selected)));
+        assert!(Client::filter_variants(
+            "CallMessage",
+            "User",
+            Some(&selected)
+        ));
         for variant in ["Vault", "Keeper", "Public", "Admin"] {
-            assert!(!Client::filter_variants("CallMessage", variant, Some(&selected)));
+            assert!(!Client::filter_variants(
+                "CallMessage",
+                variant,
+                Some(&selected)
+            ));
         }
     }
 
@@ -516,18 +484,33 @@ mod tests {
     fn selective_schema_filter_keeps_only_selected_user_actions() {
         let selected = [UserActionDiscriminants::PlaceOrders];
 
-        assert!(Client::filter_variants("UserAction", "PlaceOrders", Some(&selected)));
-        assert!(!Client::filter_variants("UserAction", "CancelOrders", Some(&selected)));
+        assert!(Client::filter_variants(
+            "UserAction",
+            "PlaceOrders",
+            Some(&selected)
+        ));
+        assert!(!Client::filter_variants(
+            "UserAction",
+            "CancelOrders",
+            Some(&selected)
+        ));
     }
 
     #[test]
     fn selective_mode_rejects_unvalidated_call_messages() {
         let selected = [UserActionDiscriminants::PlaceOrders];
         let public_call = CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] });
-        let unselected_user_call =
-            CallMessage::User(UserAction::CancelAllOrders { sub_account_index: None });
+        let unselected_user_call = CallMessage::User(UserAction::CancelAllOrders {
+            sub_account_index: None,
+        });
 
-        assert!(!Client::call_message_was_validated(&public_call, Some(&selected)));
-        assert!(!Client::call_message_was_validated(&unselected_user_call, Some(&selected),));
+        assert!(!Client::call_message_was_validated(
+            &public_call,
+            Some(&selected)
+        ));
+        assert!(!Client::call_message_was_validated(
+            &unselected_user_call,
+            Some(&selected),
+        ));
     }
 }

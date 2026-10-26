@@ -1,16 +1,6 @@
-//! Parse progenitor-generated Rust code with `syn` and build a `CodeModel`.
-//!
-//! This module is intentionally generic — it knows about Rust syntax, not WASM
-//! or progenitor semantics. The one exception is `ResponseValue<T>`: we promote
-//! it to a `RustType` variant because it appears on every client method return.
-//! See the doc comment on `RustType::ResponseValue` for rationale.
-//!
-//! # Adding new type support
-//!
-//! 1. If it's a structural type that changes codegen shape (like `Option`, `Vec`), add a variant to
-//!    `RustType` and handle it in `utils::parse_rust_type`.
-//! 2. Otherwise, it falls through to `Named { name, args }` automatically. Handle it in
-//!    `emit/type_map.rs` by matching on the name.
+//! Parse progenitor-generated code with `syn` into a `CodeModel`. Generic over Rust syntax,
+//! except `ResponseValue<T>` (see `RustType::ResponseValue`). New shape-changing types need a
+//! `RustType` variant; anything else falls through to `Named` and is handled in `emit/type_map.rs`.
 
 mod extractions;
 mod utils;
@@ -24,12 +14,13 @@ use utils::impl_target_name;
 
 use super::{CodeModel, TypeInfo};
 
-// ── Entry Point ──────────────────────────────────────────────────────────────
-
 /// Parse the progenitor-generated codegen.rs and build a `CodeModel`.
 pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
     let source = std::fs::read_to_string(codegen_path).unwrap_or_else(|e| {
-        panic!("failed to read progenitor codegen at {}: {e}", codegen_path.display())
+        panic!(
+            "failed to read progenitor codegen at {}: {e}",
+            codegen_path.display()
+        )
     });
 
     let file = syn::parse_file(&source)
@@ -38,7 +29,7 @@ pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
     let mut code_map = BTreeMap::new();
 
     for item in &file.items {
-        item_walk(item, &[], &mut code_map)
+        item_walk(item, &[], &mut code_map);
     }
 
     CodeModel { items: code_map }
@@ -46,14 +37,13 @@ pub fn extract_code_model(codegen_path: &Path) -> CodeModel {
 
 fn item_walk(item: &Item, module_path: &[String], code_map: &mut BTreeMap<String, TypeInfo>) {
     match item {
-        // We dont want to reimplement traits.
+        // Skip trait impls.
         Item::Impl(imp) if imp.trait_.is_none() => {
             let target = impl_target_name(imp);
             if !target.is_empty() {
                 let details = extract_impl(imp, &target, module_path);
-                // Merge methods into an existing struct/enum rather than overwriting.
-                // Progenitor generates inherent impls (e.g. `impl EnumName { fn as_str() }`)
-                // that would otherwise replace the Struct/Enum entry in the HashMap.
+                // Merge inherent impls (e.g. `impl EnumName { fn as_str() }`) into the existing
+                // Struct/Enum entry instead of overwriting it.
                 match code_map.get_mut(&target) {
                     Some(TypeInfo::Struct(s)) => s.methods.extend(details.methods),
                     Some(TypeInfo::Enum(e)) => e.methods.extend(details.methods),

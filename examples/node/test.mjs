@@ -9,8 +9,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as sdk from "@bulletxyz/sdk-wasm";
 
+// Tests default to testnet: the SDK refuses to connect to an endpoint whose schema does
+// not match the one it was compiled against, and testnet leads mainnet through upgrades.
+// Override with BULLET_API_ENDPOINT.
 const ENDPOINT =
-  process.env.BULLET_API_ENDPOINT ?? "https://tradingapi.bullet.xyz";
+  process.env.BULLET_API_ENDPOINT ?? "https://tradingapi.testnet.bullet.xyz";
 
 async function connectForUserActions(actions) {
   return sdk.Client.builder()

@@ -6,20 +6,22 @@
 //!
 //! ```bash
 //! # Start the trading-api server first, then:
-//! cargo run -p trading-sdk --example rest
+//! just --justfile libs/bullet-rust-sdk/justfile example-rest
 //!
 //! # Or with a custom endpoint:
-//! API_ENDPOINT=http://localhost:3000 cargo run -p trading-sdk --example rest
+//! API_ENDPOINT=http://localhost:3000 just --justfile libs/bullet-rust-sdk/justfile example-rest
 //!
 //! # With an address for account queries:
-//! ADDRESS=0x1234... cargo run -p trading-sdk --example rest
+//! ADDRESS=0x1234... just --justfile libs/bullet-rust-sdk/justfile example-rest
 //! ```
 
 use bullet_rust_sdk::Client;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).init();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
 
     let api_endpoint =
         std::env::var("API_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
@@ -62,7 +64,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(first_symbol) = info.symbols.first() {
         println!("=== 24hr Ticker ({}) ===", first_symbol.symbol);
         let tickers_24hr = api.ticker_24hr().await?.into_inner();
-        if let Some(ticker) = tickers_24hr.iter().find(|t| t.symbol == first_symbol.symbol) {
+        if let Some(ticker) = tickers_24hr
+            .iter()
+            .find(|t| t.symbol == first_symbol.symbol)
+        {
             println!("  Price change: {}", ticker.price_change);
             println!("  Price change %: {}", ticker.price_change_percent);
             println!("  High: {}", ticker.high_price);
@@ -73,7 +78,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Order book
         println!("=== Order Book ({}, depth=5) ===", first_symbol.symbol);
-        let book = api.order_book(Some(5), &first_symbol.symbol).await?.into_inner();
+        let book = api
+            .order_book(Some(5), &first_symbol.symbol)
+            .await?
+            .into_inner();
         println!("  Bids:");
         for bid in book.bids.iter().take(3) {
             if bid.len() >= 2 {
@@ -90,10 +98,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Recent trades
         println!("=== Recent Trades ({}) ===", first_symbol.symbol);
-        let trades = api.recent_trades(Some(5), &first_symbol.symbol).await?.into_inner();
+        let trades = api
+            .recent_trades(Some(5), &first_symbol.symbol)
+            .await?
+            .into_inner();
         for trade in trades.iter().take(3) {
             let side = if trade.is_buyer_maker { "SELL" } else { "BUY" };
-            println!("  {} {} @ {} (id: {})", side, trade.qty, trade.price, trade.id);
+            println!(
+                "  {} {} @ {} (id: {})",
+                side, trade.qty, trade.price, trade.id
+            );
         }
         println!();
     }
@@ -105,7 +119,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(account) => {
                 let account = account.into_inner();
                 println!("  Available balance: {}", account.available_balance);
-                println!("  Total wallet balance: {}", account.total_cross_wallet_balance);
+                println!(
+                    "  Total wallet balance: {}",
+                    account.total_cross_wallet_balance
+                );
                 println!("  Total unrealized PnL: {}", account.total_cross_un_pnl);
                 println!("  Positions: {}", account.positions.len());
             }

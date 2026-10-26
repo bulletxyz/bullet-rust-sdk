@@ -10,12 +10,11 @@
  * 4. Nested type getters return wrapper instances (e.g. ExchangeInfo.assets -> Asset[])
  */
 
-import { jest } from '@jest/globals';
 
 import {
   Client, Decimal,
   // Enums
-  TxResult, TxStatus, HealthState,
+  TxResult, TxStatus,
   // Type wrappers
   Account, AccountAsset, AccountConfig, AccountPosition,
   Asset, Balance,
@@ -25,11 +24,8 @@ import {
   ExchangeInfo, FundingRate, OrderBook,
   PingResponse, PriceTicker, TradingSymbol, Ticker24hr, TimeResponse, Trade,
   LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
-  ReadinessStatus,
 } from '../pkg/node';
 import { connectReadOnlyClient } from './helpers';
-
-jest.setTimeout(30_000);
 
 // ── Enum wrappers ────────────────────────────────────────────────────────────
 
@@ -57,13 +53,6 @@ describe('progenitor enum wrappers', () => {
     ]);
     expect(variants.size).toBe(6);
   });
-
-  test('HealthState has expected variants', () => {
-    expect(HealthState.Starting).toBeDefined();
-    expect(HealthState.Running).toBeDefined();
-    expect(HealthState.Recovering).toBeDefined();
-    expect(typeof HealthState.Starting).toBe('number');
-  });
 });
 
 // ── Type wrapper classes exist ───────────────────────────────────────────────
@@ -78,7 +67,6 @@ describe('progenitor type wrappers are exported', () => {
     'ExchangeInfo', 'FundingRate', 'OrderBook',
     'PingResponse', 'PriceTicker', 'TradingSymbol', 'Ticker24hr', 'TimeResponse', 'Trade',
     'LedgerEvent', 'SubmitTxRequest', 'SubmitTxResponse', 'TxReceipt',
-    'ReadinessStatus',
   ];
 
   const exportedClasses: Record<string, unknown> = {
@@ -90,7 +78,6 @@ describe('progenitor type wrappers are exported', () => {
     ExchangeInfo, FundingRate, OrderBook,
     PingResponse, PriceTicker, TradingSymbol, Ticker24hr, TimeResponse, Trade,
     LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
-    ReadinessStatus,
   };
 
   test.each(expectedClasses)('%s is exported as a constructor', (name) => {
@@ -166,14 +153,14 @@ describe('account config delegate wrappers', () => {
 
 describe('client methods exist', () => {
   const expectedMethods = [
-    'ping', 'time', 'health', 'ready',
+    'ping', 'time',
     'exchangeInfo', 'orderBook', 'recentTrades',
     'ticker24hr', 'tickerPrice', 'fundingRate',
     'accountInfo', 'accountBalance', 'accountConfig',
     'commissionRate', 'symbolConfig', 'rateLimitOrder',
     'queryOpenOrder', 'queryOpenOrders', 'leverageBracket',
     'insuranceBalance', 'borrowLendPools',
-    'constants', 'schema', 'submitTx',
+    'constants', 'schema', 'submitTx', 'submitDegenTx',
   ];
 
   test.each(expectedMethods)('Client.prototype.%s exists', (method) => {
@@ -333,11 +320,6 @@ describe('struct getters via live API', () => {
     }
   });
 
-  test('health returns a string', async () => {
-    const h = await client.health();
-    expect(typeof h).toBe('string');
-  });
-
   test('schema returns a JSON string', async () => {
     const s = await client.schema();
     expect(typeof s).toBe('string');
@@ -424,7 +406,7 @@ describe('struct getters via live API', () => {
       expect(rp.minBorrowRate).toBeInstanceOf(Decimal);
       expect(rp.maxBorrowRate).toBeInstanceOf(Decimal);
       expect(rp.optimalBorrowRate).toBeInstanceOf(Decimal);
-      expect(rp.optimalUtilisationRate).toBeInstanceOf(Decimal);
+      expect(rp.optimalUtilizationRate).toBeInstanceOf(Decimal);
     }
   });
 });

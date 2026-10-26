@@ -6,10 +6,8 @@ impl SubmitTxResponse {
     /// Return the Hyperlane message id emitted by a bridge withdrawal, when the
     /// trading API includes it in the transaction events.
     ///
-    /// The OpenAPI response shape carries arbitrary event JSON rather than a
-    /// dedicated message-id field, so this scans event values for common
-    /// `messageId` / `message_id` spellings and returns a normalized `0x`-
-    /// prefixed bytes32 hex string.
+    /// Events are arbitrary JSON, so this scans for `messageId`/`message_id` and returns a
+    /// `0x`-prefixed bytes32 hex string.
     pub fn message_id(&self) -> Option<String> {
         self.events.iter().find_map(|event| {
             find_message_id_in_map(&event.value, MessageIdSearchContext::default())
@@ -25,7 +23,10 @@ struct MessageIdSearchContext {
 
 impl MessageIdSearchContext {
     fn exact_message_id_value() -> Self {
-        Self { allow_id_key: true, allow_direct_string: true }
+        Self {
+            allow_id_key: true,
+            allow_direct_string: true,
+        }
     }
 }
 
@@ -57,9 +58,9 @@ fn find_message_id_in_map(
 fn message_id_from_value(value: &Value, context: MessageIdSearchContext) -> Option<String> {
     match value {
         Value::String(value) if context.allow_direct_string => normalize_message_id(value),
-        Value::Array(values) => {
-            values.iter().find_map(|value| message_id_from_value(value, context))
-        }
+        Value::Array(values) => values
+            .iter()
+            .find_map(|value| message_id_from_value(value, context)),
         Value::Object(map) => find_message_id_in_map(map, context),
         _ => None,
     }
@@ -67,7 +68,10 @@ fn message_id_from_value(value: &Value, context: MessageIdSearchContext) -> Opti
 
 fn normalize_message_id(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    let raw = trimmed.strip_prefix("0x").or_else(|| trimmed.strip_prefix("0X")).unwrap_or(trimmed);
+    let raw = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed);
     if raw.len() == 64 && raw.chars().all(|c| c.is_ascii_hexdigit()) {
         Some(format!("0x{raw}"))
     } else {
@@ -92,20 +96,29 @@ fn child_message_id_context(
     parent_context: MessageIdSearchContext,
 ) -> MessageIdSearchContext {
     if matches!(key, "message" | "msg" | "hyperlanemessage") {
-        return MessageIdSearchContext { allow_id_key: true, allow_direct_string: true };
+        return MessageIdSearchContext {
+            allow_id_key: true,
+            allow_direct_string: true,
+        };
     }
 
     if matches!(key, "mailbox" | "hyperlane" | "hyperlanemailbox")
         || (parent_context.allow_id_key && key == "dispatch")
     {
-        return MessageIdSearchContext { allow_id_key: true, allow_direct_string: false };
+        return MessageIdSearchContext {
+            allow_id_key: true,
+            allow_direct_string: false,
+        };
     }
 
     MessageIdSearchContext::default()
 }
 
 fn normalize_key(key: &str) -> String {
-    key.chars().filter(|c| c.is_ascii_alphanumeric()).flat_map(char::to_lowercase).collect()
+    key.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 #[cfg(test)]
@@ -115,12 +128,17 @@ mod tests {
     use crate::generated::types::{LedgerEvent, ModuleRef, SubmitTxResponse, TxStatus};
 
     fn response_with_value(value: serde_json::Value) -> SubmitTxResponse {
-        let value = value.as_object().expect("event value must be an object").clone();
+        let value = value
+            .as_object()
+            .expect("event value must be an object")
+            .clone();
 
         SubmitTxResponse {
             events: vec![LedgerEvent {
                 key: "dispatch".to_string(),
-                module: ModuleRef { name: "warp".to_string() },
+                module: ModuleRef {
+                    name: "warp".to_string(),
+                },
                 number: 1,
                 tx_hash: None,
                 type_: "dispatch".to_string(),

@@ -33,6 +33,7 @@ pub fn map_vec(
             ParamMapping {
                 param_type: format!("Vec<{}>", inner.param_type),
                 conversion: "{v}".into(),
+                jsdoc_type: None,
                 is_optional: false,
             }
         }
@@ -48,40 +49,34 @@ fn map_vec_by_index(
     serde_metadata: &SerdeMetadata,
     wrapper_indices: &HashSet<usize>,
 ) -> ParamMapping {
-    // Known newtype Vecs.
     if let Some(m) = newtypes::classify(field_name, inner_idx, types, serde_metadata)
         .and_then(NewtypeKind::vec_mapping)
     {
         return m;
     }
 
-    // Dynamic dispatch based on inner type.
     let inner_ty = &types[inner_idx];
     match inner_ty {
-        // Vec<NamedStruct> — accept js_sys::Array of wrapper objects.
         Ty::Struct(s) if !s.type_name.starts_with("__SovVirtualWallet_") => {
             if wrapper_indices.contains(&inner_idx) {
-                // This struct has a generated wrapper — accept a JS Array
-                // of wrapper objects. Each element is recovered from the
-                // JsValue via TryFromJsValue, then .inner extracts the
-                // domain type. JS usage: `[new NewOrderArgs(...), ...]`
+                // JS passes `[new NewOrderArgs(...), ...]`; each element is recovered via
+                // TryFromJsValue.
                 let wrapper_name = format!("Wasm{}", s.type_name);
                 ParamMapping {
                     param_type: "js_sys::Array".into(),
                     conversion: format!(
                         "extract_array::<{wrapper_name}>({{v}})?.into_iter().map(|w| w.inner).collect()"
                     ),
+                    jsdoc_type: Some(format!("Array<{}>", s.type_name)),
                     is_optional: false,
                 }
             } else {
-                // No wrapper — fall back to JSON string.
                 json_fallback()
             }
         }
         // Vec<(multi-field tuple)> — currently used by admin cancel ops.
         Ty::Tuple(t) => map_admin_cancel_vec(context_name, t, types, serde_metadata)
             .unwrap_or_else(json_fallback),
-        // Everything else — JSON fallback.
         _ => json_fallback(),
     }
 }
@@ -113,9 +108,21 @@ fn map_admin_cancel_vec(
         return None;
     }
 
-    let raw_types = components.iter().map(|c| c.raw_type).collect::<Vec<_>>().join(", ");
-    let bindings = components.iter().map(|c| c.binding).collect::<Vec<_>>().join(", ");
-    let conversions = components.iter().map(|c| c.conversion).collect::<Vec<_>>().join(", ");
+    let raw_types = components
+        .iter()
+        .map(|c| c.raw_type)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let bindings = components
+        .iter()
+        .map(|c| c.binding)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let conversions = components
+        .iter()
+        .map(|c| c.conversion)
+        .collect::<Vec<_>>()
+        .join(", ");
 
     let conversion = format!(
         "{{ let raw: Vec<({raw_types})> = from_json({{v}})?; \
@@ -123,7 +130,12 @@ fn map_admin_cancel_vec(
          .collect::<Result<Vec<_>, String>>()? }}"
     );
 
-    Some(ParamMapping { param_type: "&str".into(), conversion, is_optional: false })
+    Some(ParamMapping {
+        param_type: "&str".into(),
+        conversion,
+        jsdoc_type: None,
+        is_optional: false,
+    })
 }
 
 fn admin_cancel_id_kind(context_name: &str) -> Option<NewtypeKind> {
@@ -170,6 +182,7 @@ fn json_fallback() -> ParamMapping {
     ParamMapping {
         param_type: "&str".into(),
         conversion: "from_json({v})?".into(),
+        jsdoc_type: None,
         is_optional: false,
     }
 }
@@ -188,7 +201,11 @@ mod tests {
         let types = vec![Ty::Tuple(sov_universal_wallet::ty::Tuple {
             template: None,
             peekable: false,
-            fields: vec![immediate_u64_field(), immediate_u64_field(), immediate_u64_field()],
+            fields: vec![
+                immediate_u64_field(),
+                immediate_u64_field(),
+                immediate_u64_field(),
+            ],
         })];
 
         let serde_metadata = Vec::new();
@@ -207,7 +224,10 @@ mod tests {
 
     fn immediate_u64_field() -> UnnamedField<sov_universal_wallet::schema::IndexLinking> {
         UnnamedField {
-            value: Link::Immediate(Primitive::Integer(IntegerType::u64, IntegerDisplay::Decimal)),
+            value: Link::Immediate(Primitive::Integer(
+                IntegerType::u64,
+                IntegerDisplay::Decimal,
+            )),
             silent: false,
             doc: String::new(),
         }

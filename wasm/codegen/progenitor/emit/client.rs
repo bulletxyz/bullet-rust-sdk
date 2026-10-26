@@ -12,7 +12,6 @@ use super::type_map;
 /// Methods to skip when generating WASM bindings.
 const SKIP_METHODS: &[&str] = &["new", "new_with_client", "api_version"];
 
-/// Emit the full `impl WasmTradingApi` block.
 pub fn emit_client_impl(methods: &[&MethodDetails], enum_names: &HashSet<&str>) -> TokenStream {
     let method_tokens: Vec<TokenStream> = methods
         .iter()
@@ -35,7 +34,6 @@ fn emit_method(m: &MethodDetails, enum_names: &HashSet<&str>) -> TokenStream {
     let method = format_ident!("{}", m.name);
     let js_name = m.name.to_lower_camel_case();
 
-    // Build the WASM-facing parameter list and call arguments.
     let (wasm_params, call_args): (Vec<TokenStream>, Vec<TokenStream>) = m
         .params
         .iter()
@@ -46,7 +44,6 @@ fn emit_method(m: &MethodDetails, enum_names: &HashSet<&str>) -> TokenStream {
         })
         .unzip();
 
-    // Return type + response handling.
     let (ret_ty, body) = match &m.return_type {
         Some(ty) => type_map::return_mapping(ty, &method, &call_args),
         None => (
@@ -64,12 +61,15 @@ fn emit_method(m: &MethodDetails, enum_names: &HashSet<&str>) -> TokenStream {
         quote! {}
     };
 
-    // Build JSDoc lines.
     let mut doc_lines: Vec<String> = Vec::new();
     for p in &m.params {
         let js_ty = type_map::param_js_type(&p.ty, enum_names);
         let optional = matches!(p.ty, super::super::RustType::Option(_));
-        let name_str = if optional { format!("[{}]", p.name) } else { p.name.clone() };
+        let name_str = if optional {
+            format!("[{}]", p.name)
+        } else {
+            p.name.clone()
+        };
         doc_lines.push(format!("@param {{{js_ty}}} {name_str}"));
     }
     let ret_js = match &m.return_type {

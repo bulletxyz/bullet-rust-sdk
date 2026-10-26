@@ -4,12 +4,8 @@ use crate::errors::{SDKError, SDKResult};
 
 /// An Ed25519 keypair for signing transactions.
 ///
-/// This is a lightweight wrapper around ed25519_dalek::SigningKey that provides
-/// convenient methods for creating keypairs and signing messages.
-///
-/// # Security Note
-/// This stores the private key in memory. For production use with significant funds,
-/// consider using a hardware wallet or external signing service.
+/// Wraps `ed25519_dalek::SigningKey`. The private key lives in memory; prefer a hardware wallet or
+/// external signer for significant funds.
 #[derive(Clone)]
 pub struct Keypair {
     signing_key: ed25519_dalek::SigningKey,
@@ -58,7 +54,6 @@ impl Keypair {
 
     /// The on-chain address (base58-encoded public key).
     ///
-    /// This is the canonical address format used by the Bullet exchange.
     /// For the hex-encoded raw public key, see [`address_hex`](Self::address_hex).
     pub fn address(&self) -> String {
         let pk_bytes: [u8; 32] = self.signing_key.verifying_key().to_bytes();
@@ -113,7 +108,9 @@ impl Keypair {
 
 impl std::fmt::Debug for Keypair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Keypair").field("address", &self.address()).finish_non_exhaustive()
+        f.debug_struct("Keypair")
+            .field("address", &self.address())
+            .finish_non_exhaustive()
     }
 }
 

@@ -1,13 +1,4 @@
-//! Type mapping from `RustType` to WASM-bindgen types.
-//!
-//! This is **THE** single file to update when adding support for a new type.
-//! All type mappings are consolidated here for easy maintenance.
-//!
-//! # Adding a new type
-//!
-//! 1. If it's a primitive or common pattern, add it to the appropriate match arm.
-//! 2. If it's a `Named` type (like `ByteStream`), match on the name string.
-//! 3. Run `cargo check` on the wasm crate to verify it compiles.
+//! `RustType` -> wasm-bindgen type mapping. The single place to add support for a new type.
 
 use std::collections::HashSet;
 
@@ -16,16 +7,17 @@ use quote::{format_ident, quote};
 
 use super::super::{Primitive, RustType};
 
-// ── JS Name Renames ──────────────────────────────────────────────────────────
-
-/// Types that need JS name remapping to avoid shadowing built-ins.
-///
-/// Add entries here when a Rust type name conflicts with a JS global.
+/// JS renames for progenitor types whose names clash with a JS global or a CallMessage codegen
+/// type. Both generators share one JS namespace, so a clash is a duplicate `__wbg_<name>_free`
+/// link error rather than a Rust error.
 pub const JS_RENAMES: &[(&str, &str)] = &[
     ("Symbol", "TradingSymbol"), // Avoid shadowing JS Symbol
+    // Also a CallMessage argument type; this is the API's read-side view.
+    ("TransferEndpoint", "TransferEndpointInfo"),
+    // `Vault` is the CallMessage namespace for vault leader factories.
+    ("Vault", "VaultInfo"),
 ];
 
-/// Get the JS-facing name for a type, applying renames if needed.
 pub fn js_name(rust_name: &str) -> String {
     for (from, to) in JS_RENAMES {
         if rust_name == *from {
@@ -35,11 +27,13 @@ pub fn js_name(rust_name: &str) -> String {
     rust_name.to_string()
 }
 
-// ── JSDoc Type Helpers ──────────────────────────────────────────────────────
+/// Wrapper ident, derived from [`js_name`] so renamed types also avoid an ambiguous glob
+/// re-export in `lib.rs`.
+pub fn wrapper_ident(rust_name: &str) -> Ident {
+    format_ident!("Wasm{}", js_name(rust_name))
+}
 
 /// Map a `RustType` to its TypeScript/JSDoc type string.
-///
-/// Used in generated `@param` / `@returns` JSDoc comments.
 pub fn js_type_string(ty: &RustType, enums: &HashSet<&str>) -> String {
     match ty {
         RustType::String => "string".to_string(),
@@ -70,7 +64,6 @@ pub fn js_type_string(ty: &RustType, enums: &HashSet<&str>) -> String {
 /// Map a method parameter's `RustType` to its JSDoc type string.
 pub fn param_js_type(ty: &RustType, enums: &HashSet<&str>) -> String {
     match ty {
-        // Option<&str> shows as optional string
         RustType::Option(inner) if matches!(inner.as_ref(), RustType::Ref(r) if matches!(r.as_ref(), RustType::String)) => {
             "string".to_string()
         }
@@ -84,10 +77,7 @@ pub fn return_js_type(ty: &RustType, enums: &HashSet<&str>) -> String {
     format!("Promise<{inner}>")
 }
 
-// ── Core Type Helpers ────────────────────────────────────────────────────────
-
 /// Map a `Primitive` to its Rust type tokens.
-/// wasm-bindgen handles all JS conversions automatically.
 fn primitive_type(p: &Primitive) -> TokenStream {
     match p {
         Primitive::I8 => quote! { i8 },
@@ -104,19 +94,14 @@ fn primitive_type(p: &Primitive) -> TokenStream {
 }
 
 /// Map a `RustType` to its wasm-bindgen-compatible type tokens.
-///
-/// This is the single source of truth for Rust→WASM type mapping.
-/// Primitives pass through directly — wasm-bindgen handles JS conversion automatically.
 fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
     match ty {
-        RustType::String => quote! { String },
         RustType::Bool => quote! { bool },
         RustType::Primitive(p) => primitive_type(p),
-        RustType::Map(_, _) => quote! { String },
         RustType::Named { name, .. } if name == "Value" => quote! { String },
         RustType::Named { name, .. } if enums.contains(name.as_str()) => quote! { String },
         RustType::Named { name, .. } => {
-            let w = format_ident!("Wasm{}", name);
+            let w = wrapper_ident(name);
             quote! { #w }
         }
         RustType::Option(inner) => {
@@ -133,36 +118,25 @@ fn wasm_type(ty: &RustType, enums: &HashSet<&str>) -> TokenStream {
 
 /// Convert a value expression from a Rust type to its WASM representation.
 ///
-/// `expr` is the tokens for accessing the value (e.g., `self.0.field`, `v`).
-/// Returns tokens for the converted expression.
+/// `expr` accesses the value (e.g. `self.0.field`, `v`).
 fn value_conversion(ty: &RustType, expr: &TokenStream, enums: &HashSet<&str>) -> TokenStream {
     match ty {
         RustType::String => quote! { #expr.clone() },
         RustType::Bool | RustType::Primitive(_) => quote! { #expr },
-        RustType::Map(_, _) => quote! { to_json(&#expr) },
         RustType::Named { name, .. } if name == "Value" => quote! { to_json(&#expr) },
         RustType::Named { name, .. } if enums.contains(name.as_str()) => {
             quote! { #expr.to_string() }
         }
         RustType::Named { name, .. } => {
-            let w = format_ident!("Wasm{}", name);
+            let w = wrapper_ident(name);
             quote! { #w(#expr.clone()) }
         }
         _ => quote! { to_json(&#expr) },
     }
 }
 
-// ── Getter Mapping ───────────────────────────────────────────────────────────
-
 /// Map a struct field type to its WASM getter return type and body.
-///
-/// # Arguments
-/// - `ty`: The field's `RustType`
-/// - `field`: The field accessor tokens (e.g., `field_name` or `0` for tuple structs)
-/// - `enums`: Set of enum names (to distinguish enum refs from struct refs)
-///
-/// # Returns
-/// `(return_type, body)` tokens for the getter method.
+/// Returns `(return_type, body)`. `enums` distinguishes enum refs from struct refs.
 pub fn getter_mapping(
     ty: &RustType,
     field: &TokenStream,
@@ -189,20 +163,22 @@ fn option_getter(
     let inner_ret = wasm_type(inner, enums);
 
     let body = match inner {
-        // Copy types pass through directly.
         RustType::Bool | RustType::Primitive(_) => quote! { self.0.#field },
-        // String/clone types can clone through directly.
-        RustType::String => quote! { self.0.#field.clone() },
-        RustType::Option(_) => quote! { self.0.#field.clone() },
-        // Vec inside Option needs ref access.
+        RustType::String | RustType::Option(_) => quote! { self.0.#field.clone() },
         RustType::Vec(inner_vec) => {
-            let conv = value_conversion(inner_vec, &quote! { v.clone() }, enums);
-            quote! { self.0.#field.as_ref().map(|v| v.iter().map(|v| #conv).collect()) }
+            if matches!(
+                inner_vec.as_ref(),
+                RustType::Bool | RustType::Primitive(_) | RustType::String
+            ) {
+                quote! { self.0.#field.as_ref().map(|v| v.to_vec()) }
+            } else {
+                let conv = value_conversion(inner_vec, &quote! { v }, enums);
+                quote! { self.0.#field.as_ref().map(|v| v.iter().map(|v| #conv).collect()) }
+            }
         }
-        // Everything else: map the inner value through conversion.
         _ => {
             let conv = value_conversion(inner, &quote! { v }, enums);
-            // Named structs/maps/Value need .as_ref() to avoid moving out of the Option.
+            // `.as_ref()` avoids moving out of the Option.
             let needs_ref = matches!(inner, RustType::Map(_, _) | RustType::Named { .. });
             if needs_ref {
                 quote! { self.0.#field.as_ref().map(|v| #conv) }
@@ -221,8 +197,7 @@ fn vec_getter(
     field: &TokenStream,
     enums: &HashSet<&str>,
 ) -> (TokenStream, TokenStream) {
-    // Nested Vec<Vec<T>>, Vec<Map>, and Vec<serde_json::Value> can't cross
-    // wasm-bindgen boundaries. Serialize to JSON string instead.
+    // Nested Vec, Vec<Map> and Vec<Value> can't cross the wasm-bindgen boundary: use JSON.
     match inner {
         RustType::Vec(_) | RustType::Map(_, _) => {
             return (quote! { String }, quote! { to_json(&self.0.#field) });
@@ -235,7 +210,6 @@ fn vec_getter(
 
     let inner_ret = wasm_type(inner, enums);
 
-    // Copy/Clone types use .to_vec(); named types use .iter().map() with clone inside.
     let body = match inner {
         RustType::Bool | RustType::Primitive(_) | RustType::String => {
             quote! { self.0.#field.to_vec() }
@@ -249,33 +223,22 @@ fn vec_getter(
     (quote! { Vec<#inner_ret> }, body)
 }
 
-// ── Parameter Mapping ────────────────────────────────────────────────────────
-
 /// Map a method parameter type to its WASM declaration type and call argument expression.
-///
-/// # Arguments
-/// - `ty`: The parameter's `RustType`
-/// - `name`: The parameter name as an identifier
-///
-/// # Returns
-/// `(param_type, call_arg)` tokens for the method signature and body.
+/// Returns `(param_type, call_arg)`.
 pub fn param_mapping(ty: &RustType, name: &Ident) -> (TokenStream, TokenStream) {
     match ty {
-        // &str → passes through
         RustType::Ref(inner) if matches!(inner.as_ref(), RustType::String) => {
             (quote! { &str }, quote! { #name })
         }
 
-        // &types::Foo → &WasmFoo, unwrap to &inner.0
         RustType::Ref(inner) => match inner.as_ref() {
             RustType::Named { name: ty_name, .. } => {
-                let w = format_ident!("Wasm{}", ty_name);
+                let w = wrapper_ident(ty_name);
                 (quote! { &#w }, quote! { &#name.0 })
             }
-            // &[types::Foo] → js_sys::Array, extract and convert
             RustType::Slice(elem) => match elem.as_ref() {
                 RustType::Named { name: ty_name, .. } => {
-                    let w = format_ident!("Wasm{}", ty_name);
+                    let w = wrapper_ident(ty_name);
                     (
                         quote! { js_sys::Array },
                         quote! { &extract_array::<#w>(#name)?.into_iter().map(|w| w.0.clone()).collect::<Vec<_>>() },
@@ -286,42 +249,36 @@ pub fn param_mapping(ty: &RustType, name: &Ident) -> (TokenStream, TokenStream) 
             _ => (quote! { &str }, quote! { #name }), // fallback
         },
 
-        // Option<&str> → Option<String>, convert via as_deref()
         RustType::Option(inner) if matches!(inner.as_ref(), RustType::Ref(r) if matches!(r.as_ref(), RustType::String)) => {
             (quote! { Option<String> }, quote! { #name.as_deref() })
         }
 
-        // Option<primitive> → Option<wasm_primitive>
         RustType::Option(inner) if matches!(inner.as_ref(), RustType::Primitive(_)) => {
-            let RustType::Primitive(p) = inner.as_ref() else { unreachable!() };
+            let RustType::Primitive(p) = inner.as_ref() else {
+                unreachable!()
+            };
             let wasm_ty = primitive_type(p);
             (quote! { Option<#wasm_ty> }, quote! { #name })
         }
 
-        // Primitives
+        RustType::Option(inner) if matches!(inner.as_ref(), RustType::Bool) => {
+            (quote! { Option<bool> }, quote! { #name })
+        }
+
         RustType::Primitive(p) => {
             let wasm_ty = primitive_type(p);
             (quote! { #wasm_ty }, quote! { #name })
         }
 
-        // Fallback: pass as-is (shouldn't happen for well-formed progenitor output)
+        RustType::Bool => (quote! { bool }, quote! { #name }),
+
+        // Not expected for well-formed progenitor output.
         _ => (quote! { JsValue }, quote! { #name }),
     }
 }
 
-// ── Return Mapping ───────────────────────────────────────────────────────────
-
 /// Map a method return type to its WASM return type and body.
-///
-/// This expects the return type to be `RustType::ResponseValue(T)` as produced by walk.
-///
-/// # Arguments
-/// - `ty`: The method's return `RustType` (should be `ResponseValue(...)`)
-/// - `method`: The method name as an identifier
-/// - `call_args`: The call argument expressions
-///
-/// # Returns
-/// `(return_type, body)` tokens for the method.
+/// Expects `RustType::ResponseValue(T)` from walk. Returns `(return_type, body)`.
 pub fn return_mapping(
     ty: &RustType,
     method: &Ident,
@@ -337,7 +294,7 @@ pub fn return_mapping(
             },
         ),
         _ => {
-            // Shouldn't happen for progenitor output, but handle gracefully
+            // Not expected for progenitor output.
             (
                 quote! { WasmResult<()> },
                 quote! {
@@ -356,7 +313,6 @@ fn response_value_mapping(
     call_args: &[TokenStream],
 ) -> (TokenStream, TokenStream) {
     match inner {
-        // ResponseValue<()>
         RustType::Tuple(elems) if elems.is_empty() => (
             quote! { WasmResult<()> },
             quote! {
@@ -365,10 +321,9 @@ fn response_value_mapping(
             },
         ),
 
-        // ResponseValue<Vec<types::Foo>>
         RustType::Vec(elem) => match elem.as_ref() {
             RustType::Named { name, .. } => {
-                let w = format_ident!("Wasm{}", name);
+                let w = wrapper_ident(name);
                 (
                     quote! { WasmResult<Vec<#w>> },
                     quote! {
@@ -380,7 +335,6 @@ fn response_value_mapping(
             _ => json_fallback(method, call_args),
         },
 
-        // ResponseValue<Map<...>>
         RustType::Map(_, _) => (
             quote! { WasmResult<String> },
             quote! {
@@ -388,7 +342,6 @@ fn response_value_mapping(
             },
         ),
 
-        // ResponseValue<types::Foo> (including ByteStream as Named)
         RustType::Named { name, .. } => {
             // ByteStream → read to string
             if name == "ByteStream" {
@@ -405,8 +358,7 @@ fn response_value_mapping(
                 );
             }
 
-            // Regular struct
-            let w = format_ident!("Wasm{}", name);
+            let w = wrapper_ident(name);
             (
                 quote! { WasmResult<#w> },
                 quote! { Ok(#w(self.inner.#method(#(#call_args),*).await?.into_inner())) },
@@ -424,4 +376,36 @@ fn json_fallback(method: &Ident, call_args: &[TokenStream]) -> (TokenStream, Tok
             Ok(serde_json::to_string(&self.inner.#method(#(#call_args),*).await?.into_inner())?)
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use prettyplease::unparse;
+    use syn::{File, parse2};
+
+    use super::*;
+
+    #[test]
+    fn optional_scalar_arrays_emit_owned_elements() {
+        for (element, name) in [
+            (RustType::Primitive(Primitive::U32), "u32"),
+            (RustType::Bool, "bool"),
+            (RustType::String, "String"),
+        ] {
+            let ty = RustType::Option(Box::new(RustType::Vec(Box::new(element))));
+            let (return_type, body) = getter_mapping(&ty, &quote! { values }, &HashSet::new());
+            assert_eq!(
+                return_type.to_string(),
+                format!("Option < Vec < {name} > >")
+            );
+            let canonical = |body: TokenStream| {
+                let file: File = parse2(quote! { fn getter() { #body } }).unwrap();
+                unparse(&file)
+            };
+            assert_eq!(
+                canonical(body),
+                canonical(quote! { self.0.values.as_ref().map(|v| v.to_vec()) })
+            );
+        }
+    }
 }

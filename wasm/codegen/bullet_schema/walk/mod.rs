@@ -1,7 +1,4 @@
-//! Walk the Transaction schema and resolve all types for codegen.
-//!
-//! Extracts action groups, structs, and enums from the schema,
-//! then maps all fields to wasm-bindgen-compatible param types.
+//! Walk the Transaction schema and map every field to a wasm-bindgen param type.
 
 mod actions;
 mod enums;
@@ -24,7 +21,6 @@ pub fn extract_schema_info() -> SchemaInfo {
     let types = schema.types();
     let serde_metadata = schema.serde_metadata();
 
-    // Phase 1: Extract raw action groups and discover structs/enums.
     let raw_groups = actions::extract_action_groups(types);
     let seeds: Vec<usize> = raw_groups
         .iter()
@@ -38,15 +34,12 @@ pub fn extract_schema_info() -> SchemaInfo {
     let raw_structs = structs::discover_structs(&seeds, types, &mut visited, &mut queue);
     let enums = enums::discover_enums(&visited, types);
 
-    // Which structs and enums will have wasm-bindgen wrappers generated?
-    // The map phase needs to know this so it can decide per-field whether to
-    // accept a typed wrapper (e.g. `WasmNewOrderArgs`) or fall back to a
-    // JSON string. We build these sets once and pass them through.
+    // Lets the map phase choose per field between a typed wrapper (e.g. `WasmNewOrderArgs`)
+    // and a JSON string fallback.
     let wrapper_indices = raw_structs.iter().map(|s| s.schema_index).collect();
 
     let enum_indices = enums.iter().map(|e| e.schema_index).collect();
 
-    // Phase 3: Resolve all raw fields from the schema to fields mapped to the WASM bindgen types.
     let action_groups = raw_groups
         .into_iter()
         .map(|g| ActionGroup {
@@ -65,7 +58,10 @@ pub fn extract_schema_info() -> SchemaInfo {
                         &wrapper_indices,
                         &enum_indices,
                     );
-                    VariantInfo { variant_name, fields }
+                    VariantInfo {
+                        variant_name,
+                        fields,
+                    }
                 })
                 .collect(),
         })
@@ -83,11 +79,19 @@ pub fn extract_schema_info() -> SchemaInfo {
                 &wrapper_indices,
                 &enum_indices,
             );
-            SchemaStruct { type_name, schema_index: s.schema_index, fields }
+            SchemaStruct {
+                type_name,
+                schema_index: s.schema_index,
+                fields,
+            }
         })
         .collect();
 
-    SchemaInfo { action_groups, structs, enums }
+    SchemaInfo {
+        action_groups,
+        structs,
+        enums,
+    }
 }
 
 fn resolve_fields(
@@ -98,8 +102,14 @@ fn resolve_fields(
     wrapper_indices: &HashSet<usize>,
     enum_indices: &HashSet<usize>,
 ) -> Vec<MappedField> {
-    let mappings =
-        map::map_fields(context_name, fields, types, serde_metadata, wrapper_indices, enum_indices);
+    let mappings = map::map_fields(
+        context_name,
+        fields,
+        types,
+        serde_metadata,
+        wrapper_indices,
+        enum_indices,
+    );
     fields
         .iter()
         .zip(mappings)
@@ -107,18 +117,19 @@ fn resolve_fields(
             name: f.name.clone(),
             param_type: m.param_type,
             conversion: m.conversion,
+            jsdoc_type: m.jsdoc_type,
             is_optional: m.is_optional,
         })
         .collect()
 }
 
-// ── Shared helpers ───────────────────────────────────────────────────────────
-
 fn field_info_from_link(name: &str, link: &Link) -> FieldInfo {
     match link {
-        Link::ByIndex(i) => {
-            FieldInfo { name: name.to_string(), schema_index: Some(*i), primitive: None }
-        }
+        Link::ByIndex(i) => FieldInfo {
+            name: name.to_string(),
+            schema_index: Some(*i),
+            primitive: None,
+        },
         Link::Immediate(prim) => FieldInfo {
             name: name.to_string(),
             schema_index: None,
