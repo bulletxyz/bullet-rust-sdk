@@ -3448,7 +3448,19 @@
                     {
                         "name": "action",
                         "in": "query",
-                        "description": "Restrict to one kind of movement, e.g. `DEPOSIT` or `BRIDGE_IN` (optional, case-insensitive)",
+                        "description": "Comma-separated movement kinds: DEPOSIT, WITHDRAWAL, TRANSFER, SEND,\nVAULT_DEPOSIT, VAULT_WITHDRAWAL, BRIDGE_IN, BRIDGE_OUT (case-insensitive).\nOmit for all; empty entries are ignored. Unknown kinds or a wholly empty filter return 400.",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "asset",
+                        "in": "query",
+                        "description": "Asset name, e.g. `USDC` or `SOL` (optional, case-insensitive; omitted means all assets)",
                         "required": false,
                         "schema": {
                             "type": [
@@ -3510,6 +3522,16 @@
                     },
                     "400": {
                         "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Asset not found",
                         "content": {
                             "application/json": {
                                 "schema": {

@@ -437,6 +437,14 @@ a required argument can follow a nullable one — pass `null` or `undefined` for
 the ones you do not need (for example `client.orderBook(null, 'BTC-USD')`).
 Arguments marked `?` may be omitted entirely.
 
+`userTransfers(action, address, asset, endTime, limit, startTime)` accepts an
+optional asset name (for example `'USDC'`) and comma-separated movement kinds
+(for example `'DEPOSIT,WITHDRAWAL'`). Both filters are case-insensitive. Empty
+action entries are ignored; unknown actions or a wholly empty action filter
+return HTTP 400. When upgrading, insert `null` or `undefined` for `asset` before
+the existing `endTime`, `limit`, and `startTime` arguments to keep querying all
+assets.
+
 `vaultEquity(address)` returns the user's active positions across vaults plus
 `totalEquity`. Each position includes `vaultAddress`, `shares`, `equity`, and a
 nullable `percentageReturn`.
