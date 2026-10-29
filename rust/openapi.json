@@ -551,7 +551,7 @@
                     "API"
                 ],
                 "summary": "Submit Solana off-chain signed transaction",
-                "description": "Accepts the JSON envelope produced by the SDK's `solana` / `solanaSimple`\nauthenticator (Phantom, Solflare, Ledger), where the body is signed with\na Solana off-chain message signature rather than a Sovereign credential.\nThe rollup verifies the signature and constructs the inner tx; this route\nis a pass-through proxy and intentionally skips the borsh tx validator; the\ncall whitelist still applies.",
+                "description": "Accepts the JSON envelope produced by the SDK's `solana` / `solanaSimple`\nauthenticator (Phantom, Solflare, Ledger), where the body is signed with\na Solana off-chain message signature rather than a Sovereign credential.\nThe rollup verifies the signature and constructs the inner tx; this route\nis a pass-through proxy and intentionally skips the borsh tx validator; the\ncall whitelist still applies. A `User/DegenTrade` call message belongs on\n`/api/v1/solanaOffchainTxDegen`, and this route refuses it.",
                 "operationId": "submit_solana_offchain_tx",
                 "requestBody": {
                     "content": {
@@ -575,7 +575,89 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid request body, envelope, or chain_hash mismatch",
+                        "description": "Invalid request body, envelope, chain_hash mismatch, or a DegenTrade call message (use /api/v1/solanaOffchainTxDegen)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid Solana signature",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Call message not relayed by this API",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Validation service unavailable (chain_hash not loaded)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/solanaOffchainTxDegen": {
+            "post": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Submit a Degen trade as a Solana off-chain signed transaction.",
+                "description": "Takes the same envelope as `/api/v1/solanaOffchainTx` and returns the same sequencer\nresponse; the signed call message must be `User/DegenTrade`. Browser clients send this route\nwith credentials so the edge can require a browser challenge clearance on it alone.",
+                "operationId": "submit_solana_offchain_degen_tx",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SubmitSolanaOffchainTxRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Transaction submitted successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubmitTxResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body, envelope, chain_hash mismatch, or not a DegenTrade call message (use /api/v1/solanaOffchainTx)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1337,6 +1419,110 @@
                 "responses": {
                     "200": {
                         "description": "User commission rate"
+                    }
+                }
+            }
+        },
+        "/fapi/v1/degenPositionHistory": {
+            "get": {
+                "tags": [
+                    "User Data (Beta)"
+                ],
+                "summary": "Protocol-complete Degen user closes and supported liquidations, newest close first. Each item\nrepresents one position lifecycle, not an opening or closing fill.",
+                "operationId": "degen_position_history",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "description": "Account or subaccount address (required on the first request).",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "symbol",
+                        "in": "query",
+                        "description": "Optional market symbol filter.",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Number of completed positions (default 100, max 500). Zero returns an empty page.",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "uint64",
+                            "minimum": 0,
+                            "maximum": 500
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "Opaque signed cursor from the preceding page",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Completed Degen position history",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedResponse_CompletedDegenPosition"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Market not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Historical data service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -4014,7 +4200,7 @@
                     "Trading"
                 ],
                 "summary": "Submit a transaction to the rollup.",
-                "description": "Accepts the JSON envelope containing the base64 encoded and borsh serialized transaction.\nA `User/DegenTrade` call message is also accepted on `/tx/submitDegen`.",
+                "description": "Accepts the JSON envelope containing the base64 encoded and borsh serialized transaction.\nA `User/DegenTrade` call message belongs on `/tx/submitDegen`, and this route refuses it.",
                 "operationId": "submit_tx",
                 "requestBody": {
                     "content": {
@@ -4038,7 +4224,7 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid transaction format or validation failed",
+                        "description": "Invalid transaction format, validation failed, or a DegenTrade call message (use /tx/submitDegen)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -5127,6 +5313,92 @@
                     }
                 }
             },
+            "CompletedDegenPosition": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "address",
+                    "marketId",
+                    "asset",
+                    "direction",
+                    "wager",
+                    "realizedPnl",
+                    "fee",
+                    "status",
+                    "closeReason",
+                    "liquidationType",
+                    "openedTimestampMicros",
+                    "closedTimestampMicros",
+                    "holdTimeMicros",
+                    "closingTxHash"
+                ],
+                "properties": {
+                    "address": {
+                        "type": "string"
+                    },
+                    "asset": {
+                        "type": "string"
+                    },
+                    "closeReason": {
+                        "type": "string",
+                        "description": "Projector-defined terminal reason, such as user_close or backstop_liquidation."
+                    },
+                    "closedTimestampMicros": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "closingTxHash": {
+                        "type": "string"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "description": "LONG or SHORT, derived from the opening side."
+                    },
+                    "fee": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Indexed opening and closing USDC trading fees plus any correlated backstop protocol fee. Excludes the liquidator reward."
+                    },
+                    "holdTimeMicros": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "liquidationType": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Liquidation mechanism when status is liquidated; otherwise null."
+                    },
+                    "marketId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "openedTimestampMicros": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "realizedPnl": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Terminal closing transaction realized PNL less that transaction's USDC trading fee, matching the trade-complete display. Display this value directly."
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "Terminal lifecycle status: closed or liquidated."
+                    },
+                    "wager": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "USDC collateral committed when the position opened."
+                    }
+                }
+            },
             "Delegate": {
                 "type": "object",
                 "required": [
@@ -5983,6 +6255,110 @@
                     "SL",
                     "TP"
                 ]
+            },
+            "PaginatedResponse_CompletedDegenPosition": {
+                "type": "object",
+                "description": "paginated response wrapper with optional cursor for next page",
+                "required": [
+                    "data"
+                ],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "id",
+                                "address",
+                                "marketId",
+                                "asset",
+                                "direction",
+                                "wager",
+                                "realizedPnl",
+                                "fee",
+                                "status",
+                                "closeReason",
+                                "liquidationType",
+                                "openedTimestampMicros",
+                                "closedTimestampMicros",
+                                "holdTimeMicros",
+                                "closingTxHash"
+                            ],
+                            "properties": {
+                                "address": {
+                                    "type": "string"
+                                },
+                                "asset": {
+                                    "type": "string"
+                                },
+                                "closeReason": {
+                                    "type": "string",
+                                    "description": "Projector-defined terminal reason, such as user_close or backstop_liquidation."
+                                },
+                                "closedTimestampMicros": {
+                                    "type": "integer",
+                                    "format": "int64"
+                                },
+                                "closingTxHash": {
+                                    "type": "string"
+                                },
+                                "direction": {
+                                    "type": "string",
+                                    "description": "LONG or SHORT, derived from the opening side."
+                                },
+                                "fee": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "Indexed opening and closing USDC trading fees plus any correlated backstop protocol fee. Excludes the liquidator reward."
+                                },
+                                "holdTimeMicros": {
+                                    "type": "integer",
+                                    "format": "uint64",
+                                    "minimum": 0
+                                },
+                                "id": {
+                                    "type": "string"
+                                },
+                                "liquidationType": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "Liquidation mechanism when status is liquidated; otherwise null."
+                                },
+                                "marketId": {
+                                    "type": "integer",
+                                    "format": "uint16",
+                                    "minimum": 0
+                                },
+                                "openedTimestampMicros": {
+                                    "type": "integer",
+                                    "format": "int64"
+                                },
+                                "realizedPnl": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "Terminal closing transaction realized PNL less that transaction's USDC trading fee, matching the trade-complete display. Display this value directly."
+                                },
+                                "status": {
+                                    "type": "string",
+                                    "description": "Terminal lifecycle status: closed or liquidated."
+                                },
+                                "wager": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "USDC collateral committed when the position opened."
+                                }
+                            }
+                        }
+                    },
+                    "nextCursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
             },
             "PaginatedResponse_HistoricalOrder": {
                 "type": "object",
@@ -6948,15 +7324,10 @@
                     "size",
                     "costOfTrades",
                     "realizedPnl",
-                    "cachedMarkPrice",
                     "fundingPaymentsOnSide",
                     "fundingPaymentsOnPosition"
                 ],
                 "properties": {
-                    "cachedMarkPrice": {
-                        "type": "string",
-                        "format": "decimal"
-                    },
                     "costOfTrades": {
                         "type": "string",
                         "format": "decimal"
@@ -7068,7 +7439,7 @@
                     "estimatedFundingRate": {
                         "type": "string",
                         "format": "decimal",
-                        "description": "pre-computed estimated 1h funding rate (dampened 8h rate ÷ 8) from current premium index\naccumulator"
+                        "description": "estimated 8h funding rate for the current hour, dampened by the market's funding dampening\nmultiplier; the hour settles rate ÷ 8"
                     },
                     "indexPrice": {
                         "type": "string",

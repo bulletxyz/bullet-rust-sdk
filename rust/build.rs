@@ -1,6 +1,7 @@
 use std::env;
 use std::path::PathBuf;
 
+use progenitor::TypePatch;
 use schemars::schema::{InstanceType, SchemaObject};
 use serde_json::Value;
 
@@ -41,6 +42,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         "rust_decimal::Decimal",
         [progenitor::TypeImpl::Display, progenitor::TypeImpl::FromStr].into_iter(),
+    );
+    settings.with_patch(
+        "PaginatedResponseCompletedDegenPositionDataItem",
+        TypePatch::default()
+            .with_derive("PartialEq")
+            .with_derive("Eq"),
     );
     let mut generator = progenitor::Generator::new(&settings);
 

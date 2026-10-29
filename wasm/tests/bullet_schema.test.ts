@@ -103,6 +103,11 @@ describe('DegenAction', () => {
 
     const close = DegenAction.close();
     expect(User.degenTrade(7, close, 2)).toBeDefined();
+
+    expect(User.degenTrade(7, DegenAction.openV1('5', Side.Bid, '10', 50))).toBeDefined();
+    expect(User.degenTrade(7, DegenAction.openV1('5', Side.Bid, '10'))).toBeDefined();
+    expect(User.degenTrade(7, DegenAction.closeV1(50), 2)).toBeDefined();
+    expect(User.degenTrade(7, DegenAction.closeV1())).toBeDefined();
   });
 
   test('DegenAction.open validates decimal inputs', () => {

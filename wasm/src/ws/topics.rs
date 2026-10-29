@@ -136,6 +136,16 @@ impl WasmTopic {
         }
     }
 
+    /// Create a completed Degen position topic, e.g. `"0xabc@user.degenPositions"`.
+    /// @param {string} address - The account or subaccount address.
+    /// @returns {Topic}
+    #[wasm_bindgen(js_name = userDegenPositions)]
+    pub fn user_degen_positions(address: &str) -> WasmTopic {
+        WasmTopic {
+            inner: SdkTopic::user_degen_positions(address).to_string(),
+        }
+    }
+
     /// Subscribe to all market tickers.
     /// @returns {Topic}
     #[wasm_bindgen(js_name = allTickers)]

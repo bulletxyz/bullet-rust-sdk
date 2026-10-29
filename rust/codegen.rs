@@ -25,9 +25,7 @@ pub fn merge_response_arms(file: &mut File) {
             for arm in status.arms.drain(..) {
                 if let Some(previous) = arms.last_mut()
                     && previous.attrs.is_empty()
-                    && previous.guard.is_none()
                     && arm.attrs.is_empty()
-                    && arm.guard.is_none()
                     && previous.body == arm.body
                     && let Some(mut statuses) = error_statuses(&previous.pat)
                     && let Some(next) = error_statuses(&arm.pat)
@@ -54,6 +52,7 @@ pub fn merge_response_arms(file: &mut File) {
 }
 
 fn error_statuses(pattern: &Pat) -> Option<BTreeSet<u16>> {
+    // Syn 3 puts match guards in Pat::Guard, which must not contribute statuses.
     match pattern {
         Pat::Lit(lit) => Some(BTreeSet::from([error_status(&lit.lit)?])),
         Pat::Range(range) if matches!(range.limits, RangeLimits::Closed(_)) => {
@@ -126,6 +125,18 @@ mod tests {
             (
                 "400 if enabled => error(), 500 => error()",
                 "400 if enabled => error(), 500 => error()",
+            ),
+            (
+                "400 => error(), 500 if enabled => error()",
+                "400 => error(), 500 if enabled => error()",
+            ),
+            (
+                "400 if first => error(), 500 if second => error()",
+                "400 if first => error(), 500 if second => error()",
+            ),
+            (
+                "400 | 401 if enabled => error(), 500 => error()",
+                "400 | 401 if enabled => error(), 500 => error()",
             ),
             (
                 "#[cfg(feature = \"special\")] 400 => error(), 500 => error()",

@@ -1,10 +1,12 @@
 use bullet_exchange_interface::message::UserActionDiscriminants;
 use bullet_exchange_interface::transaction::{Amount, Gas, PriorityFeeBips};
 use bullet_rust_sdk::{Client, Network};
+use wasm_bindgen::convert::TryFromJsValue;
 use wasm_bindgen::prelude::*;
 
 use crate::errors::WasmResult;
 use crate::keypair::WasmKeypair;
+use crate::transaction_builder::WasmNewOrderArgs;
 
 /// Network names for `Client.builder().network(...)`; custom URL strings are also accepted.
 #[wasm_bindgen(js_name = Network)]
@@ -228,6 +230,46 @@ impl WasmTradingApi {
         sub_account_index: Option<u8>,
     ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
         let resp = self.inner.cancel_all_orders(sub_account_index).await?;
+        Ok(crate::generated::WasmSubmitTxResponse(resp))
+    }
+
+    /// Cancel orders and place new ones in a single signed transaction.
+    /// `places` may be empty when `cancels` is not, which cancels only; both empty is rejected.
+    /// @param {number} marketId - Numeric market ID.
+    /// @param {string} cancels - JSON array of order IDs, the same encoding `User.cancelAndPlaceOrders` takes.
+    /// @param {Array<NewOrderArgs>} places - Orders to place.
+    /// @param {bigint} [expiryTimestamp] - Venue-clock time in microseconds that auto-cancels the placed orders.
+    /// @param {number} [subAccountIndex] - Optional sub-account index.
+    /// @returns {Promise<SubmitTxResponse>}
+    #[wasm_bindgen(js_name = cancelAndPlaceOrders)]
+    pub async fn cancel_and_place_orders(
+        &self,
+        market_id: u16,
+        cancels: &str,
+        places: js_sys::Array,
+        expiry_timestamp: Option<i64>,
+        sub_account_index: Option<u8>,
+    ) -> WasmResult<crate::generated::WasmSubmitTxResponse> {
+        let cancels: Vec<bullet_exchange_interface::types::OrderIdKind> =
+            serde_json::from_str(cancels).map_err(|e| e.to_string())?;
+        let places = places
+            .iter()
+            .map(|v| {
+                WasmNewOrderArgs::try_from_js_value(v)
+                    .map(|w| w.inner)
+                    .map_err(|_| "expected NewOrderArgs".to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let resp = self
+            .inner
+            .cancel_and_place_orders(
+                bullet_exchange_interface::types::MarketId(market_id),
+                cancels,
+                places,
+                expiry_timestamp.map(bullet_exchange_interface::time::UnixTimestampMicros),
+                sub_account_index,
+            )
+            .await?;
         Ok(crate::generated::WasmSubmitTxResponse(resp))
     }
 }

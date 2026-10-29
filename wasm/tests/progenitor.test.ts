@@ -161,6 +161,7 @@ describe('client methods exist', () => {
     'queryOpenOrder', 'queryOpenOrders', 'leverageBracket',
     'insuranceBalance', 'borrowLendPools',
     'constants', 'schema', 'submitTx', 'submitDegenTx',
+    'submitSolanaOffchainTx', 'submitSolanaOffchainDegenTx',
   ];
 
   test.each(expectedMethods)('Client.prototype.%s exists', (method) => {

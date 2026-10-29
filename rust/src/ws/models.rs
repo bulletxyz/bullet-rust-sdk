@@ -8,6 +8,8 @@ pub use bullet_ws_interface::{
 };
 use serde::{Deserialize, Serialize};
 
+/// One completed Degen position, shared with the generated REST history response.
+pub use crate::codegen::types::PaginatedResponseCompletedDegenPositionDataItem as CompletedDegenPosition;
 use crate::types::{
     AggTradeMessage, BookTickerMessage, DepthUpdate, ErrorMessage, ForceOrderMessage,
     MarkPriceMessage, MessageType, OrderUpdateMessage, PongMessage, RequestId, StatusMessage,
@@ -67,6 +69,29 @@ pub struct MarketStatusMessage {
     pub markets: Vec<MarketStatusEntry>,
 }
 
+/// Event type of a completed Degen position message.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DegenPositionCompletedEventType {
+    #[serde(rename = "degenPositionCompleted")]
+    DegenPositionCompleted,
+}
+
+/// Full-payload update published when one Degen position completes.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DegenPositionCompletedMessage {
+    /// Event type.
+    #[serde(rename = "e")]
+    pub event_type: DegenPositionCompletedEventType,
+    /// Publish time in Unix microseconds.
+    #[serde(rename = "E")]
+    pub event_time: u64,
+    /// Sequencer event number encoded as a string to preserve `u64` precision.
+    pub sequence: String,
+    /// The completed position.
+    pub position: CompletedDegenPosition,
+}
+
 /// Tagged messages from the server (have an "e" event type field)
 #[derive(Serialize, Deserialize, Clone, Debug, strum::AsRefStr)]
 #[strum(serialize_all = "camelCase")]
@@ -113,6 +138,7 @@ pub enum ServerMessage {
     ForceOrder(ForceOrderMessage),
     OrderUpdate(OrderUpdateMessage),
     MarketStatus(MarketStatusMessage),
+    DegenPositionCompleted(DegenPositionCompletedMessage),
 
     // Untagged error response (e.g., order errors without "e" field)
     Error(ErrorMessage),
@@ -193,6 +219,82 @@ mod tests {
         );
         assert_eq!(status.markets[0].change.as_deref(), Some("status"));
         assert_eq!(status.markets[1].change.as_deref(), Some("listed"));
+    }
+
+    #[test]
+    fn completed_degen_position_parses_full_payload() {
+        let json = r#"{
+            "e": "degenPositionCompleted",
+            "E": 1706745600000100,
+            "sequence": "18446744073709551615",
+            "position": {
+                "id": "open-tx#7",
+                "address": "subaccount",
+                "marketId": 1,
+                "asset": "BTC",
+                "direction": "LONG",
+                "wager": "10.5",
+                "realizedPnl": "-2.25",
+                "fee": "0.01",
+                "status": "liquidated",
+                "closeReason": "liquidation",
+                "liquidationType": "backstop",
+                "openedTimestampMicros": 1706745500000000,
+                "closedTimestampMicros": 1706745600000000,
+                "holdTimeMicros": 100000000,
+                "closingTxHash": "0xclose"
+            }
+        }"#;
+
+        let message: ServerMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(message.as_ref(), "degenPositionCompleted");
+        let ServerMessage::DegenPositionCompleted(completed) = message else {
+            panic!("expected completed Degen position, got {message:?}");
+        };
+        assert_eq!(completed.sequence, "18446744073709551615");
+        assert_eq!(completed.position.id, "open-tx#7");
+        assert_eq!(completed.position.direction, "LONG");
+        assert_eq!(completed.position.wager.to_string(), "10.5");
+        assert_eq!(completed.position.realized_pnl.to_string(), "-2.25");
+        assert_eq!(
+            completed.position.liquidation_type.as_deref(),
+            Some("backstop")
+        );
+        assert_eq!(completed.position.closing_tx_hash, "0xclose");
+    }
+
+    #[test]
+    fn completed_degen_position_preserves_null_liquidation_type() {
+        let message = ServerMessage::DegenPositionCompleted(DegenPositionCompletedMessage {
+            event_type: DegenPositionCompletedEventType::DegenPositionCompleted,
+            event_time: 20,
+            sequence: "9".to_string(),
+            position: CompletedDegenPosition {
+                id: "open-tx#1".to_string(),
+                address: "account".to_string(),
+                market_id: 1,
+                asset: "BTC".to_string(),
+                direction: "SHORT".to_string(),
+                wager: "10".parse().unwrap(),
+                realized_pnl: "2".parse().unwrap(),
+                fee: "0.01".parse().unwrap(),
+                status: "closed".to_string(),
+                close_reason: "user_close".to_string(),
+                liquidation_type: None,
+                opened_timestamp_micros: 10,
+                closed_timestamp_micros: 20,
+                hold_time_micros: 10,
+                closing_tx_hash: "0xclose".to_string(),
+            },
+        });
+
+        let value = serde_json::to_value(message).unwrap();
+        assert_eq!(value["e"], "degenPositionCompleted");
+        assert_eq!(value["sequence"], "9");
+        assert_eq!(value["position"]["wager"], "10");
+        assert_eq!(value["position"]["realizedPnl"], "2");
+        assert_eq!(value["position"]["fee"], "0.01");
+        assert!(value["position"]["liquidationType"].is_null());
     }
 
     /// The `e` tag is a unit enum, so a message carrying the same field names

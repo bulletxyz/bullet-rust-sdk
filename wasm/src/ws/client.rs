@@ -5,6 +5,7 @@ use bullet_rust_sdk::ws::client::{WebsocketConfig, WebsocketHandle};
 use bullet_rust_sdk::ws::managed::{ManagedWebsocket, ManagedWsConfig, WsEvent};
 use bullet_rust_sdk::ws::models::ServerMessage;
 use js_sys::{Array, Function};
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use web_time::Duration;
 
@@ -35,7 +36,7 @@ pub struct WasmServerMessage {
 #[wasm_bindgen(js_class = ServerMessage)]
 impl WasmServerMessage {
     /// The message type discriminant, e.g. `"depthUpdate"`, `"aggTrade"`,
-    /// `"status"`, `"error"`, `"unknown"`, etc.
+    /// `"degenPositionCompleted"`, `"status"`, `"error"`, `"unknown"`, etc.
     /// @returns {string}
     #[wasm_bindgen(getter, js_name = type)]
     pub fn msg_type(&self) -> String {
@@ -45,11 +46,17 @@ impl WasmServerMessage {
         }
     }
 
-    /// The message payload as a plain JS object.
+    /// The message payload as a plain JS object. Nullable completed Degen position fields remain
+    /// `null` rather than becoming `undefined`.
     /// @returns {object}
     #[wasm_bindgen(getter)]
     pub fn data(&self) -> JsValue {
-        serde_wasm_bindgen::to_value(&self.inner).unwrap_or(JsValue::NULL)
+        if matches!(&self.inner, ServerMessage::DegenPositionCompleted(_)) {
+            let serializer = serde_wasm_bindgen::Serializer::new().serialize_missing_as_null(true);
+            self.inner.serialize(&serializer).unwrap_or(JsValue::NULL)
+        } else {
+            serde_wasm_bindgen::to_value(&self.inner).unwrap_or(JsValue::NULL)
+        }
     }
 
     /// `true` if this is an error message (tagged or untagged).

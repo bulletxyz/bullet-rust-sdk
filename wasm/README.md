@@ -42,6 +42,10 @@ lot size. `amountToTransfer` funds the isolated balance from cross margin and is
 capped by the protocol at 10 USDC. `close` executes IOC and returns the remaining
 isolated balance to cross margin once the position is flat.
 
+`openV1` and `closeV1` take an optional `maxSlippageBps` (1 bps = 0.01%): the
+transaction reverts if the average fill price is worse than the mark price by
+more than that. A fill better than mark always passes. Omit it for no limit.
+
 ```typescript
 import { DegenAction, Side, User } from '@bulletxyz/sdk-wasm';
 
@@ -51,6 +55,10 @@ const open = User.degenTrade(
 );
 
 const close = User.degenTrade(7, DegenAction.close(), 2);
+
+// Revert if the average fill is more than 0.5% worse than mark.
+const guardedOpen = User.degenTrade(7, DegenAction.openV1('5', Side.Bid, '10', 50));
+const guardedClose = User.degenTrade(7, DegenAction.closeV1(50));
 ```
 
 ## API Reference
@@ -59,6 +67,8 @@ const close = User.degenTrade(7, DegenAction.close(), 2);
 
 Use `Client.mainnet()`, `Client.connect(networkOrUrl)`, or the builder shown above.
 The installed package's TypeScript declarations describe all methods and parameters.
+`client.cancelAndPlaceOrders(marketId, cancels, places, expiryTimestamp?, subAccountIndex?)`
+cancels and places orders in one signed transaction. `places` must not be empty.
 
 By default the client validates every exchange call-message group against the
 server schema at connection. `.userActions(['PlaceOrders', 'CancelOrders'])`
@@ -365,11 +375,15 @@ await ws.subscribe([
     Topic.depth('ETH-USD', OrderbookDepth.D10),
     Topic.bookTicker('SOL-USD'),
     Topic.kline('BTC-USD', KlineInterval.H1),
+    Topic.userDegenPositions('account-address'),
     Topic.allTickers(),
 ]);
 
 // Receive messages
 const msg = await ws.recv();
+if (msg.type === 'degenPositionCompleted') {
+    console.log(msg.data.position);
+}
 
 // Submit orders via WebSocket
 const tx = Transaction.builder()

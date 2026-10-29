@@ -90,6 +90,9 @@ pub enum Topic {
     /// User order stream for an address.
     UserOrders { address: String },
 
+    /// Completed Degen position stream for an address.
+    UserDegenPositions { address: String },
+
     /// All symbols mini ticker stream.
     AllTickers,
 
@@ -158,6 +161,13 @@ impl Topic {
         }
     }
 
+    /// Subscribe to completed Degen positions for an address.
+    pub fn user_degen_positions(address: impl Into<String>) -> Self {
+        Self::UserDegenPositions {
+            address: address.into(),
+        }
+    }
+
     /// Subscribe to mini ticker updates for all symbols.
     pub fn all_tickers() -> Self {
         Self::AllTickers
@@ -194,6 +204,9 @@ impl fmt::Display for Topic {
             Topic::Kline { symbol, interval } => write!(f, "{symbol}@kline_{}", interval.as_str()),
             Topic::ForceOrder { symbol } => write!(f, "{symbol}@forceOrder"),
             Topic::UserOrders { address } => write!(f, "{address}@user.orders"),
+            Topic::UserDegenPositions { address } => {
+                write!(f, "{address}@user.degenPositions")
+            }
             Topic::AllTickers => write!(f, "!ticker@arr"),
             Topic::AllMarkPrices => write!(f, "!markPrice@arr"),
             Topic::AllBookTickers => write!(f, "!bookTicker@arr"),
@@ -245,6 +258,10 @@ mod tests {
             ),
             (Topic::force_order("BTC-USD"), "BTC-USD@forceOrder"),
             (Topic::user_orders("0xabc"), "0xabc@user.orders"),
+            (
+                Topic::user_degen_positions("0xabc"),
+                "0xabc@user.degenPositions",
+            ),
             (Topic::all_tickers(), "!ticker@arr"),
             (Topic::all_mark_prices(), "!markPrice@arr"),
             (Topic::all_market_statuses(), "!marketStatus@arr"),

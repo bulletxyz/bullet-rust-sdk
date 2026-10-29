@@ -504,7 +504,7 @@ impl Client {
     ) -> SDKResult<SubmitTxResponse> {
         let body = Transaction::to_base64(signed)?;
         let request = SubmitTxRequest { body };
-        // /tx/submit still carries DegenTrade, but /tx/submitDegen is where it is going.
+        // /tx/submit refuses DegenTrade; its own route is challenged at the edge (browser-only)
         let response = if is_degen_trade(signed) {
             self.client().submit_degen_tx(&request).await
         } else {
