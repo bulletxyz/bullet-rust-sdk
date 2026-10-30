@@ -52,6 +52,8 @@ pub use bullet_exchange_interface::message::{
     AmendOrderArgs, BackstopLiquidatePerpPositionArgsV1, CancelOrderArgs, NewOrderArgs,
     NewTriggerOrderArgs, NewTwapOrderArgs, PendingTpslPair, Tpsl, TpslPair,
 };
+/// Microseconds since the Unix epoch, on the venue's clock (e.g. an order expiry).
+pub use bullet_exchange_interface::time::UnixTimestampMicros;
 /// Transaction uniqueness/replay-protection data: `Nonce`, `Generation`, or `Window`.
 ///
 /// Set on a transaction via `UnsignedTransaction::builder().uniqueness(...)` or
@@ -63,6 +65,9 @@ pub use bullet_exchange_interface::types::ClientOrderId;
 pub use bullet_exchange_interface::types::MarketId;
 /// Exchange-assigned order identifier. Wraps a `u64`.
 pub use bullet_exchange_interface::types::OrderId;
+/// An order to cancel, by exchange id (`Server`) or client id (`Client`); see
+/// [`Client::cancel_and_place_orders`].
+pub use bullet_exchange_interface::types::OrderIdKind;
 /// Order execution type; immediate-or-cancel orders retain a price limit.
 pub use bullet_exchange_interface::types::OrderType;
 /// Order side: `Bid` means buy, `Ask` means sell.
