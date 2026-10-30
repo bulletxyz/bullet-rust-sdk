@@ -183,8 +183,9 @@ impl Client {
     /// Cancel orders and place new ones in a single signed transaction.
     ///
     /// `places` may be empty if `cancels` is not: the venue treats that as cancel-only, like
-    /// [`Client::cancel_orders`]. Both empty is rejected. `expiry_timestamp` auto-cancels the
-    /// placed orders at that venue-clock time.
+    /// [`Client::cancel_orders`]. Both empty is rejected. Cancels of orders that no longer rest
+    /// are skipped. `expiry_timestamp` (venue clock) stops the placed orders filling after that
+    /// time; they stay listed until an incoming order reaches them.
     pub async fn cancel_and_place_orders(
         &self,
         market_id: MarketId,
