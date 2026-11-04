@@ -5,28 +5,21 @@ use std::collections::HashSet;
 use sov_universal_wallet::schema::{Link, Primitive as SchemaPrimitive};
 use sov_universal_wallet::ty::{Tuple, Ty};
 
-use super::super::super::{SerdeMetadata, Types};
+use super::super::super::Types;
 use super::newtypes::{self, NewtypeKind};
 use super::{ParamMapping, primitives};
 
 /// Map a `Vec { value }` schema type.
 pub fn map_vec(
     context_name: &str,
-    field_name: &str,
     value_link: &Link,
     types: &Types,
-    serde_metadata: &SerdeMetadata,
     wrapper_indices: &HashSet<usize>,
 ) -> ParamMapping {
     match value_link {
-        Link::ByIndex(inner_idx) => map_vec_by_index(
-            context_name,
-            field_name,
-            *inner_idx,
-            types,
-            serde_metadata,
-            wrapper_indices,
-        ),
+        Link::ByIndex(inner_idx) => {
+            map_vec_by_index(context_name, *inner_idx, types, wrapper_indices)
+        }
         Link::Immediate(SchemaPrimitive::ByteArray { .. }) => json_fallback(),
         Link::Immediate(prim) => {
             let inner = primitives::map_immediate(prim);
@@ -43,15 +36,11 @@ pub fn map_vec(
 
 fn map_vec_by_index(
     context_name: &str,
-    field_name: &str,
     inner_idx: usize,
     types: &Types,
-    serde_metadata: &SerdeMetadata,
     wrapper_indices: &HashSet<usize>,
 ) -> ParamMapping {
-    if let Some(m) = newtypes::classify(field_name, inner_idx, types, serde_metadata)
-        .and_then(NewtypeKind::vec_mapping)
-    {
+    if let Some(m) = newtypes::classify(inner_idx, types).and_then(NewtypeKind::vec_mapping) {
         return m;
     }
 
@@ -75,8 +64,7 @@ fn map_vec_by_index(
             }
         }
         // Vec<(multi-field tuple)> — currently used by admin cancel ops.
-        Ty::Tuple(t) => map_admin_cancel_vec(context_name, t, types, serde_metadata)
-            .unwrap_or_else(json_fallback),
+        Ty::Tuple(t) => map_admin_cancel_vec(context_name, t, types).unwrap_or_else(json_fallback),
         _ => json_fallback(),
     }
 }
@@ -86,7 +74,6 @@ fn map_admin_cancel_vec(
     context_name: &str,
     tuple: &Tuple<sov_universal_wallet::schema::IndexLinking>,
     types: &Types,
-    serde_metadata: &SerdeMetadata,
 ) -> Option<ParamMapping> {
     let id_kind = admin_cancel_id_kind(context_name)?;
     let expected = [NewtypeKind::MarketId, id_kind, NewtypeKind::Address];
@@ -98,8 +85,7 @@ fn map_admin_cancel_vec(
     let mut components = Vec::with_capacity(tuple.fields.len());
     for field in &tuple.fields {
         let kind = expected.iter().copied().find(|kind| {
-            !seen.contains(kind)
-                && newtypes::classify_link_as(&field.value, *kind, types, serde_metadata).is_some()
+            !seen.contains(kind) && newtypes::classify_link(&field.value, types) == Some(*kind)
         })?;
         seen.insert(kind);
         components.push(admin_cancel_component(kind));
@@ -199,6 +185,7 @@ mod tests {
     #[test]
     fn unknown_three_tuple_vec_context_falls_back_to_json() {
         let types = vec![Ty::Tuple(sov_universal_wallet::ty::Tuple {
+            type_name: None,
             template: None,
             peekable: false,
             fields: vec![
@@ -208,15 +195,7 @@ mod tests {
             ],
         })];
 
-        let serde_metadata = Vec::new();
-        let mapping = map_vec(
-            "FutureStruct",
-            "tuple_items",
-            &Link::ByIndex(0),
-            &types,
-            &serde_metadata,
-            &HashSet::new(),
-        );
+        let mapping = map_vec("FutureStruct", &Link::ByIndex(0), &types, &HashSet::new());
 
         assert_eq!(mapping.param_type, "&str");
         assert_eq!(mapping.conversion, "from_json({v})?");

@@ -1,9 +1,9 @@
-//! Mapping for known newtypes (single-value `Tuple`s in the schema).
+//! Mapping for known newtypes (named single-value `Tuple`s in the schema).
 
 use sov_universal_wallet::schema::{Link, Primitive as SchemaPrimitive};
 use sov_universal_wallet::ty::{ByteDisplay, IntegerType, Ty};
 
-use super::super::super::{SerdeMetadata, Types};
+use super::super::super::Types;
 use super::ParamMapping;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -22,239 +22,35 @@ pub enum NewtypeKind {
 }
 
 /// Try to map a known newtype. Returns `None` if the type is not a known newtype.
-pub fn try_map_newtype(
-    field_name: &str,
-    idx: usize,
-    types: &Types,
-    serde_metadata: &SerdeMetadata,
-) -> Option<ParamMapping> {
-    classify(field_name, idx, types, serde_metadata).map(NewtypeKind::scalar_mapping)
+pub fn try_map_newtype(idx: usize, types: &Types) -> Option<ParamMapping> {
+    classify(idx, types).map(NewtypeKind::scalar_mapping)
 }
 
-pub fn classify(
-    field_name: &str,
-    idx: usize,
-    types: &Types,
-    serde_metadata: &SerdeMetadata,
-) -> Option<NewtypeKind> {
-    classify_index(idx, types, serde_metadata, NewtypeHint::Any)
-        .or_else(|| classify_index_by_field_name(field_name, idx, types))
-}
-
-pub fn classify_link_as(
-    link: &Link,
-    expected: NewtypeKind,
-    types: &Types,
-    serde_metadata: &SerdeMetadata,
-) -> Option<NewtypeKind> {
-    classify_link(link, types, serde_metadata, NewtypeHint::Expected(expected))
-}
-
-#[derive(Clone, Copy)]
-enum NewtypeHint {
-    Any,
-    Expected(NewtypeKind),
-}
-
-fn classify_index(
-    idx: usize,
-    types: &Types,
-    serde_metadata: &SerdeMetadata,
-    hint: NewtypeHint,
-) -> Option<NewtypeKind> {
-    if let Some(kind) = metadata_kind(idx, serde_metadata) {
-        return classify_known_index(idx, kind, types, hint);
-    }
-
-    match hint {
-        NewtypeHint::Any => None,
-        NewtypeHint::Expected(_) => {
-            classify_index_by_expected_shape(idx, types, serde_metadata, hint)
-        }
-    }
-}
-
-fn classify_known_index(
-    idx: usize,
-    kind: NewtypeKind,
-    types: &Types,
-    hint: NewtypeHint,
-) -> Option<NewtypeKind> {
+pub fn classify(idx: usize, types: &Types) -> Option<NewtypeKind> {
+    let kind = match &types[idx] {
+        Ty::Tuple(tuple) if tuple.fields.len() == 1 => kind_from_name(tuple.type_name.as_deref()?)?,
+        Ty::Struct(s) if s.type_name == "SurrogateDecimal" => NewtypeKind::SurrogateDecimal,
+        _ => return None,
+    };
     assert!(
         kind_matches_index(kind, idx, types),
-        "newtype mapping for schema index {idx} classified it as {kind:?}, but the schema shape no longer matches"
+        "schema index {idx} is named {kind:?}, but its shape no longer matches the conversion"
     );
-    hint.accept(kind)
+    Some(kind)
 }
 
-fn classify_index_by_expected_shape(
-    idx: usize,
-    types: &Types,
-    serde_metadata: &SerdeMetadata,
-    hint: NewtypeHint,
-) -> Option<NewtypeKind> {
-    match &types[idx] {
-        Ty::Tuple(tuple) if tuple.fields.len() == 1 => {
-            classify_tuple_field(&tuple.fields[0].value, types, serde_metadata, hint)
-        }
-        Ty::Struct(s) if s.type_name == "SurrogateDecimal" => {
-            hint.accept(NewtypeKind::SurrogateDecimal)
-        }
-        _ => None,
-    }
-}
-
-fn classify_index_by_field_name(
-    field_name: &str,
-    idx: usize,
-    types: &Types,
-) -> Option<NewtypeKind> {
-    match &types[idx] {
-        Ty::Tuple(tuple) if tuple.fields.len() == 1 => {
-            classify_tuple_field_by_name(field_name, &tuple.fields[0].value, types)
-        }
-        Ty::Struct(s) if s.type_name == "SurrogateDecimal" => Some(NewtypeKind::SurrogateDecimal),
-        _ => None,
-    }
-}
-
-fn classify_link(
-    link: &Link,
-    types: &Types,
-    serde_metadata: &SerdeMetadata,
-    hint: NewtypeHint,
-) -> Option<NewtypeKind> {
+pub fn classify_link(link: &Link, types: &Types) -> Option<NewtypeKind> {
     match link {
-        Link::ByIndex(inner_idx) => classify_index(*inner_idx, types, serde_metadata, hint),
-        Link::Immediate(prim) => classify_immediate(prim, hint),
+        Link::ByIndex(idx) => classify(*idx, types),
         _ => None,
     }
-}
-
-fn classify_tuple_field(
-    value: &Link,
-    types: &Types,
-    serde_metadata: &SerdeMetadata,
-    hint: NewtypeHint,
-) -> Option<NewtypeKind> {
-    match (hint, value) {
-        (NewtypeHint::Expected(NewtypeKind::PositiveDecimal), Link::ByIndex(inner_idx))
-            if is_surrogate_decimal(*inner_idx, types) =>
-        {
-            Some(NewtypeKind::PositiveDecimal)
-        }
-        _ => classify_link(value, types, serde_metadata, hint),
-    }
-}
-
-fn classify_immediate(prim: &SchemaPrimitive, hint: NewtypeHint) -> Option<NewtypeKind> {
-    let NewtypeHint::Expected(kind) = hint else {
-        return None;
-    };
-    kind.matches_immediate(prim).then_some(kind)
-}
-
-fn classify_tuple_field_by_name(
-    field_name: &str,
-    value: &Link,
-    types: &Types,
-) -> Option<NewtypeKind> {
-    match value {
-        Link::Immediate(SchemaPrimitive::ByteArray { len: 32, display }) => {
-            matches!(display, ByteDisplay::Base58).then_some(NewtypeKind::Address)
-        }
-        Link::Immediate(SchemaPrimitive::Integer(IntegerType::u16, _)) => {
-            classify_u16_field(field_name)
-        }
-        Link::Immediate(SchemaPrimitive::Integer(IntegerType::u64, _)) => {
-            classify_u64_field(field_name)
-        }
-        Link::Immediate(SchemaPrimitive::Integer(IntegerType::i64, _))
-            if is_timestamp_field(field_name) =>
-        {
-            Some(NewtypeKind::UnixTimestampMicros)
-        }
-        Link::Immediate(SchemaPrimitive::String) if is_token_id_field(field_name) => {
-            Some(NewtypeKind::TokenId)
-        }
-        Link::ByIndex(inner_idx) if is_surrogate_decimal(*inner_idx, types) => {
-            Some(NewtypeKind::PositiveDecimal)
-        }
-        _ => None,
-    }
-}
-
-fn classify_u16_field(field_name: &str) -> Option<NewtypeKind> {
-    if is_market_id_field(field_name) {
-        Some(NewtypeKind::MarketId)
-    } else if is_asset_id_field(field_name) {
-        Some(NewtypeKind::AssetId)
-    } else {
-        None
-    }
-}
-
-fn classify_u64_field(field_name: &str) -> Option<NewtypeKind> {
-    if is_client_order_id_field(field_name) {
-        Some(NewtypeKind::ClientOrderId)
-    } else if is_trigger_order_id_field(field_name) {
-        Some(NewtypeKind::TriggerOrderId)
-    } else if is_twap_id_field(field_name) {
-        Some(NewtypeKind::TwapId)
-    } else if is_order_id_field(field_name) {
-        Some(NewtypeKind::OrderId)
-    } else {
-        None
-    }
-}
-
-fn is_client_order_id_field(field_name: &str) -> bool {
-    field_name.ends_with("client_order_id") || field_name.ends_with("client_order_ids")
-}
-
-fn is_trigger_order_id_field(field_name: &str) -> bool {
-    field_name.ends_with("trigger_order_id") || field_name.ends_with("trigger_order_ids")
-}
-
-fn is_twap_id_field(field_name: &str) -> bool {
-    field_name.ends_with("twap_id") || field_name.ends_with("twap_ids")
-}
-
-fn is_order_id_field(field_name: &str) -> bool {
-    field_name.ends_with("order_id") || field_name.ends_with("order_ids")
-}
-
-fn is_asset_id_field(field_name: &str) -> bool {
-    field_name.ends_with("asset_id") || field_name.ends_with("asset_ids")
-}
-
-fn is_market_id_field(field_name: &str) -> bool {
-    field_name.ends_with("market_id") || field_name.ends_with("market_ids")
-}
-
-fn is_token_id_field(field_name: &str) -> bool {
-    field_name.ends_with("token_id")
-}
-
-fn is_timestamp_field(field_name: &str) -> bool {
-    field_name == "timestamp"
-        || field_name.ends_with("_timestamp")
-        || field_name == "expires_at"
-        || field_name == "internal_pricing_time_constant"
-}
-
-fn metadata_kind(idx: usize, serde_metadata: &SerdeMetadata) -> Option<NewtypeKind> {
-    let name = serde_metadata.get(idx)?.name.as_str();
-    kind_from_name(name)
 }
 
 fn kind_from_name(name: &str) -> Option<NewtypeKind> {
-    let name = name.rsplit("::").next().unwrap_or(name);
     match name {
         "Address" => Some(NewtypeKind::Address),
         "AssetId" => Some(NewtypeKind::AssetId),
         "PositiveDecimal" => Some(NewtypeKind::PositiveDecimal),
-        "SurrogateDecimal" => Some(NewtypeKind::SurrogateDecimal),
         "MarketId" => Some(NewtypeKind::MarketId),
         "UnixTimestampMicros" => Some(NewtypeKind::UnixTimestampMicros),
         "ClientOrderId" => Some(NewtypeKind::ClientOrderId),
@@ -320,41 +116,7 @@ fn is_surrogate_decimal(idx: usize, types: &Types) -> bool {
     matches!(&types[idx], Ty::Struct(s) if s.type_name == "SurrogateDecimal")
 }
 
-impl NewtypeHint {
-    fn accept(self, kind: NewtypeKind) -> Option<NewtypeKind> {
-        match self {
-            NewtypeHint::Any => Some(kind),
-            NewtypeHint::Expected(expected) if expected == kind => Some(kind),
-            NewtypeHint::Expected(_) => None,
-        }
-    }
-}
-
 impl NewtypeKind {
-    fn matches_immediate(self, prim: &SchemaPrimitive) -> bool {
-        match self {
-            NewtypeKind::Address => matches!(
-                prim,
-                SchemaPrimitive::ByteArray { len: 32, display }
-                    if matches!(display, ByteDisplay::Base58)
-            ),
-            NewtypeKind::AssetId | NewtypeKind::MarketId => {
-                matches!(prim, SchemaPrimitive::Integer(IntegerType::u16, _))
-            }
-            NewtypeKind::UnixTimestampMicros => {
-                matches!(prim, SchemaPrimitive::Integer(IntegerType::i64, _))
-            }
-            NewtypeKind::ClientOrderId
-            | NewtypeKind::OrderId
-            | NewtypeKind::TriggerOrderId
-            | NewtypeKind::TwapId => {
-                matches!(prim, SchemaPrimitive::Integer(IntegerType::u64, _))
-            }
-            NewtypeKind::TokenId => matches!(prim, SchemaPrimitive::String),
-            NewtypeKind::PositiveDecimal | NewtypeKind::SurrogateDecimal => false,
-        }
-    }
-
     pub fn scalar_mapping(self) -> ParamMapping {
         let (param_type, conversion) = match self {
             NewtypeKind::Address => ("&str", "parse_addr({v})?"),

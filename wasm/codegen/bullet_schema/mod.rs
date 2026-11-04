@@ -4,7 +4,7 @@
 pub mod emit;
 pub mod walk;
 
-use sov_universal_wallet::ty::{ContainerSerdeMetadata, Ty};
+use sov_universal_wallet::ty::Ty;
 
 /// One CallMessage action group (User, Public, Keeper, Vault, Admin); emitted as a JS namespace
 /// struct with one factory method per variant.
@@ -92,5 +92,3 @@ pub(crate) enum Primitive {
 }
 
 pub(crate) type Types = [Ty<sov_universal_wallet::schema::IndexLinking>];
-
-pub(crate) type SerdeMetadata = [ContainerSerdeMetadata];

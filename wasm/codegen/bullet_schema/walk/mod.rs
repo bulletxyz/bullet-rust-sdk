@@ -19,7 +19,6 @@ use super::{
 pub fn extract_schema_info() -> SchemaInfo {
     let schema = Schema::of_single_type::<Transaction>().expect("failed to build schema");
     let types = schema.types();
-    let serde_metadata = schema.serde_metadata();
 
     let raw_groups = actions::extract_action_groups(types);
     let seeds: Vec<usize> = raw_groups
@@ -54,7 +53,6 @@ pub fn extract_schema_info() -> SchemaInfo {
                         &variant_name,
                         &v.fields,
                         types,
-                        serde_metadata,
                         &wrapper_indices,
                         &enum_indices,
                     );
@@ -75,7 +73,6 @@ pub fn extract_schema_info() -> SchemaInfo {
                 &type_name,
                 &s.fields,
                 types,
-                serde_metadata,
                 &wrapper_indices,
                 &enum_indices,
             );
@@ -98,18 +95,10 @@ fn resolve_fields(
     context_name: &str,
     fields: &[FieldInfo],
     types: &super::Types,
-    serde_metadata: &super::SerdeMetadata,
     wrapper_indices: &HashSet<usize>,
     enum_indices: &HashSet<usize>,
 ) -> Vec<MappedField> {
-    let mappings = map::map_fields(
-        context_name,
-        fields,
-        types,
-        serde_metadata,
-        wrapper_indices,
-        enum_indices,
-    );
+    let mappings = map::map_fields(context_name, fields, types, wrapper_indices, enum_indices);
     fields
         .iter()
         .zip(mappings)
