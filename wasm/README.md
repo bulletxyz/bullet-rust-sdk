@@ -374,6 +374,7 @@ await ws.subscribe([
     Topic.aggTrade('BTC-USD'),
     Topic.depth('ETH-USD', OrderbookDepth.D10),
     Topic.bookTicker('SOL-USD'),
+    Topic.degenResults('BTC-USD'),
     Topic.kline('BTC-USD', KlineInterval.H1),
     Topic.userDegenPositions('account-address'),
     Topic.allTickers(),
@@ -381,8 +382,14 @@ await ws.subscribe([
 
 // Receive messages
 const msg = await ws.recv();
-if (msg.type === 'degenPositionCompleted') {
+if (msg.type === 'degenPositionsChanged') {
+    // Queue, fill, expiry, or settlement changed the live snapshot.
+    const snapshot = await client.degenPositions('account-address');
+    console.log(snapshot.positions);
+} else if (msg.type === 'degenPositionCompleted') {
     console.log(msg.data.position);
+} else if (msg.type === 'degenResult') {
+    console.log(msg.data.size, msg.data.realizedPnl, msg.data.closeReason);
 }
 
 // Submit orders via WebSocket
@@ -451,6 +458,41 @@ a required argument can follow a nullable one — pass `null` or `undefined` for
 the ones you do not need (for example `client.orderBook(null, 'BTC-USD')`).
 Arguments marked `?` may be omitted entirely.
 
+`degenPositions(address)` returns queued and active V2 Degen positions. Financial
+values are `Decimal` objects; use `toString()` when storing or displaying them.
+After a fill, `openTxHash` can join the position to locally retained transaction
+inputs such as the user's selected leverage:
+
+```typescript
+const snapshot = await client.degenPositions(address);
+
+for (const position of snapshot.positions) {
+    const submitted = position.openTxHash
+        ? pendingDegenInputsByTxHash.get(position.openTxHash)
+        : undefined;
+
+    console.log({
+        positionId: position.positionId,
+        wager: position.wager.toString(),
+        effectiveLeverage: position.effectiveLeverage?.toString(),
+        selectedLeverage: submitted?.selectedLeverage,
+        openedAt: position.openedAt,
+    });
+}
+```
+
+`openTxHash` and `openedAt` are best-effort and may be `undefined` if the serving
+Trading API instance did not observe the fill, including after a restart or a
+request routed to another replica. `openedAt`, `updatedAt`, and `asOf` are Unix
+microseconds. The `degenPositionsChanged` WebSocket message
+is an invalidation signal; refresh `degenPositions(address)` instead of treating
+it as a complete position payload.
+
+`dispatchQuote(destinationDomain, gasLimit, recipientAddress, relayer)` returns
+the Hyperlane dispatch quote through the Trading API. Pass `gasLimit` as an
+unsigned decimal string; the response `amount` is also a decimal string so
+values above JavaScript's safe-integer range remain exact.
+
 `userTransfers(action, address, asset, endTime, limit, startTime)` accepts an
 optional asset name (for example `'USDC'`) and comma-separated movement kinds
 (for example `'DEPOSIT,WITHDRAWAL'`). Both filters are case-insensitive. Empty
@@ -462,6 +504,13 @@ assets.
 `vaultEquity(address)` returns the user's active positions across vaults plus
 `totalEquity`. Each position includes `vaultAddress`, `shares`, `equity`, and a
 nullable `percentageReturn`.
+
+`vaultEquities()` returns every vault's `equity` (the vault account plus its
+sub-vault accounts) and `totalShares` at one `stateSlot`. `equity` is null for a
+vault whose pricing is unavailable; otherwise, with `totalShares` above zero,
+`equity / totalShares` is the share price (a share-less vault mints its next
+deposit at 1). Do not price shares from `account(vaultAddress)`: it omits the
+sub-vault accounts.
 
 Each item returned by `vaultDepositors` includes held, queued, and total shares
 plus equity including the main vault account and its vault-owned sub-accounts.

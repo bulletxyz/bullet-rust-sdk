@@ -5,6 +5,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use bon::bon;
 use borsh::{BorshDeserialize, BorshSerialize};
 use bullet_exchange_interface::address::Address;
+use bullet_exchange_interface::message::DegenAction;
 use bullet_exchange_interface::schema::Schema;
 use bullet_exchange_interface::transaction::{
     Amount, Gas, PriorityFeeBips, RuntimeCall, Transaction as SignedTransaction,
@@ -483,14 +484,17 @@ impl Transaction {
     }
 }
 
-/// Whether the signed call is a `DegenTrade`, which has its own trading API route.
-fn is_degen_trade(signed: &SignedTransaction) -> bool {
+/// Whether the signed call is a Degen open, which has its own trading API route.
+fn is_degen_open(signed: &SignedTransaction) -> bool {
     let SignedTransaction::V0(v0) = signed else {
         return false;
     };
     matches!(
         v0.runtime_call,
-        RuntimeCall::Exchange(CallMessage::User(UserAction::DegenTrade { .. }))
+        RuntimeCall::Exchange(CallMessage::User(UserAction::DegenTrade {
+            action: DegenAction::Open { .. } | DegenAction::OpenV1 { .. },
+            ..
+        }))
     )
 }
 
@@ -504,8 +508,8 @@ impl Client {
     ) -> SDKResult<SubmitTxResponse> {
         let body = Transaction::to_base64(signed)?;
         let request = SubmitTxRequest { body };
-        // /tx/submit refuses DegenTrade; its own route is challenged at the edge (browser-only)
-        let response = if is_degen_trade(signed) {
+        // /tx/submit refuses Degen opens; their route is challenged at the edge (browser-only)
+        let response = if is_degen_open(signed) {
             self.client().submit_degen_tx(&request).await
         } else {
             self.client().submit_tx(&request).await
@@ -604,7 +608,7 @@ impl Client {
                 )?;
                 let body = Transaction::to_base64(&signed)?;
                 let request = SubmitTxRequest { body };
-                let retried = if is_degen_trade(&signed) {
+                let retried = if is_degen_open(&signed) {
                     self.client().submit_degen_tx(&request).await
                 } else {
                     self.client().submit_tx(&request).await
@@ -658,6 +662,9 @@ fn stringify_offchain_max_fee(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use bullet_exchange_interface::decimals::PositiveDecimal;
     use bullet_exchange_interface::message::{
         CancelOrderArgs, DegenAction, PublicAction, UserAction,
     };
@@ -666,7 +673,7 @@ mod tests {
         Amount, PriorityFeeBips, RuntimeCall, Transaction as InterfaceTransaction, TxDetails,
         UniquenessData, UnsignedTransaction as RawUnsignedTransaction, WarpBytes32, warp,
     };
-    use bullet_exchange_interface::types::{MarketId, OrderId};
+    use bullet_exchange_interface::types::{MarketId, OrderId, Side};
     use ed25519_dalek::{Signature, Verifier, VerifyingKey};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -760,7 +767,7 @@ mod tests {
         (server, client)
     }
 
-    /// A `DegenTrade` goes to the route dedicated to it, every other call to `/tx/submit`.
+    /// A Degen open goes to the route dedicated to it, every other call to `/tx/submit`.
     #[tokio::test]
     async fn the_submission_route_follows_the_signed_call_message() {
         let server = MockServer::start().await;
@@ -793,15 +800,24 @@ mod tests {
             .unwrap();
         let keypair = Keypair::generate();
 
+        let pd = |value: &str| PositiveDecimal::from_str(value).unwrap();
+        let degen = |action| {
+            CallMessage::User(UserAction::DegenTrade {
+                market_id: MarketId(1),
+                action,
+                sub_account_index: None,
+            })
+        };
         let cases = [
             (
-                CallMessage::User(UserAction::DegenTrade {
-                    market_id: MarketId(1),
-                    action: DegenAction::Close,
-                    sub_account_index: None,
+                degen(DegenAction::Open {
+                    size: pd("1"),
+                    side: Side::Bid,
+                    amount_to_transfer: pd("10"),
                 }),
                 "/tx/submitDegen",
             ),
+            (degen(DegenAction::Close), "/tx/submit"),
             (
                 CallMessage::Public(PublicAction::ApplyFunding { addresses: vec![] }),
                 "/tx/submit",

@@ -344,6 +344,106 @@
                 }
             }
         },
+        "/api/v1/bridge/dispatchQuote": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Return a Hyperlane dispatch gas quote from the configured rollup.",
+                "operationId": "dispatch_quote",
+                "parameters": [
+                    {
+                        "name": "destination_domain",
+                        "in": "query",
+                        "description": "Hyperlane destination domain.",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "uint32"
+                        }
+                    },
+                    {
+                        "name": "gas_limit",
+                        "in": "query",
+                        "description": "Unsigned `u128` gas limit encoded as a decimal string.",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "recipient_address",
+                        "in": "query",
+                        "description": "`0x`-prefixed 32-byte Hyperlane recipient address.",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "relayer",
+                        "in": "query",
+                        "description": "`0x`-prefixed 32-byte relayer address.",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Hyperlane dispatch gas quote",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DispatchQuoteResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid quote parameters",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Rollup quote failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Rollup unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Rollup unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/bridge/warpRoutes": {
             "get": {
                 "tags": [
@@ -364,6 +464,56 @@
                     },
                     "503": {
                         "description": "No warp-route snapshot is available",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/degenPositions": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "operationId": "degen_positions",
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Current V2 Degen positions and queued opens",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DegenPositionsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream snapshot unavailable",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -551,7 +701,7 @@
                     "API"
                 ],
                 "summary": "Submit Solana off-chain signed transaction",
-                "description": "Accepts the JSON envelope produced by the SDK's `solana` / `solanaSimple`\nauthenticator (Phantom, Solflare, Ledger), where the body is signed with\na Solana off-chain message signature rather than a Sovereign credential.\nThe rollup verifies the signature and constructs the inner tx; this route\nis a pass-through proxy and intentionally skips the borsh tx validator; the\ncall whitelist still applies. A `User/DegenTrade` call message belongs on\n`/api/v1/solanaOffchainTxDegen`, and this route refuses it.",
+                "description": "Accepts the JSON envelope produced by the SDK's `solana` / `solanaSimple`\nauthenticator (Phantom, Solflare, Ledger), where the body is signed with\na Solana off-chain message signature rather than a Sovereign credential.\nThe rollup verifies the signature and constructs the inner tx; this route\nis a pass-through proxy and intentionally skips the borsh tx validator; the\ncall whitelist still applies. A `User/DegenTrade` open belongs on\n`/api/v1/solanaOffchainTxDegen`, and this route refuses it.",
                 "operationId": "submit_solana_offchain_tx",
                 "requestBody": {
                     "content": {
@@ -575,7 +725,7 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid request body, envelope, chain_hash mismatch, or a DegenTrade call message (use /api/v1/solanaOffchainTxDegen)",
+                        "description": "Invalid request body, envelope, chain_hash mismatch, or a DegenTrade open (use /api/v1/solanaOffchainTxDegen)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -633,7 +783,7 @@
                     "API"
                 ],
                 "summary": "Submit a Degen trade as a Solana off-chain signed transaction.",
-                "description": "Takes the same envelope as `/api/v1/solanaOffchainTx` and returns the same sequencer\nresponse; the signed call message must be `User/DegenTrade`. Browser clients send this route\nwith credentials so the edge can require a browser challenge clearance on it alone.",
+                "description": "Takes the same envelope as `/api/v1/solanaOffchainTx` and returns the same sequencer\nresponse; the signed call message must be a `User/DegenTrade` open. Browser clients send this\nroute with credentials so the edge can require a browser challenge clearance on it alone.",
                 "operationId": "submit_solana_offchain_degen_tx",
                 "requestBody": {
                     "content": {
@@ -657,7 +807,7 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid request body, envelope, chain_hash mismatch, or not a DegenTrade call message (use /api/v1/solanaOffchainTx)",
+                        "description": "Invalid request body, envelope, chain_hash mismatch, or not a DegenTrade open (use /api/v1/solanaOffchainTx)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1428,7 +1578,7 @@
                 "tags": [
                     "User Data (Beta)"
                 ],
-                "summary": "Protocol-complete Degen user closes and supported liquidations, newest close first. Each item\nrepresents one position lifecycle, not an opening or closing fill.",
+                "summary": "Completed Degen V2 vault settlements, newest close first. Each item represents one position\nlifecycle, not an opening or closing event.",
                 "operationId": "degen_position_history",
                 "parameters": [
                     {
@@ -1466,8 +1616,8 @@
                                 "null"
                             ],
                             "format": "uint64",
-                            "minimum": 0,
-                            "maximum": 500
+                            "maximum": 500,
+                            "minimum": 0
                         }
                     },
                     {
@@ -1476,10 +1626,7 @@
                         "description": "Opaque signed cursor from the preceding page",
                         "required": false,
                         "schema": {
-                            "type": [
-                                "string",
-                                "null"
-                            ]
+                            "type": "string"
                         }
                     }
                 ],
@@ -1610,7 +1757,7 @@
                         }
                     },
                     "503": {
-                        "description": "No orderbook snapshot yet: the provider has not completed its first poll for this market",
+                        "description": "No current orderbook for this market: not yet synced with the rollup, or resynchronising",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -4200,7 +4347,7 @@
                     "Trading"
                 ],
                 "summary": "Submit a transaction to the rollup.",
-                "description": "Accepts the JSON envelope containing the base64 encoded and borsh serialized transaction.\nA `User/DegenTrade` call message belongs on `/tx/submitDegen`, and this route refuses it.",
+                "description": "Accepts the JSON envelope containing the base64 encoded and borsh serialized transaction.\nA `User/DegenTrade` open belongs on `/tx/submitDegen`, and this route refuses it.",
                 "operationId": "submit_tx",
                 "requestBody": {
                     "content": {
@@ -4224,7 +4371,7 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid transaction format, validation failed, or a DegenTrade call message (use /tx/submitDegen)",
+                        "description": "Invalid transaction format, validation failed, or a DegenTrade open (use /tx/submitDegen)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -4282,7 +4429,7 @@
                     "Trading"
                 ],
                 "summary": "Submit a Degen trade to the rollup.",
-                "description": "Takes the same envelope as `/tx/submit` and returns the same sequencer response; the signed\ncall message must be `User/DegenTrade`.",
+                "description": "Takes the same envelope as `/tx/submit` and returns the same sequencer response; the signed\ncall message must be a `User/DegenTrade` open.",
                 "operationId": "submit_degen_tx",
                 "requestBody": {
                     "content": {
@@ -4306,7 +4453,7 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid transaction format, validation failed, or not a DegenTrade call message (use /tx/submit)",
+                        "description": "Invalid transaction format, validation failed, or not a DegenTrade open (use /tx/submit)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -4347,6 +4494,57 @@
                     },
                     "503": {
                         "description": "Validation service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/vaultEquities": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Vault Equities\nEvery vault's equity and share supply at one archival slot, for pricing shares. Returns 503\nwhen the cached state collection is over 90 seconds old.",
+                "operationId": "vault_equities",
+                "responses": {
+                    "200": {
+                        "description": "Equity and total shares of every vault",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VaultEquitiesResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "State snapshot stale",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -4404,6 +4602,13 @@
                     },
                     "marginDiscount": {
                         "type": "string"
+                    },
+                    "maxAdverseMove": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal"
                     },
                     "maxWithdrawAmount": {
                         "type": "string",
@@ -4560,6 +4765,13 @@
                     "unsettledPerpProfit"
                 ],
                 "properties": {
+                    "maxAdverseMove": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal"
+                    },
                     "tradingCredits": {
                         "type": "string",
                         "format": "decimal"
@@ -4756,11 +4968,11 @@
                     "details": {
                         "oneOf": [
                             {
-                                "type": "null"
-                            },
-                            {
                                 "$ref": "#/components/schemas/ApiErrorDetail",
                                 "description": "Structured per-failure details. Shape depends on the variant."
+                            },
+                            {
+                                "type": "null"
                             }
                         ]
                     },
@@ -5071,11 +5283,11 @@
                     "pendingTpsl": {
                         "oneOf": [
                             {
-                                "type": "null"
-                            },
-                            {
                                 "$ref": "#/components/schemas/PendingTpsl",
                                 "description": "reserved TP/SL pair attached to this parent limit order. only present\nwhile the parent is unfilled — once filled, the trigger orders are\nactivated and listed independently"
+                            },
+                            {
+                                "type": "null"
                             }
                         ]
                     },
@@ -5321,12 +5533,14 @@
                     "marketId",
                     "asset",
                     "direction",
+                    "size",
+                    "entryPrice",
+                    "exitPrice",
                     "wager",
                     "realizedPnl",
                     "fee",
                     "status",
                     "closeReason",
-                    "liquidationType",
                     "openedTimestampMicros",
                     "closedTimestampMicros",
                     "holdTimeMicros",
@@ -5341,7 +5555,7 @@
                     },
                     "closeReason": {
                         "type": "string",
-                        "description": "Projector-defined terminal reason, such as user_close or backstop_liquidation."
+                        "description": "Terminal reason. V2 uses user_close, win_cap, timeout, or degen_liquidation."
                     },
                     "closedTimestampMicros": {
                         "type": "integer",
@@ -5357,7 +5571,7 @@
                     "fee": {
                         "type": "string",
                         "format": "decimal",
-                        "description": "Indexed opening and closing USDC trading fees plus any correlated backstop protocol fee. Excludes the liquidator reward."
+                        "description": "Zero for V2 vault settlements, which currently charge no separate user fee."
                     },
                     "holdTimeMicros": {
                         "type": "integer",
@@ -5372,7 +5586,7 @@
                             "string",
                             "null"
                         ],
-                        "description": "Liquidation mechanism when status is liquidated; otherwise null."
+                        "description": "Liquidation mechanism when status is liquidated. V2 vault liquidations use degen_vault."
                     },
                     "marketId": {
                         "type": "integer",
@@ -5386,7 +5600,7 @@
                     "realizedPnl": {
                         "type": "string",
                         "format": "decimal",
-                        "description": "Terminal closing transaction realized PNL less that transaction's USDC trading fee, matching the trade-complete display. Display this value directly."
+                        "description": "V2 user payout minus the original wager."
                     },
                     "status": {
                         "type": "string",
@@ -5396,6 +5610,166 @@
                         "type": "string",
                         "format": "decimal",
                         "description": "USDC collateral committed when the position opened."
+                    },
+                    "size": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Original filled position size. Direction is represented separately."
+                    },
+                    "entryPrice": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Weighted average price at which the position opened."
+                    },
+                    "exitPrice": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Weighted average price at which the position settled."
+                    }
+                }
+            },
+            "DegenPosition": {
+                "type": "object",
+                "required": [
+                    "positionId",
+                    "address",
+                    "marketId",
+                    "symbol",
+                    "baseAssetId",
+                    "baseAsset",
+                    "size",
+                    "entryPrice",
+                    "wager",
+                    "isolatedBalance",
+                    "effectiveLeverage",
+                    "liquidationPrice",
+                    "unrealizedPnl",
+                    "status",
+                    "openTxHash",
+                    "openedAt",
+                    "updatedAt"
+                ],
+                "properties": {
+                    "address": {
+                        "type": "string"
+                    },
+                    "baseAsset": {
+                        "type": "string"
+                    },
+                    "baseAssetId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "effectiveLeverage": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal"
+                    },
+                    "entryPrice": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal"
+                    },
+                    "isolatedBalance": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Wager plus capped unrealized PNL; zero at or beyond the loss boundary."
+                    },
+                    "liquidationPrice": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Oracle price where the position reaches its 95% wager loss boundary."
+                    },
+                    "marketId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "openTxHash": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Fill transaction observed by this Trading API instance."
+                    },
+                    "openedAt": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64",
+                        "description": "Fill time in Unix microseconds, when observed by this Trading API instance."
+                    },
+                    "positionId": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/DegenPositionStatus"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "unrealizedPnl": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal"
+                    },
+                    "updatedAt": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64",
+                        "description": "Latest oracle update time in Unix microseconds."
+                    },
+                    "wager": {
+                        "type": "string",
+                        "format": "decimal"
+                    }
+                }
+            },
+            "DegenPositionStatus": {
+                "type": "string",
+                "enum": [
+                    "pending_open",
+                    "open",
+                    "pending_close"
+                ]
+            },
+            "DegenPositionsResponse": {
+                "type": "object",
+                "required": [
+                    "positions",
+                    "asOf"
+                ],
+                "properties": {
+                    "asOf": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Server snapshot time in Unix microseconds."
+                    },
+                    "positions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/DegenPosition"
+                        }
                     }
                 }
             },
@@ -5455,6 +5829,18 @@
                     }
                 }
             },
+            "DispatchQuoteResponse": {
+                "type": "object",
+                "required": [
+                    "amount"
+                ],
+                "properties": {
+                    "amount": {
+                        "type": "string",
+                        "description": "Interchain gas payment in base units, encoded as an unsigned decimal string."
+                    }
+                }
+            },
             "ExchangeInfo": {
                 "type": "object",
                 "required": [
@@ -5480,10 +5866,10 @@
                     "chainInfo": {
                         "oneOf": [
                             {
-                                "type": "null"
+                                "$ref": "#/components/schemas/ChainInfo"
                             },
                             {
-                                "$ref": "#/components/schemas/ChainInfo"
+                                "type": "null"
                             }
                         ]
                     },
@@ -6225,10 +6611,10 @@
                     "triggerConditions": {
                         "oneOf": [
                             {
-                                "type": "null"
+                                "$ref": "#/components/schemas/TriggerConditions"
                             },
                             {
-                                "$ref": "#/components/schemas/TriggerConditions"
+                                "type": "null"
                             }
                         ]
                     },
@@ -6273,12 +6659,14 @@
                                 "marketId",
                                 "asset",
                                 "direction",
+                                "size",
+                                "entryPrice",
+                                "exitPrice",
                                 "wager",
                                 "realizedPnl",
                                 "fee",
                                 "status",
                                 "closeReason",
-                                "liquidationType",
                                 "openedTimestampMicros",
                                 "closedTimestampMicros",
                                 "holdTimeMicros",
@@ -6293,7 +6681,7 @@
                                 },
                                 "closeReason": {
                                     "type": "string",
-                                    "description": "Projector-defined terminal reason, such as user_close or backstop_liquidation."
+                                    "description": "Terminal reason. V2 uses user_close, win_cap, timeout, or degen_liquidation."
                                 },
                                 "closedTimestampMicros": {
                                     "type": "integer",
@@ -6309,7 +6697,7 @@
                                 "fee": {
                                     "type": "string",
                                     "format": "decimal",
-                                    "description": "Indexed opening and closing USDC trading fees plus any correlated backstop protocol fee. Excludes the liquidator reward."
+                                    "description": "Zero for V2 vault settlements, which currently charge no separate user fee."
                                 },
                                 "holdTimeMicros": {
                                     "type": "integer",
@@ -6324,7 +6712,7 @@
                                         "string",
                                         "null"
                                     ],
-                                    "description": "Liquidation mechanism when status is liquidated; otherwise null."
+                                    "description": "Liquidation mechanism when status is liquidated. V2 vault liquidations use degen_vault."
                                 },
                                 "marketId": {
                                     "type": "integer",
@@ -6338,7 +6726,7 @@
                                 "realizedPnl": {
                                     "type": "string",
                                     "format": "decimal",
-                                    "description": "Terminal closing transaction realized PNL less that transaction's USDC trading fee, matching the trade-complete display. Display this value directly."
+                                    "description": "V2 user payout minus the original wager."
                                 },
                                 "status": {
                                     "type": "string",
@@ -6348,6 +6736,21 @@
                                     "type": "string",
                                     "format": "decimal",
                                     "description": "USDC collateral committed when the position opened."
+                                },
+                                "size": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "Original filled position size. Direction is represented separately."
+                                },
+                                "entryPrice": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "Weighted average price at which the position opened."
+                                },
+                                "exitPrice": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "Weighted average price at which the position settled."
                                 }
                             }
                         }
@@ -6538,10 +6941,10 @@
                                 "triggerConditions": {
                                     "oneOf": [
                                         {
-                                            "type": "null"
+                                            "$ref": "#/components/schemas/TriggerConditions"
                                         },
                                         {
-                                            "$ref": "#/components/schemas/TriggerConditions"
+                                            "type": "null"
                                         }
                                     ]
                                 },
@@ -6850,11 +7253,11 @@
                                 "borrowLend": {
                                     "oneOf": [
                                         {
-                                            "type": "null"
-                                        },
-                                        {
                                             "$ref": "#/components/schemas/BorrowLendLiquidation",
                                             "description": "`borrow_lend` only, null otherwise"
+                                        },
+                                        {
+                                            "type": "null"
                                         }
                                     ]
                                 },
@@ -7253,20 +7656,20 @@
                     "sl": {
                         "oneOf": [
                             {
-                                "type": "null"
+                                "$ref": "#/components/schemas/TpslLeg"
                             },
                             {
-                                "$ref": "#/components/schemas/TpslLeg"
+                                "type": "null"
                             }
                         ]
                     },
                     "tp": {
                         "oneOf": [
                             {
-                                "type": "null"
+                                "$ref": "#/components/schemas/TpslLeg"
                             },
                             {
-                                "$ref": "#/components/schemas/TpslLeg"
+                                "type": "null"
                             }
                         ]
                     }
@@ -8538,11 +8941,11 @@
                     "borrowLend": {
                         "oneOf": [
                             {
-                                "type": "null"
-                            },
-                            {
                                 "$ref": "#/components/schemas/BorrowLendLiquidation",
                                 "description": "`borrow_lend` only, null otherwise"
+                            },
+                            {
+                                "type": "null"
                             }
                         ]
                     },
@@ -8903,10 +9306,10 @@
                     "depositPolicy": {
                         "oneOf": [
                             {
-                                "type": "null"
+                                "$ref": "#/components/schemas/VaultDepositPolicyResponse"
                             },
                             {
-                                "$ref": "#/components/schemas/VaultDepositPolicyResponse"
+                                "type": "null"
                             }
                         ]
                     },
@@ -9302,10 +9705,10 @@
                     "asset": {
                         "oneOf": [
                             {
-                                "type": "null"
+                                "$ref": "#/components/schemas/WarpRouteAsset"
                             },
                             {
-                                "$ref": "#/components/schemas/WarpRouteAsset"
+                                "type": "null"
                             }
                         ]
                     },
@@ -9406,6 +9809,59 @@
                         "items": {
                             "$ref": "#/components/schemas/WarpRouteResponse"
                         }
+                    }
+                }
+            },
+            "VaultEquitiesResponse": {
+                "type": "object",
+                "required": [
+                    "stateSlot",
+                    "stateUpdatedAt",
+                    "items"
+                ],
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/VaultValuation"
+                        }
+                    },
+                    "stateSlot": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Committed state version every item is read at.",
+                        "minimum": 0
+                    },
+                    "stateUpdatedAt": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Time this cached state collection finished, in Unix microseconds."
+                    }
+                }
+            },
+            "VaultValuation": {
+                "type": "object",
+                "required": [
+                    "vaultAddress",
+                    "totalShares",
+                    "equity"
+                ],
+                "properties": {
+                    "equity": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Equity of the vault account plus its sub-vault accounts at `stateSlot`. Null when the\nvault account is missing or a price it depends on is unavailable. With `totalShares`\nabove zero, `equity / totalShares` is the share price; a share-less vault mints its next\ndeposit at 1 and any residual equity accrues to that depositor."
+                    },
+                    "totalShares": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Shares outstanding at `stateSlot`, including shares queued for withdrawal."
+                    },
+                    "vaultAddress": {
+                        "type": "string"
                     }
                 }
             }

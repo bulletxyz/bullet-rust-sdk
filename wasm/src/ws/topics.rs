@@ -126,6 +126,16 @@ impl WasmTopic {
         }
     }
 
+    /// Create a completed Degen result topic, e.g. `"BTC-USD@degenResults"`.
+    /// @param {string} symbol - The market symbol.
+    /// @returns {Topic}
+    #[wasm_bindgen(js_name = degenResults)]
+    pub fn degen_results(symbol: &str) -> WasmTopic {
+        WasmTopic {
+            inner: SdkTopic::degen_results(symbol).to_string(),
+        }
+    }
+
     /// Create a user order topic, e.g. `"0xabc@user.orders"`.
     /// @param {string} address - The user address.
     /// @returns {Topic}

@@ -21,7 +21,7 @@ import {
   BinanceOrder, Bracket, LeverageBracket,
   BorrowLendPoolResponse, InsuranceAsset, InsuranceBalance,
   ChainInfo, Delegate, ModuleRef, RateLimit, RateParams, RollupConstants,
-  ExchangeInfo, FundingRate, OrderBook,
+  DispatchQuoteResponse, ExchangeInfo, FundingRate, OrderBook,
   PingResponse, PriceTicker, TradingSymbol, Ticker24hr, TimeResponse, Trade,
   LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
 } from '../pkg/node';
@@ -64,6 +64,7 @@ describe('progenitor type wrappers are exported', () => {
     'BinanceOrder', 'Bracket', 'LeverageBracket',
     'BorrowLendPoolResponse', 'InsuranceAsset', 'InsuranceBalance',
     'ChainInfo', 'Delegate', 'ModuleRef', 'RateLimit', 'RateParams', 'RollupConstants',
+    'DispatchQuoteResponse',
     'ExchangeInfo', 'FundingRate', 'OrderBook',
     'PingResponse', 'PriceTicker', 'TradingSymbol', 'Ticker24hr', 'TimeResponse', 'Trade',
     'LedgerEvent', 'SubmitTxRequest', 'SubmitTxResponse', 'TxReceipt',
@@ -75,6 +76,7 @@ describe('progenitor type wrappers are exported', () => {
     BinanceOrder, Bracket, LeverageBracket,
     BorrowLendPoolResponse, InsuranceAsset, InsuranceBalance,
     ChainInfo, Delegate, ModuleRef, RateLimit, RateParams, RollupConstants,
+    DispatchQuoteResponse,
     ExchangeInfo, FundingRate, OrderBook,
     PingResponse, PriceTicker, TradingSymbol, Ticker24hr, TimeResponse, Trade,
     LedgerEvent, SubmitTxRequest, SubmitTxResponse, TxReceipt,
@@ -84,6 +86,16 @@ describe('progenitor type wrappers are exported', () => {
     const Ctor = exportedClasses[name];
     expect(Ctor).toBeDefined();
     expect(typeof Ctor).toBe('function');
+  });
+});
+
+describe('dispatch quote precision', () => {
+  test('amount remains a decimal string', () => {
+    const amount = '340282366920938463463374607431768211455';
+    const quote = DispatchQuoteResponse.fromJson(JSON.stringify({ amount }));
+
+    expect(quote.amount).toBe(amount);
+    expect(typeof quote.amount).toBe('string');
   });
 });
 

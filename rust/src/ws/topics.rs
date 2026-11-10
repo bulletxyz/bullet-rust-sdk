@@ -87,6 +87,9 @@ pub enum Topic {
     /// Liquidation order stream for a symbol.
     ForceOrder { symbol: String },
 
+    /// Completed Degen result stream for a symbol.
+    DegenResults { symbol: String },
+
     /// User order stream for an address.
     UserOrders { address: String },
 
@@ -154,6 +157,13 @@ impl Topic {
         }
     }
 
+    /// Subscribe to completed Degen results for a symbol.
+    pub fn degen_results(symbol: impl Into<String>) -> Self {
+        Self::DegenResults {
+            symbol: symbol.into(),
+        }
+    }
+
     /// Subscribe to user order updates for an address.
     pub fn user_orders(address: impl Into<String>) -> Self {
         Self::UserOrders {
@@ -203,6 +213,7 @@ impl fmt::Display for Topic {
             Topic::MarkPrice { symbol } => write!(f, "{symbol}@markPrice"),
             Topic::Kline { symbol, interval } => write!(f, "{symbol}@kline_{}", interval.as_str()),
             Topic::ForceOrder { symbol } => write!(f, "{symbol}@forceOrder"),
+            Topic::DegenResults { symbol } => write!(f, "{symbol}@degenResults"),
             Topic::UserOrders { address } => write!(f, "{address}@user.orders"),
             Topic::UserDegenPositions { address } => {
                 write!(f, "{address}@user.degenPositions")
@@ -257,6 +268,7 @@ mod tests {
                 "BTC-USD@kline_1d",
             ),
             (Topic::force_order("BTC-USD"), "BTC-USD@forceOrder"),
+            (Topic::degen_results("BTC-USD"), "BTC-USD@degenResults"),
             (Topic::user_orders("0xabc"), "0xabc@user.orders"),
             (
                 Topic::user_degen_positions("0xabc"),

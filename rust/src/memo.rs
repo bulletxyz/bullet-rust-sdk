@@ -52,6 +52,16 @@ pub fn encode_fast_bridge_memo(
         Some(index) => Some(index as u8), // checked above
         None => None,
     };
+    // These decode, but the exchange refuses them to anyone but the protocol admin, so a
+    // depositor's memo naming one would only strand the deposit.
+    if matches!(
+        balance,
+        BalanceBucket::UsdcBorrowLendPool | BalanceBucket::UsdcPnlPool
+    ) {
+        return Err(SDKError::InvalidMemo(format!(
+            "{balance:?} is not a depositor destination"
+        )));
+    }
     let bytes = encode(&Memo::V1(MemoV1 {
         to_address,
         to: TransferEndpoint {
@@ -64,8 +74,11 @@ pub fn encode_fast_bridge_memo(
     // without anyone being told. Asking the real decoder — rather than restating its
     // rules, such as today's rejection of the zero address — is what keeps that
     // impossible when a future rule is added on the decoding side only.
-    decode(&bytes)
-        .map_err(|_| SDKError::InvalidMemo(format!("{to_address} is not a usable destination")))?;
+    decode(&bytes).map_err(|_| {
+        SDKError::InvalidMemo(format!(
+            "{to_address} {balance:?} is not a usable destination"
+        ))
+    })?;
     Ok(bytes)
 }
 
@@ -118,9 +131,9 @@ mod tests {
         ));
     }
 
-    /// Base58 for 32 zero bytes: parses as an address, but the shared decoder
-    /// refuses it, so encoding it would hand back a memo the operator discards in
-    /// favour of paying the depositor.
+    /// The zero address (base58 for 32 zero bytes) parses but the shared decoder refuses
+    /// it, and the exchange refuses a pool bucket from a depositor, so encoding either
+    /// would hand back a memo that cannot pay the named recipient.
     #[test]
     fn rejects_a_destination_the_shared_decoder_would_refuse() {
         const ZERO: &str = "11111111111111111111111111111111";
@@ -128,10 +141,19 @@ mod tests {
             Address::from_str(ZERO).is_ok(),
             "the address parses; only the memo rule rejects it"
         );
-        assert!(matches!(
-            encode_fast_bridge_memo(ZERO, None, BalanceBucket::Bank),
-            Err(SDKError::InvalidMemo(_))
-        ));
+        for (address, balance) in [
+            (ZERO, BalanceBucket::Bank),
+            (ADDRESS, BalanceBucket::UsdcBorrowLendPool),
+            (ADDRESS, BalanceBucket::UsdcPnlPool),
+        ] {
+            assert!(
+                matches!(
+                    encode_fast_bridge_memo(address, None, balance),
+                    Err(SDKError::InvalidMemo(_))
+                ),
+                "{balance:?}"
+            );
+        }
     }
 
     #[test]

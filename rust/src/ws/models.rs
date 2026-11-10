@@ -6,6 +6,7 @@
 pub use bullet_ws_interface::{
     ListSubscriptionsMessage, MethodResult, OrderResultMessage, OrderResultPayload, TxStatus,
 };
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 /// One completed Degen position, shared with the generated REST history response.
@@ -92,6 +93,54 @@ pub struct DegenPositionCompletedMessage {
     pub position: CompletedDegenPosition,
 }
 
+/// Event type of a V2 Degen position invalidation message.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DegenPositionsChangedEventType {
+    #[serde(rename = "degenPositionsChanged")]
+    DegenPositionsChanged,
+}
+
+/// User-scoped signal to refresh the current V2 Degen position snapshot.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DegenPositionsChangedMessage {
+    #[serde(rename = "e")]
+    pub event_type: DegenPositionsChangedEventType,
+    #[serde(rename = "E")]
+    pub event_time: u64,
+    pub sequence: String,
+    pub market_id: u16,
+    pub symbol: String,
+    pub base_asset_id: u16,
+    pub base_asset: String,
+    pub change: String,
+}
+
+/// Event type of a market-scoped Degen result message.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DegenResultEventType {
+    #[serde(rename = "degenResult")]
+    DegenResult,
+}
+
+/// Anonymous completed Degen result for chart markers and market statistics.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DegenResultMessage {
+    #[serde(rename = "e")]
+    pub event_type: DegenResultEventType,
+    #[serde(rename = "E")]
+    pub event_time: u64,
+    pub sequence: String,
+    pub opened_timestamp_micros: i64,
+    pub closed_timestamp_micros: i64,
+    pub size: Decimal,
+    pub entry_price: Decimal,
+    pub exit_price: Decimal,
+    pub realized_pnl: Decimal,
+    pub close_reason: String,
+}
+
 /// Tagged messages from the server (have an "e" event type field)
 #[derive(Serialize, Deserialize, Clone, Debug, strum::AsRefStr)]
 #[strum(serialize_all = "camelCase")]
@@ -138,7 +187,9 @@ pub enum ServerMessage {
     ForceOrder(ForceOrderMessage),
     OrderUpdate(OrderUpdateMessage),
     MarketStatus(MarketStatusMessage),
+    DegenPositionsChanged(DegenPositionsChangedMessage),
     DegenPositionCompleted(DegenPositionCompletedMessage),
+    DegenResult(DegenResultMessage),
 
     // Untagged error response (e.g., order errors without "e" field)
     Error(ErrorMessage),
@@ -233,6 +284,9 @@ mod tests {
                 "marketId": 1,
                 "asset": "BTC",
                 "direction": "LONG",
+                "size": "0.01",
+                "entryPrice": "80000",
+                "exitPrice": "78353.2",
                 "wager": "10.5",
                 "realizedPnl": "-2.25",
                 "fee": "0.01",
@@ -254,6 +308,9 @@ mod tests {
         assert_eq!(completed.sequence, "18446744073709551615");
         assert_eq!(completed.position.id, "open-tx#7");
         assert_eq!(completed.position.direction, "LONG");
+        assert_eq!(completed.position.size.to_string(), "0.01");
+        assert_eq!(completed.position.entry_price.to_string(), "80000");
+        assert_eq!(completed.position.exit_price.to_string(), "78353.2");
         assert_eq!(completed.position.wager.to_string(), "10.5");
         assert_eq!(completed.position.realized_pnl.to_string(), "-2.25");
         assert_eq!(
@@ -275,6 +332,9 @@ mod tests {
                 market_id: 1,
                 asset: "BTC".to_string(),
                 direction: "SHORT".to_string(),
+                size: "0.01".parse().unwrap(),
+                entry_price: "80000".parse().unwrap(),
+                exit_price: "78353.2".parse().unwrap(),
                 wager: "10".parse().unwrap(),
                 realized_pnl: "2".parse().unwrap(),
                 fee: "0.01".parse().unwrap(),
@@ -291,10 +351,75 @@ mod tests {
         let value = serde_json::to_value(message).unwrap();
         assert_eq!(value["e"], "degenPositionCompleted");
         assert_eq!(value["sequence"], "9");
+        assert_eq!(value["position"]["size"], "0.01");
+        assert_eq!(value["position"]["entryPrice"], "80000");
+        assert_eq!(value["position"]["exitPrice"], "78353.2");
         assert_eq!(value["position"]["wager"], "10");
         assert_eq!(value["position"]["realizedPnl"], "2");
         assert_eq!(value["position"]["fee"], "0.01");
         assert!(value["position"]["liquidationType"].is_null());
+    }
+
+    #[test]
+    fn degen_result_parses_chart_and_stats_fields() {
+        let json = r#"{
+            "e": "degenResult",
+            "E": 1706745600000100,
+            "sequence": "42",
+            "openedTimestampMicros": 1706745500000000,
+            "closedTimestampMicros": 1706745600000000,
+            "size": "0.01",
+            "entryPrice": "80000",
+            "exitPrice": "78353.2",
+            "realizedPnl": "-2.25",
+            "closeReason": "degen_liquidation"
+        }"#;
+
+        let message: ServerMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(message.as_ref(), "degenResult");
+        let ServerMessage::DegenResult(result) = message else {
+            panic!("expected Degen result, got {message:?}");
+        };
+        assert_eq!(result.sequence, "42");
+        assert_eq!(result.opened_timestamp_micros, 1_706_745_500_000_000);
+        assert_eq!(result.closed_timestamp_micros, 1_706_745_600_000_000);
+        assert_eq!(result.size.to_string(), "0.01");
+        assert_eq!(result.entry_price.to_string(), "80000");
+        assert_eq!(result.exit_price.to_string(), "78353.2");
+        assert_eq!(result.realized_pnl.to_string(), "-2.25");
+        assert_eq!(result.close_reason, "degen_liquidation");
+
+        let value = serde_json::to_value(result).unwrap();
+        assert_eq!(value["size"], "0.01");
+        assert_eq!(value["entryPrice"], "80000");
+        assert_eq!(value["exitPrice"], "78353.2");
+        assert_eq!(value["realizedPnl"], "-2.25");
+    }
+
+    #[test]
+    fn degen_positions_changed_parses_live_snapshot_invalidation() {
+        let json = r#"{
+            "e": "degenPositionsChanged",
+            "E": 1706745600000000,
+            "sequence": "18446744073709551615",
+            "marketId": 1,
+            "symbol": "BTC-USD",
+            "baseAssetId": 2,
+            "baseAsset": "BTC",
+            "change": "open"
+        }"#;
+
+        let message: ServerMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(message.as_ref(), "degenPositionsChanged");
+        let ServerMessage::DegenPositionsChanged(changed) = message else {
+            panic!("expected Degen position invalidation, got {message:?}");
+        };
+        assert_eq!(changed.sequence, "18446744073709551615");
+        assert_eq!(changed.market_id, 1);
+        assert_eq!(changed.symbol, "BTC-USD");
+        assert_eq!(changed.base_asset_id, 2);
+        assert_eq!(changed.base_asset, "BTC");
+        assert_eq!(changed.change, "open");
     }
 
     /// The `e` tag is a unit enum, so a message carrying the same field names

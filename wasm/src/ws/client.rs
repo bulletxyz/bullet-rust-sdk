@@ -36,7 +36,8 @@ pub struct WasmServerMessage {
 #[wasm_bindgen(js_class = ServerMessage)]
 impl WasmServerMessage {
     /// The message type discriminant, e.g. `"depthUpdate"`, `"aggTrade"`,
-    /// `"degenPositionCompleted"`, `"status"`, `"error"`, `"unknown"`, etc.
+    /// `"degenResult"`, `"degenPositionsChanged"`, `"degenPositionCompleted"`, `"status"`,
+    /// `"error"`, etc.
     /// @returns {string}
     #[wasm_bindgen(getter, js_name = type)]
     pub fn msg_type(&self) -> String {
