@@ -24,10 +24,6 @@
         {
             "url": "https://tradingapi.testnet.bullet.xyz",
             "description": "Testnet"
-        },
-        {
-            "url": "https://tradingapi.staging.bullet.xyz",
-            "description": "Staging"
         }
     ],
     "paths": {
@@ -359,7 +355,8 @@
                         "required": true,
                         "schema": {
                             "type": "integer",
-                            "format": "uint32"
+                            "format": "uint32",
+                            "minimum": 0
                         }
                     },
                     {
@@ -464,6 +461,287 @@
                     },
                     "503": {
                         "description": "No warp-route snapshot is available",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/cmc/contracts": {
+            "get": {
+                "tags": [
+                    "Listings"
+                ],
+                "summary": "Perpetual contracts for CoinMarketCap, with contract specs merged in.",
+                "operationId": "cmc_contracts",
+                "responses": {
+                    "200": {
+                        "description": "Perpetual contracts",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/CmcContract"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream snapshot unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Historical data unavailable or stale",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/cmc/orderbook/{ticker_id}": {
+            "get": {
+                "tags": [
+                    "Listings"
+                ],
+                "summary": "Order book for one CoinMarketCap contract.",
+                "operationId": "cmc_orderbook",
+                "parameters": [
+                    {
+                        "name": "ticker_id",
+                        "in": "path",
+                        "description": "Contract id from `/contracts`, e.g. `BTC-PERP`",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "depth",
+                        "in": "query",
+                        "description": "Total levels across both sides (100 = 50 each); omit or 0 for the full book.",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int32",
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Order book",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListingOrderbook"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Unknown ticker_id",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "No orderbook snapshot yet",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/coingecko/contracts": {
+            "get": {
+                "tags": [
+                    "Listings"
+                ],
+                "summary": "Perpetual contracts for CoinGecko, with contract specs merged in.",
+                "operationId": "coingecko_contracts",
+                "responses": {
+                    "200": {
+                        "description": "Perpetual contracts",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/CoinGeckoContract"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream snapshot unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Historical data unavailable or stale",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/coingecko/orderbook": {
+            "get": {
+                "tags": [
+                    "Listings"
+                ],
+                "summary": "Order book for one CoinGecko contract.",
+                "operationId": "coingecko_orderbook",
+                "parameters": [
+                    {
+                        "name": "ticker_id",
+                        "in": "query",
+                        "description": "Contract id from `/contracts`, e.g. `BTC-PERP`.",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "depth",
+                        "in": "query",
+                        "description": "Total levels across both sides (100 = 50 each); omit or 0 for the full book.",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "int32",
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Order book",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListingOrderbook"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Missing or invalid query",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Unknown ticker_id",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "No orderbook snapshot yet",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/degenConfig": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Live public Degen presentation configuration. Read from the rollup on every request.",
+                "operationId": "degen_config",
+                "responses": {
+                    "200": {
+                        "description": "Live Degen configuration",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DegenConfigResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream state unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Rollup service unavailable",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -701,7 +979,7 @@
                     "API"
                 ],
                 "summary": "Submit Solana off-chain signed transaction",
-                "description": "Accepts the JSON envelope produced by the SDK's `solana` / `solanaSimple`\nauthenticator (Phantom, Solflare, Ledger), where the body is signed with\na Solana off-chain message signature rather than a Sovereign credential.\nThe rollup verifies the signature and constructs the inner tx; this route\nis a pass-through proxy and intentionally skips the borsh tx validator; the\ncall whitelist still applies. A `User/DegenTrade` open belongs on\n`/api/v1/solanaOffchainTxDegen`, and this route refuses it.",
+                "description": "Accepts the envelope produced by the SDK's Solana off-chain authenticators (Phantom,\nSolflare, Ledger, multisig), where the body is signed with a Solana off-chain message\nsignature rather than a Sovereign credential. Every envelope variant is verified here\n(chain hash, signatures, payload shape, call whitelist) before the rollup sees it. A\n`User/DegenTrade` open belongs on `/api/v1/solanaOffchainTxDegen`, and this\nroute refuses it.",
                 "operationId": "submit_solana_offchain_tx",
                 "requestBody": {
                     "content": {
@@ -1100,6 +1378,57 @@
                     },
                     "503": {
                         "description": "Vault pricing unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/vaultEquities": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Vault Equities\nEvery vault's equity and share supply at one archival slot, for pricing shares. Returns 503\nwhen the cached state collection is over 90 seconds old.",
+                "operationId": "vault_equities",
+                "responses": {
+                    "200": {
+                        "description": "Equity and total shares of every vault",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VaultEquitiesResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "State snapshot stale",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1547,6 +1876,7 @@
                     "Account"
                 ],
                 "summary": "User Commission Rate",
+                "description": "The account's effective maker and taker fees on one symbol. The funding spread is the same for\nevery account: see `GET /fapi/v1/fundingInfo`.",
                 "operationId": "commission_rate",
                 "parameters": [
                     {
@@ -1568,7 +1898,54 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "User commission rate"
+                        "description": "User commission rate",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CommissionRate"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Market not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1825,7 +2202,7 @@
                 "tags": [
                     "Market-Data"
                 ],
-                "summary": "Funding rate metadata (caps, intervals) per symbol",
+                "summary": "Funding rate metadata (caps, interval, multiplier, spread) per symbol",
                 "operationId": "funding_info",
                 "parameters": [
                     {
@@ -3373,6 +3750,7 @@
                     "User Data (Beta)"
                 ],
                 "summary": "User Funding Payment History",
+                "description": "One row per nonzero funding payment, settled hourly per position: the gross payment and the\nfunding spread charged on it. The balance moves by `fundingApplied - fee`.",
                 "operationId": "user_funding_payments",
                 "parameters": [
                     {
@@ -4504,57 +4882,6 @@
                     }
                 }
             }
-        },
-        "/api/v1/vaultEquities": {
-            "get": {
-                "tags": [
-                    "API"
-                ],
-                "summary": "Vault Equities\nEvery vault's equity and share supply at one archival slot, for pricing shares. Returns 503\nwhen the cached state collection is over 90 seconds old.",
-                "operationId": "vault_equities",
-                "responses": {
-                    "200": {
-                        "description": "Equity and total shares of every vault",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/VaultEquitiesResponse"
-                                }
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "502": {
-                        "description": "Upstream service unavailable",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "503": {
-                        "description": "State snapshot stale",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
     },
     "components": {
@@ -4588,17 +4915,20 @@
                     },
                     "availableBalance": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "`totalMarginBalance - totalInitialMargin`"
                     },
                     "feeDiscountBps": {
                         "type": "integer",
                         "format": "int32",
-                        "minimum": 0
+                        "minimum": 0,
+                        "description": "discount on trading fees, in bps of the fee (not of notional)"
                     },
                     "feeTier": {
                         "type": "integer",
                         "format": "int32",
-                        "minimum": 0
+                        "minimum": 0,
+                        "description": "index into `makerFeeBps` / `takerFeeBps` in `GET /fapi/v1/exchangeInfo`; the\naccount's effective rates are in `GET /fapi/v1/commissionRate`"
                     },
                     "marginDiscount": {
                         "type": "string"
@@ -4608,11 +4938,13 @@
                             "string",
                             "null"
                         ],
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "Fraction every asset can move against the account's net cross exposure before\nliquidation; `null` without cross positions or when no move liquidates the account."
                     },
                     "maxWithdrawAmount": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "sum of each cross asset's withdrawable amount, valued in USD at oracle prices"
                     },
                     "positions": {
                         "type": "array",
@@ -4622,39 +4954,48 @@
                     },
                     "totalCrossUnPnl": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "same as `totalUnrealizedProfit`"
                     },
                     "totalCrossWalletBalance": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "same as `totalWalletBalance`"
                     },
                     "totalInitialMargin": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "cross perp initial margin requirement in USD, positions and open orders"
                     },
                     "totalMaintMargin": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "cross perp maintenance margin requirement in USD"
                     },
                     "totalMarginBalance": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "cross equity in USD: `totalWalletBalance + totalUnrealizedProfit`"
                     },
                     "totalOpenOrderInitialMargin": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "initial margin held by cross open orders"
                     },
                     "totalPositionInitialMargin": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "initial margin held by cross positions"
                     },
                     "totalUnrealizedProfit": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "cross perp unrealized PnL at mark prices"
                     },
                     "totalWalletBalance": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "cross collateral in USD at oracle prices, plus trading credits and unsettled perp\nprofit, excluding unrealized PnL. USDC counts at its oracle price, so this drifts with\nit: for asset amounts read `assets[].walletBalance`"
                     }
                 }
             },
@@ -4681,7 +5022,8 @@
                     },
                     "walletBalance": {
                         "type": "string",
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "cross balance net of liabilities, in units of the asset"
                     }
                 }
             },
@@ -4770,7 +5112,8 @@
                             "string",
                             "null"
                         ],
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "Fraction every asset can move against the account's net cross exposure before\nliquidation; `null` without cross positions or when no move liquidates the account."
                     },
                     "tradingCredits": {
                         "type": "string",
@@ -5525,6 +5868,282 @@
                     }
                 }
             },
+            "CmcContract": {
+                "type": "object",
+                "description": "A CoinMarketCap `/contracts` entry, with `/contract_specs` merged in as the spec allows.",
+                "required": [
+                    "ticker_id",
+                    "base_currency",
+                    "quote_currency",
+                    "last_price",
+                    "base_volume",
+                    "quote_volume",
+                    "USD_volume",
+                    "bid",
+                    "ask",
+                    "high",
+                    "low",
+                    "product_type",
+                    "open_interest",
+                    "open_interest_usd",
+                    "open_interest_methodology",
+                    "index_price",
+                    "funding_rate",
+                    "next_funding_rate",
+                    "next_funding_rate_timestamp",
+                    "contract_type",
+                    "contract_price",
+                    "contract_price_currency"
+                ],
+                "properties": {
+                    "USD_volume": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "USDT taken at par for crypto perps, so currently ~9.5bps high: the oracle divides\nUSDT/USD out of every asset price and keeps only the quotient. Exact for RWA perps."
+                    },
+                    "ask": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "base_currency": {
+                        "type": "string"
+                    },
+                    "base_volume": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Rolling 24h volume in the base asset."
+                    },
+                    "bid": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "contract_price": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Price of one contract, which is one unit of the base asset."
+                    },
+                    "contract_price_currency": {
+                        "type": "string"
+                    },
+                    "contract_type": {
+                        "type": "string"
+                    },
+                    "funding_rate": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Estimated rate charged at the next hourly settlement."
+                    },
+                    "high": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "index_price": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "last_price": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "low": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "next_funding_rate": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "next_funding_rate_timestamp": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Next funding settlement in Unix milliseconds."
+                    },
+                    "open_interest": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Longs plus shorts, in the base asset."
+                    },
+                    "open_interest_methodology": {
+                        "type": "string"
+                    },
+                    "open_interest_usd": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Longs plus shorts, at the mark price."
+                    },
+                    "product_type": {
+                        "type": "string"
+                    },
+                    "quote_currency": {
+                        "type": "string"
+                    },
+                    "quote_volume": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Rolling 24h volume in the quote currency."
+                    },
+                    "ticker_id": {
+                        "type": "string"
+                    }
+                }
+            },
+            "CoinGeckoContract": {
+                "type": "object",
+                "description": "A CoinGecko `/contracts` entry, with `/contract_specs` merged in as the spec allows.",
+                "required": [
+                    "ticker_id",
+                    "base_currency",
+                    "target_currency",
+                    "last_price",
+                    "base_volume",
+                    "target_volume",
+                    "bid",
+                    "ask",
+                    "high",
+                    "low",
+                    "product_type",
+                    "open_interest",
+                    "open_interest_usd",
+                    "long_open_interest",
+                    "long_open_interest_usd",
+                    "short_open_interest",
+                    "short_open_interest_usd",
+                    "index_price",
+                    "index_currency",
+                    "funding_rate",
+                    "funding_interval_minutes",
+                    "next_funding_rate",
+                    "next_funding_rate_timestamp",
+                    "contract_type",
+                    "contract_price_currency"
+                ],
+                "properties": {
+                    "ask": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "base_currency": {
+                        "type": "string"
+                    },
+                    "base_volume": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Rolling 24h volume in the base asset."
+                    },
+                    "bid": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "contract_price_currency": {
+                        "type": "string"
+                    },
+                    "contract_type": {
+                        "type": "string"
+                    },
+                    "funding_interval_minutes": {
+                        "type": "integer",
+                        "format": "int32",
+                        "minimum": 0
+                    },
+                    "funding_rate": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Estimated rate charged at the next hourly settlement."
+                    },
+                    "high": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "index_currency": {
+                        "type": "string"
+                    },
+                    "index_price": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "last_price": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "long_open_interest": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Half of `open_interest`; every long has a matching short."
+                    },
+                    "long_open_interest_usd": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "low": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "next_funding_rate": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "next_funding_rate_timestamp": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Next funding settlement in Unix seconds."
+                    },
+                    "open_interest": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Longs plus shorts, in the base asset."
+                    },
+                    "open_interest_usd": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Longs plus shorts, at the mark price."
+                    },
+                    "product_type": {
+                        "type": "string"
+                    },
+                    "short_open_interest": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "short_open_interest_usd": {
+                        "type": "string",
+                        "format": "decimal"
+                    },
+                    "target_currency": {
+                        "type": "string"
+                    },
+                    "target_volume": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Rolling 24h volume in the target (quote) currency."
+                    },
+                    "ticker_id": {
+                        "type": "string"
+                    }
+                }
+            },
+            "CommissionRate": {
+                "type": "object",
+                "required": [
+                    "symbol",
+                    "makerCommissionRate",
+                    "takerCommissionRate"
+                ],
+                "properties": {
+                    "makerCommissionRate": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "fraction of fill notional at the account's fee tier, after its fee discount; negative is a\nrebate, which the discount doesn't reduce"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "takerCommissionRate": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "fraction of fill notional at the account's fee tier, after its fee discount. Against a\nmaker earning a rebate the discount applies to the fee net of that rebate, so the fill\ncosts slightly more"
+                    }
+                }
+            },
             "CompletedDegenPosition": {
                 "type": "object",
                 "required": [
@@ -5568,6 +6187,16 @@
                         "type": "string",
                         "description": "LONG or SHORT, derived from the opening side."
                     },
+                    "entryPrice": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Weighted average price at which the position opened."
+                    },
+                    "exitPrice": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Weighted average price at which the position settled."
+                    },
                     "fee": {
                         "type": "string",
                         "format": "decimal",
@@ -5602,6 +6231,11 @@
                         "format": "decimal",
                         "description": "V2 user payout minus the original wager."
                     },
+                    "size": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Original filled position size. Direction is represented separately."
+                    },
                     "status": {
                         "type": "string",
                         "description": "Terminal lifecycle status: closed or liquidated."
@@ -5610,23 +6244,116 @@
                         "type": "string",
                         "format": "decimal",
                         "description": "USDC collateral committed when the position opened."
-                    },
-                    "size": {
-                        "type": "string",
-                        "format": "decimal",
-                        "description": "Original filled position size. Direction is represented separately."
-                    },
-                    "entryPrice": {
-                        "type": "string",
-                        "format": "decimal",
-                        "description": "Weighted average price at which the position opened."
-                    },
-                    "exitPrice": {
-                        "type": "string",
-                        "format": "decimal",
-                        "description": "Weighted average price at which the position settled."
                     }
                 }
+            },
+            "DegenConfigResponse": {
+                "type": "object",
+                "required": [
+                    "closeFeeBps",
+                    "runDelayRuns",
+                    "entryExpiryRuns",
+                    "timeoutRuns",
+                    "winBonusBps",
+                    "maxMargin",
+                    "flowWindowRuns",
+                    "maxFlow",
+                    "minFlow",
+                    "flowLossThreshold",
+                    "flowRecoveryBps",
+                    "markets",
+                    "asOf"
+                ],
+                "properties": {
+                    "asOf": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Server snapshot time in Unix microseconds."
+                    },
+                    "closeFeeBps": {
+                        "type": "string",
+                        "description": "Fee every settlement pays, in basis points of the entry notional, as a decimal string. A\nposition is liquidated once its wager no longer covers it and then pays nothing back."
+                    },
+                    "entryExpiryRuns": {
+                        "type": "string",
+                        "description": "Eligible-entry expiry in oracle runs, not seconds. Decimal-encoded u64."
+                    },
+                    "flowLossThreshold": {
+                        "type": "string",
+                        "description": "Vault loss in one flow window, in USDC as a decimal string, past which the next window's\ncap halves."
+                    },
+                    "flowRecoveryBps": {
+                        "type": "integer",
+                        "format": "int32",
+                        "description": "What the cap regains after any other window, in basis points of `maxFlow`.",
+                        "minimum": 0
+                    },
+                    "flowWindowRuns": {
+                        "type": "string",
+                        "description": "Length of a flow window in oracle runs, not seconds. Decimal-encoded u64."
+                    },
+                    "markets": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/DegenMarket"
+                        },
+                        "description": "Every market with a Degen book, in market-id order. A market is absent until its Degen\nvault takes its first deposit, or while this server does not know it; do not offer a Degen\nopen on it."
+                    },
+                    "maxFlow": {
+                        "type": "string",
+                        "description": "Most wager a market fills per flow window, both directions together, in USDC, as a decimal\nstring. \"0\" means no cap. The cap in force can be lower after a window the vault lost in."
+                    },
+                    "maxMargin": {
+                        "type": "string",
+                        "description": "Largest wager one open may carry, in USDC, as a decimal string. \"0\" means no maximum."
+                    },
+                    "minFlow": {
+                        "type": "string",
+                        "description": "Lowest the cap in force can fall to, in USDC, as a decimal string."
+                    },
+                    "runDelayRuns": {
+                        "type": "string",
+                        "description": "Queued-action delay in oracle runs, not seconds. Decimal-encoded u64."
+                    },
+                    "timeoutRuns": {
+                        "type": "string",
+                        "description": "Position timeout in oracle runs, not seconds. Decimal-encoded u64."
+                    },
+                    "winBonusBps": {
+                        "type": "integer",
+                        "format": "int32",
+                        "description": "Configured maximum win bonus in basis points, not a guaranteed payout or available market bonus-pool funds.",
+                        "minimum": 0
+                    }
+                }
+            },
+            "DegenMarket": {
+                "type": "object",
+                "required": [
+                    "marketId",
+                    "symbol",
+                    "status"
+                ],
+                "properties": {
+                    "marketId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/DegenMarketState"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    }
+                }
+            },
+            "DegenMarketState": {
+                "type": "string",
+                "enum": [
+                    "on",
+                    "close_only"
+                ]
             },
             "DegenPosition": {
                 "type": "object",
@@ -5640,6 +6367,7 @@
                     "size",
                     "entryPrice",
                     "wager",
+                    "creditMargin",
                     "isolatedBalance",
                     "effectiveLeverage",
                     "liquidationPrice",
@@ -5661,6 +6389,11 @@
                         "format": "uint16",
                         "minimum": 0
                     },
+                    "creditMargin": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Part of the wager funded with trading credits; returned as credits unless lost."
+                    },
                     "effectiveLeverage": {
                         "type": [
                             "string",
@@ -5681,7 +6414,7 @@
                             "null"
                         ],
                         "format": "decimal",
-                        "description": "Wager plus capped unrealized PNL; zero at or beyond the loss boundary."
+                        "description": "Wager plus unrealized PNL and available win bonus; zero at the loss boundary."
                     },
                     "liquidationPrice": {
                         "type": [
@@ -5689,7 +6422,7 @@
                             "null"
                         ],
                         "format": "decimal",
-                        "description": "Oracle price where the position reaches its 95% wager loss boundary."
+                        "description": "Oracle price at the loss boundary, where the wager only covers the live close fee."
                     },
                     "marketId": {
                         "type": "integer",
@@ -5729,7 +6462,8 @@
                             "string",
                             "null"
                         ],
-                        "format": "decimal"
+                        "format": "decimal",
+                        "description": "Capped price result minus the close fee: what a close would pay now, less the wager."
                     },
                     "updatedAt": {
                         "type": [
@@ -5737,7 +6471,7 @@
                             "null"
                         ],
                         "format": "int64",
-                        "description": "Latest oracle update time in Unix microseconds."
+                        "description": "Publish time, in Unix microseconds, of the Degen price the position is valued at."
                     },
                     "wager": {
                         "type": "string",
@@ -6043,7 +6777,9 @@
                     "symbol",
                     "adjustedFundingRateCap",
                     "adjustedFundingRateFloor",
-                    "fundingIntervalHours"
+                    "fundingIntervalHours",
+                    "fundingMultiplier",
+                    "fundingSpreadRate"
                 ],
                 "properties": {
                     "adjustedFundingRateCap": {
@@ -6061,8 +6797,18 @@
                         "format": "int32",
                         "minimum": 0
                     },
+                    "fundingMultiplier": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "configured scale on an RWA perp's raw rate (1 for other markets); every published rate\nand cap already includes it"
+                    },
                     "symbol": {
                         "type": "string"
+                    },
+                    "fundingSpreadRate": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "funding spread, charged on each side of every funding payment: payers pay `1 + rate`\ntimes the payment and receivers get `1 - rate` times it; published rates are gross of it"
                     }
                 }
             },
@@ -6419,6 +7165,57 @@
                     "borrow_lend"
                 ]
             },
+            "ListingOrderbook": {
+                "type": "object",
+                "description": "Order book for one contract; same shape for both aggregators.",
+                "required": [
+                    "ticker_id",
+                    "timestamp",
+                    "bids",
+                    "asks"
+                ],
+                "properties": {
+                    "asks": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": false,
+                            "prefixItems": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "bids": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": false,
+                            "prefixItems": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "description": "`[price, quantity]`, best first."
+                    },
+                    "ticker_id": {
+                        "type": "string"
+                    },
+                    "timestamp": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Sequencer time of the book in Unix milliseconds."
+                    }
+                }
+            },
             "ModuleRef": {
                 "type": "object",
                 "description": "Reference to a module",
@@ -6694,6 +7491,16 @@
                                     "type": "string",
                                     "description": "LONG or SHORT, derived from the opening side."
                                 },
+                                "entryPrice": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "Weighted average price at which the position opened."
+                                },
+                                "exitPrice": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "Weighted average price at which the position settled."
+                                },
                                 "fee": {
                                     "type": "string",
                                     "format": "decimal",
@@ -6728,6 +7535,11 @@
                                     "format": "decimal",
                                     "description": "V2 user payout minus the original wager."
                                 },
+                                "size": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "Original filled position size. Direction is represented separately."
+                                },
                                 "status": {
                                     "type": "string",
                                     "description": "Terminal lifecycle status: closed or liquidated."
@@ -6736,21 +7548,6 @@
                                     "type": "string",
                                     "format": "decimal",
                                     "description": "USDC collateral committed when the position opened."
-                                },
-                                "size": {
-                                    "type": "string",
-                                    "format": "decimal",
-                                    "description": "Original filled position size. Direction is represented separately."
-                                },
-                                "entryPrice": {
-                                    "type": "string",
-                                    "format": "decimal",
-                                    "description": "Weighted average price at which the position opened."
-                                },
-                                "exitPrice": {
-                                    "type": "string",
-                                    "format": "decimal",
-                                    "description": "Weighted average price at which the position settled."
                                 }
                             }
                         }
@@ -9565,6 +10362,33 @@
                     }
                 }
             },
+            "VaultEquitiesResponse": {
+                "type": "object",
+                "required": [
+                    "stateSlot",
+                    "stateUpdatedAt",
+                    "items"
+                ],
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/VaultValuation"
+                        }
+                    },
+                    "stateSlot": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Committed state version every item is read at.",
+                        "minimum": 0
+                    },
+                    "stateUpdatedAt": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Time this cached state collection finished, in Unix microseconds."
+                    }
+                }
+            },
             "VaultEquityResponse": {
                 "type": "object",
                 "required": [
@@ -9653,6 +10477,32 @@
                         "format": "decimal"
                     },
                     "userAddress": {
+                        "type": "string"
+                    }
+                }
+            },
+            "VaultValuation": {
+                "type": "object",
+                "required": [
+                    "vaultAddress",
+                    "totalShares",
+                    "equity"
+                ],
+                "properties": {
+                    "equity": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Equity of the vault account plus its sub-vault accounts at `stateSlot`. Null when the\nvault account is missing or a price it depends on is unavailable. With `totalShares`\nabove zero, `equity / totalShares` is the share price; a share-less vault mints its next\ndeposit at 1 and any residual equity accrues to that depositor."
+                    },
+                    "totalShares": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Shares outstanding at `stateSlot`, including shares queued for withdrawal."
+                    },
+                    "vaultAddress": {
                         "type": "string"
                     }
                 }
@@ -9811,59 +10661,6 @@
                         }
                     }
                 }
-            },
-            "VaultEquitiesResponse": {
-                "type": "object",
-                "required": [
-                    "stateSlot",
-                    "stateUpdatedAt",
-                    "items"
-                ],
-                "properties": {
-                    "items": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/VaultValuation"
-                        }
-                    },
-                    "stateSlot": {
-                        "type": "integer",
-                        "format": "int64",
-                        "description": "Committed state version every item is read at.",
-                        "minimum": 0
-                    },
-                    "stateUpdatedAt": {
-                        "type": "integer",
-                        "format": "int64",
-                        "description": "Time this cached state collection finished, in Unix microseconds."
-                    }
-                }
-            },
-            "VaultValuation": {
-                "type": "object",
-                "required": [
-                    "vaultAddress",
-                    "totalShares",
-                    "equity"
-                ],
-                "properties": {
-                    "equity": {
-                        "type": [
-                            "string",
-                            "null"
-                        ],
-                        "format": "decimal",
-                        "description": "Equity of the vault account plus its sub-vault accounts at `stateSlot`. Null when the\nvault account is missing or a price it depends on is unavailable. With `totalShares`\nabove zero, `equity / totalShares` is the share price; a share-less vault mints its next\ndeposit at 1 and any residual equity accrues to that depositor."
-                    },
-                    "totalShares": {
-                        "type": "string",
-                        "format": "decimal",
-                        "description": "Shares outstanding at `stateSlot`, including shares queued for withdrawal."
-                    },
-                    "vaultAddress": {
-                        "type": "string"
-                    }
-                }
             }
         }
     },
@@ -9882,6 +10679,7 @@
             "name": "Bullet API",
             "tags": [
                 "API",
+                "Listings",
                 "Rollup"
             ]
         }

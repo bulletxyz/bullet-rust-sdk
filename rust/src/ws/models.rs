@@ -114,6 +114,9 @@ pub struct DegenPositionsChangedMessage {
     pub base_asset_id: u16,
     pub base_asset: String,
     pub change: String,
+    /// Why a queued open was returned; only with `pending_open_removed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 /// Event type of a market-scoped Degen result message.
@@ -138,7 +141,34 @@ pub struct DegenResultMessage {
     pub entry_price: Decimal,
     pub exit_price: Decimal,
     pub realized_pnl: Decimal,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub roi_percent: Option<Decimal>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wager: Option<Decimal>,
     pub close_reason: String,
+}
+
+/// Event type of a market-scoped Degen price message.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DegenPriceEventType {
+    #[serde(rename = "degenPrice")]
+    DegenPrice,
+}
+
+/// The price a market's Degen book ran at; fills and settlements of the same `run` use it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DegenPriceMessage {
+    #[serde(rename = "e")]
+    pub event_type: DegenPriceEventType,
+    #[serde(rename = "E")]
+    pub event_time: u64,
+    pub symbol: String,
+    /// Decimal-encoded u64.
+    pub run: String,
+    pub price: Decimal,
+    pub publish_timestamp_micros: u64,
+    pub execution_timestamp_micros: u64,
 }
 
 /// Tagged messages from the server (have an "e" event type field)
@@ -190,6 +220,7 @@ pub enum ServerMessage {
     DegenPositionsChanged(DegenPositionsChangedMessage),
     DegenPositionCompleted(DegenPositionCompletedMessage),
     DegenResult(DegenResultMessage),
+    DegenPrice(DegenPriceMessage),
 
     // Untagged error response (e.g., order errors without "e" field)
     Error(ErrorMessage),
@@ -372,6 +403,8 @@ mod tests {
             "entryPrice": "80000",
             "exitPrice": "78353.2",
             "realizedPnl": "-2.25",
+            "roiPercent": "-22.5",
+            "wager": "10",
             "closeReason": "degen_liquidation"
         }"#;
 
@@ -387,6 +420,8 @@ mod tests {
         assert_eq!(result.entry_price.to_string(), "80000");
         assert_eq!(result.exit_price.to_string(), "78353.2");
         assert_eq!(result.realized_pnl.to_string(), "-2.25");
+        assert_eq!(result.roi_percent.unwrap().to_string(), "-22.5");
+        assert_eq!(result.wager.unwrap().to_string(), "10");
         assert_eq!(result.close_reason, "degen_liquidation");
 
         let value = serde_json::to_value(result).unwrap();
@@ -394,6 +429,39 @@ mod tests {
         assert_eq!(value["entryPrice"], "80000");
         assert_eq!(value["exitPrice"], "78353.2");
         assert_eq!(value["realizedPnl"], "-2.25");
+        let mut legacy: serde_json::Value = serde_json::from_str(json).unwrap();
+        legacy.as_object_mut().unwrap().remove("roiPercent");
+        legacy.as_object_mut().unwrap().remove("wager");
+        let message: ServerMessage = serde_json::from_value(legacy).unwrap();
+        let ServerMessage::DegenResult(result) = message else {
+            panic!("expected legacy Degen result");
+        };
+        assert_eq!(result.roi_percent, None);
+        assert_eq!(result.wager, None);
+    }
+
+    #[test]
+    fn degen_price_parses() {
+        let json = r#"{
+            "e": "degenPrice",
+            "E": 1706745600000000,
+            "symbol": "BTC-USD",
+            "run": "1234567",
+            "price": "78353.2",
+            "publishTimestampMicros": 1706745599850000,
+            "executionTimestampMicros": 1706745599980000
+        }"#;
+
+        let message: ServerMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(message.as_ref(), "degenPrice");
+        let ServerMessage::DegenPrice(price) = message else {
+            panic!("expected Degen price, got {message:?}");
+        };
+        assert_eq!(price.symbol, "BTC-USD");
+        assert_eq!(price.run, "1234567");
+        assert_eq!(price.price.to_string(), "78353.2");
+        assert_eq!(price.publish_timestamp_micros, 1_706_745_599_850_000);
+        assert_eq!(price.execution_timestamp_micros, 1_706_745_599_980_000);
     }
 
     #[test]
@@ -420,6 +488,7 @@ mod tests {
         assert_eq!(changed.base_asset_id, 2);
         assert_eq!(changed.base_asset, "BTC");
         assert_eq!(changed.change, "open");
+        assert_eq!(changed.reason, None);
     }
 
     /// The `e` tag is a unit enum, so a message carrying the same field names

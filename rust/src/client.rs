@@ -443,7 +443,29 @@ mod tests {
     use bullet_exchange_interface::message::PublicAction;
 
     use super::*;
+    use crate::codegen::types::DegenConfigResponse;
     use crate::types::UserAction;
+
+    #[test]
+    fn degen_config_preserves_oracle_run_precision() {
+        let value = serde_json::json!({
+            "closeFeeBps": "0.4",
+            "runDelayRuns": "18446744073709551615",
+            "entryExpiryRuns": "60",
+            "timeoutRuns": "300",
+            "winBonusBps": 250,
+            "maxMargin": "50",
+            "flowWindowRuns": "300",
+            "maxFlow": "500",
+            "minFlow": "50",
+            "flowLossThreshold": "150",
+            "flowRecoveryBps": 1000,
+            "markets": [{"marketId": 1, "symbol": "BTC-USD", "status": "close_only"}],
+            "asOf": 1794390000000000_i64
+        });
+        let config: DegenConfigResponse = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(config).unwrap(), value);
+    }
 
     #[test]
     fn network_from_resolves_named_networks_and_custom_urls() {

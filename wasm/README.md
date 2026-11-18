@@ -1,5 +1,10 @@
 # @bulletxyz/sdk-wasm
 
+`degenResult` messages include decimal-string `roiPercent`, the bonus-inclusive realized PnL
+divided by the original wager and multiplied by 100. `"120"` represents 120% ROI.
+`wager` is the original committed USDC margin, also encoded as a decimal string.
+Both fields are omitted when messages come from older servers; check for their presence before use.
+
 WebAssembly bindings for the [Bullet](https://bullet.xyz) trading API. Works in Node.js, browsers, and Deno.
 
 ## Install
@@ -36,15 +41,16 @@ Use the typed `DegenAction` factories to open or close a degen position. The
 action is passed directly into the generated call message without JSON
 serialization.
 
-`open` executes all-or-nothing at top-of-book: `Side.Bid` opens a long and
-`Side.Ask` opens a short. The size must be non-zero and aligned to the market's
-lot size. `amountToTransfer` funds the isolated balance from cross margin and is
-capped by the protocol at 10 USDC. `close` executes IOC and returns the remaining
-isolated balance to cross margin once the position is flat.
+`open` queues an open against the market's degen vault: `Side.Bid` opens a long
+and `Side.Ask` opens a short. It fills at the Degen price of a later run, never
+through the orderbook, so no price is given. The size must be non-zero and
+aligned to the market's lot size. `amountToTransfer` is the margin, at least
+1 USDC, taken from the cross balance when the open is queued and returned if the
+entry expires unfilled. `close` queues a close that settles at the Degen price
+of a later run; it is rejected until the minimum hold (`degenConfig()`) is over.
 
-`openV1` and `closeV1` take an optional `maxSlippageBps` (1 bps = 0.01%): the
-transaction reverts if the average fill price is worse than the mark price by
-more than that. A fill better than mark always passes. Omit it for no limit.
+Follow the queue and the position with `degenPositions(address)` and the Degen
+WebSocket topics below.
 
 ```typescript
 import { DegenAction, Side, User } from '@bulletxyz/sdk-wasm';
@@ -55,10 +61,6 @@ const open = User.degenTrade(
 );
 
 const close = User.degenTrade(7, DegenAction.close(), 2);
-
-// Revert if the average fill is more than 0.5% worse than mark.
-const guardedOpen = User.degenTrade(7, DegenAction.openV1('5', Side.Bid, '10', 50));
-const guardedClose = User.degenTrade(7, DegenAction.closeV1(50));
 ```
 
 ## API Reference
@@ -375,6 +377,7 @@ await ws.subscribe([
     Topic.depth('ETH-USD', OrderbookDepth.D10),
     Topic.bookTicker('SOL-USD'),
     Topic.degenResults('BTC-USD'),
+    Topic.degenPrice('BTC-USD'),
     Topic.kline('BTC-USD', KlineInterval.H1),
     Topic.userDegenPositions('account-address'),
     Topic.allTickers(),
@@ -390,6 +393,9 @@ if (msg.type === 'degenPositionsChanged') {
     console.log(msg.data.position);
 } else if (msg.type === 'degenResult') {
     console.log(msg.data.size, msg.data.realizedPnl, msg.data.closeReason);
+} else if (msg.type === 'degenPrice') {
+    // The price Degen positions fill and settle at, one message per Degen run.
+    console.log(msg.data.symbol, msg.data.run, msg.data.price);
 }
 
 // Submit orders via WebSocket
@@ -449,6 +455,19 @@ Checked arithmetic (`checkedAdd`, `checkedSub`, `checkedMul`, `checkedDiv`)
 returns `undefined` on failure.
 
 ### REST API Methods
+
+`await client.degenConfig()` returns the live public Degen configuration. `closeFeeBps` is the
+fee every settlement pays, a decimal string in basis points of the entry notional; a position is
+liquidated once its margin no longer covers it. `winBonusBps` is integer basis points, a
+configured maximum and not a guaranteed payout or available pool balance. `runDelayRuns`, `entryExpiryRuns`, and `timeoutRuns`
+are decimal strings counting oracle runs, not seconds. `maxMargin` is the largest margin an open
+may carry when it is submitted, a decimal string in USDC; `"0"` means no maximum. A change does
+not affect opens that are already queued. `maxFlow` is the most margin a market fills per window
+of `flowWindowRuns` oracle runs, `"0"` for no cap; an open past it is returned unfilled.
+`minFlow`, `flowLossThreshold` and `flowRecoveryBps` describe how that cap shrinks after a window
+the vault lost in and recovers. `markets` lists the markets with a Degen book that the server
+knows, each with its `status`, `on` or `close_only`; a close-only market rejects new opens and new
+vault deposits. `asOf` is Unix microseconds.
 
 The client exposes REST endpoints as typed async methods. Response objects have
 typed getters plus `toJSON()` for full JSON serialization.

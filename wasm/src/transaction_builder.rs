@@ -15,9 +15,10 @@ use bullet_exchange_interface::transaction::{
     Amount, Gas, RuntimeCall, Transaction as RustSignedTransaction, WarpBytes32, warp,
 };
 use bullet_exchange_interface::types::{
-    AdminType, AssetId, ClientOrderId, FeeTier, MarginDiscount, MarketId, MarketTradingStatus,
-    OrderId, OrderType, Side, SpotCollateralTransferDirection, TokenId, TradingCreditsUpdateType,
-    TradingMode, TriggerDirection, TriggerOrderId, TriggerPriceCondition, TwapId,
+    AdminType, AssetId, ClientOrderId, DegenMarketStatus, FeeTier, MarginDiscount, MarketId,
+    MarketTradingStatus, OrderId, OrderType, Side, SpotCollateralTransferDirection, TokenId,
+    TradingCreditsUpdateType, TradingMode, TriggerDirection, TriggerOrderId, TriggerPriceCondition,
+    TwapId,
 };
 use bullet_rust_sdk::types::CallMessage;
 use bullet_rust_sdk::{
@@ -101,8 +102,7 @@ pub struct WasmCallMessage {
 
 /// A typed degen trade action.
 ///
-/// Construct with a static `open`, `openV1`, `close` or `closeV1` factory, then pass it to
-/// `User.degenTrade(...)`.
+/// Construct with a static `open` or `close` factory, then pass it to `User.degenTrade(...)`.
 #[wasm_bindgen(js_name = DegenAction)]
 pub struct WasmDegenAction {
     pub(crate) inner: DegenAction,
@@ -110,10 +110,11 @@ pub struct WasmDegenAction {
 
 #[wasm_bindgen(js_class = DegenAction)]
 impl WasmDegenAction {
-    /// Open an isolated degen position all-or-nothing at top-of-book.
+    /// Queue a degen open against the market's degen vault; it fills at the Degen price of a
+    /// later run.
     /// @param {string} size - Non-zero, lot-size-aligned position size.
     /// @param {Side} side - `Bid` opens a long; `Ask` opens a short.
-    /// @param {string} amountToTransfer - Cross-margin funds to transfer, capped at 10 USDC.
+    /// @param {string} amountToTransfer - Margin in USDC (at least 1), taken from the cross balance.
     /// @returns {DegenAction}
     /// @example
     /// ```js
@@ -134,51 +135,12 @@ impl WasmDegenAction {
         })
     }
 
-    /// Like `open`, but reverts if the average fill price is worse than mark by more than
-    /// `maxSlippageBps` (1 bps = 0.01%).
-    /// @param {string} size - Non-zero, lot-size-aligned position size.
-    /// @param {Side} side - `Bid` opens a long; `Ask` opens a short.
-    /// @param {string} amountToTransfer - Cross-margin funds to transfer, capped at 10 USDC.
-    /// @param {number} [maxSlippageBps] - Slippage limit in basis points; omit for none.
-    /// @returns {DegenAction}
-    /// @example
-    /// ```js
-    /// const action = DegenAction.openV1("5", Side.Bid, "10", 50);
-    /// const message = User.degenTrade(7, action);
-    /// ```
-    #[wasm_bindgen(js_name = openV1)]
-    pub fn open_v1(
-        size: &str,
-        side: WasmSide,
-        amount_to_transfer: &str,
-        max_slippage_bps: Option<u16>,
-    ) -> WasmResult<WasmDegenAction> {
-        Ok(WasmDegenAction {
-            inner: DegenAction::OpenV1 {
-                size: parse_degen_open_size(size)?,
-                side: side.into_domain(),
-                amount_to_transfer: parse_dec(amount_to_transfer)?,
-                max_slippage_bps,
-            },
-        })
-    }
-
-    /// Close the degen position IOC at top-of-book.
+    /// Queue a close of the market's degen position; it settles at the Degen price of a later
+    /// run.
     /// @returns {DegenAction}
     pub fn close() -> WasmDegenAction {
         WasmDegenAction {
             inner: DegenAction::Close,
-        }
-    }
-
-    /// Like `close`, but reverts if the average fill price is worse than mark by more than
-    /// `maxSlippageBps` (1 bps = 0.01%).
-    /// @param {number} [maxSlippageBps] - Slippage limit in basis points; omit for none.
-    /// @returns {DegenAction}
-    #[wasm_bindgen(js_name = closeV1)]
-    pub fn close_v1(max_slippage_bps: Option<u16>) -> WasmDegenAction {
-        WasmDegenAction {
-            inner: DegenAction::CloseV1 { max_slippage_bps },
         }
     }
 }
@@ -244,36 +206,6 @@ mod call_message_factory_tests {
     fn degen_trade_open_rejects_zero_size() {
         assert!(WasmDegenAction::open("0", WasmSide::Bid, "10").is_err());
         assert!(WasmDegenAction::open("0.0", WasmSide::Ask, "10").is_err());
-        assert!(WasmDegenAction::open_v1("0", WasmSide::Bid, "10", Some(50)).is_err());
-    }
-
-    #[test]
-    fn degen_trade_v1_actions_serialize_exact_runtime_calls() {
-        let open = WasmDegenAction::open_v1("2.5", WasmSide::Ask, "9.75", Some(50))
-            .unwrap_or_else(|_| panic!("valid degen open v1 action"));
-        let call = User::degen_trade(7, open, None)
-            .unwrap_or_else(|_| panic!("valid degen open v1 message"));
-        assert_eq!(
-            serde_json::to_value(&call.inner).expect("serialize runtime call")["exchange"]["user"]
-                ["degen_trade"]["action"],
-            json!({
-                "open_v1": {
-                    "size": "2.5",
-                    "side": "ask",
-                    "amount_to_transfer": "9.75",
-                    "max_slippage_bps": 50,
-                },
-            })
-        );
-
-        let close = WasmDegenAction::close_v1(None);
-        let call = User::degen_trade(7, close, Some(2))
-            .unwrap_or_else(|_| panic!("valid degen close v1 message"));
-        assert_eq!(
-            serde_json::to_value(&call.inner).expect("serialize runtime call")["exchange"]["user"]
-                ["degen_trade"]["action"],
-            json!({ "close_v1": { "max_slippage_bps": null } })
-        );
     }
 
     #[test]
