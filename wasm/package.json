@@ -20,7 +20,7 @@
     "dex"
   ],
   "type": "module",
-  "packageManager": "pnpm@11.28.11",
+  "packageManager": "pnpm@11.28.13",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
