@@ -321,6 +321,7 @@ mod tests {
                 "wager": "10.5",
                 "realizedPnl": "-2.25",
                 "fee": "0.01",
+                "totalPayout": "8.25",
                 "status": "liquidated",
                 "closeReason": "liquidation",
                 "liquidationType": "backstop",
@@ -344,6 +345,8 @@ mod tests {
         assert_eq!(completed.position.exit_price.to_string(), "78353.2");
         assert_eq!(completed.position.wager.to_string(), "10.5");
         assert_eq!(completed.position.realized_pnl.to_string(), "-2.25");
+        assert_eq!(completed.position.total_payout.to_string(), "8.25");
+        assert!(completed.position.bonus_paid.is_none());
         assert_eq!(
             completed.position.liquidation_type.as_deref(),
             Some("backstop")
@@ -369,6 +372,13 @@ mod tests {
                 wager: "10".parse().unwrap(),
                 realized_pnl: "2".parse().unwrap(),
                 fee: "0.01".parse().unwrap(),
+                total_payout: "12".parse().unwrap(),
+                bonus_paid: None,
+                credit_margin: None,
+                cash_margin: None,
+                credit_return: None,
+                credit_loss: None,
+                cash_payout: None,
                 status: "closed".to_string(),
                 close_reason: "user_close".to_string(),
                 liquidation_type: None,
@@ -388,6 +398,7 @@ mod tests {
         assert_eq!(value["position"]["wager"], "10");
         assert_eq!(value["position"]["realizedPnl"], "2");
         assert_eq!(value["position"]["fee"], "0.01");
+        assert_eq!(value["position"]["totalPayout"], "12");
         assert!(value["position"]["liquidationType"].is_null());
     }
 

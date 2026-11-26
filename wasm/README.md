@@ -33,7 +33,8 @@ const response = await Transaction.builder()
 ```
 
 For market data without a signer, use `await Client.mainnet()` and typed REST
-methods such as `client.tickerPrice('BTC-USD')`.
+methods such as `client.tickerPrice('BTC-USD')`. `client.nativeExchangeInfo()` includes
+spot and perpetual trading rules; `client.exchangeInfo()` lists futures only.
 
 ### Degen trading
 
@@ -296,8 +297,13 @@ const deposit = User.transfer(
 );
 ```
 
-The older `User.deposit`, `User.withdraw` and `User.createSubAccount` factories
-remain for wire compatibility, but the exchange rejects those actions.
+`User.transfer` from your master `cross` to a vault's master `cross` is also how
+you deposit into a vault — pass the vault's address as the trailing destination
+argument. It mints shares at the vault's NAV and charges no fee.
+
+The older `User.deposit`, `User.withdraw`, `User.createSubAccount`,
+`User.depositToVault` and `User.cancelQueuedWithdrawal` factories remain for
+wire compatibility, but the exchange rejects those actions.
 
 Delegate expiry is encoded as epoch microseconds. If your app stores epoch
 milliseconds, pass `BigInt(expiresAtMs) * 1000n` for `expiresAt`.
@@ -322,8 +328,7 @@ vault example.
 `User.cancelQueuedWithdrawalV1(vault, withdrawalTimestamp?)` cancels the queued
 withdrawal whose `timestamp` (from `queuedWithdrawals` on `vault`/`vaults`)
 matches, or all of the sender's queued withdrawals from the vault when the
-timestamp is omitted. The older `User.cancelQueuedWithdrawal(vault)` cancels
-only the oldest one.
+timestamp is omitted.
 
 `deriveSubAccountAddress(master, index)` computes a sub-account's address from
 its master address and index (`0-31`). A transfer into a sub-account creates it;
@@ -469,6 +474,37 @@ the vault lost in and recovers. `markets` lists the markets with a Degen book th
 knows, each with its `status`, `on` or `close_only`; a close-only market rejects new opens and new
 vault deposits. `asOf` is Unix microseconds.
 
+`minMargin` and `maxLeverage` expose protocol limits. Each market also returns its inherited
+`maxMargin`, latest `price`, decimal-string `run`, `publishTimestampMicros`, `bonusPool`, and current
+`flowCap`, `flowFilled`, `remainingFlow`, and `flowWindowStartRun`. Price/time are null before a
+recorded run; cap/window fields are null when flow is disabled or uninitialized. These are
+snapshots, not reservations. Subscribe to `Topic.degenPrice(symbol)` before bootstrapping and
+retain the newest market/run. The snapshot has no chain execution timestamp.
+
+`flowWindowEndRun` is the exclusive end of the stored window under current settings:
+`flowWindowStartRun + flowWindowRuns`. `flowWindowRunsRemaining` is `max(flowWindowEndRun - run, 0)`.
+The engine increments the market run before checking rollover, so `"1"` reaches the boundary on
+the next run. `"0"` means the boundary is already due under current settings; rollover waits for
+a processed run. Both fields are decimal strings, or null without an active cap or when the end
+overflows u64. They are not wall-clock deadlines.
+
+Extra API serves historical Degen run samples at `GET /charts/degen-price-history` with
+`market_id`, `from_us`, `to_us` and `limit` query parameters. Subscribe to `Topic.degenPrice(symbol)`
+before loading history, then reconcile by market/run and source timestamps. History preserves
+actual runs and gaps; timestamp and run fields are strings.
+
+`degenConfig()` also exposes queue/action limits, per-market queue counts,
+locked vault funds and nullable conservative `freeVaultCapacity` from the archival vault-account
+cache, without additional account requests. Missing accounts or snapshots older than 30 seconds
+leave it null. These snapshots do not reserve capacity. Position `winPrice`, `availableWinBonus`,
+run deadlines/countdowns and cash/credit payout estimates remove the need to embed timing or
+funding assumptions in the UI. Run counts remain
+strings; missing evidence and overflow remain null.
+
+`degenMarketStats(marketId)` returns indexed Degen OI and notional at its own latest recorded price,
+with nullable pricing and explicit source timestamps. `asOf` is the successful background
+cache-fetch time; uninitialized or stale snapshots return 503.
+
 The client exposes REST endpoints as typed async methods. Response objects have
 typed getters plus `toJSON()` for full JSON serialization.
 
@@ -479,6 +515,25 @@ Arguments marked `?` may be omitted entirely.
 
 `degenPositions(address)` returns queued and active V2 Degen positions. Financial
 values are `Decimal` objects; use `toString()` when storing or displaying them.
+`degenPrice` is the actual valuation price; `pricePnl`, `estimatedCloseFee`, `winCap`, and `winBonus`
+explain the unchanged net `unrealizedPnl`. Do not reconstruct price from net PnL. Run fields
+`currentRun`, `openedRun`, and `eligibleRun` are decimal strings, with unavailable values null.
+Completed-position history and WebSocket receipts include `totalPayout`, nullable recorded
+`bonusPaid`, and numeric `fee`. The fee is what settlement retained beyond the capped price result
+and bonus, or on liquidation what the price loss left of the wager. REST history uses the recorded
+bonus when available; missing bonus evidence falls back to zero and can underreport the fee,
+floored at zero. Net realized PnL already includes the fee and bonus; do not subtract the fee again.
+Completed receipts require `totalPayout`. `bonusPaid` remains nullable and may be omitted by older
+servers.
+`winPrice` is the stored win target. `availableWinBonus` is the current pool-funded maximum,
+`min(wager × winBonusBps / 10000, bonusPool)`, even before winning. The amount is unreserved
+and unguaranteed. Other settlements can change the pool, and only a winning settlement pays a
+bonus. `winBonus` remains the bonus included in the current net valuation.
+Run deadlines/countdowns are decimal strings, with null on overflow and zero remaining once due.
+Cash/credit close estimates preserve token precision and include all bonus in cash. Completed
+receipts also include nullable `creditMargin`, `cashMargin`, `creditReturn`, `creditLoss`, and
+`cashPayout`, proven from complete transaction evidence; unavailable or conflicting evidence is null.
+
 After a fill, `openTxHash` can join the position to locally retained transaction
 inputs such as the user's selected leverage:
 

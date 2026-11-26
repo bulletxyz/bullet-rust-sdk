@@ -753,6 +753,62 @@
                 }
             }
         },
+        "/api/v1/degenMarketStats": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Cached Degen open interest and its own price. Lifecycle indexing refreshes once per minute;\nsource prices can be stale or missing. An unknown market is empty, not a fabricated zero.",
+                "operationId": "degen_market_stats",
+                "parameters": [
+                    {
+                        "name": "marketId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "format": "uint16",
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Indexed Degen market statistics",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DegenMarketStatsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid market ID",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Historical data service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/degenPositions": {
             "get": {
                 "tags": [
@@ -792,6 +848,48 @@
                     },
                     "502": {
                         "description": "Upstream snapshot unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/degenPriceHistory": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "operationId": "degen_price_history",
+                "parameters": [
+                    {
+                        "name": "marketId",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "uint16",
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Recent in-memory Degen price observations",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DegenPriceHistoryResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid or unknown market ID",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -863,6 +961,57 @@
                     },
                     "502": {
                         "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/exchangeInfo": {
+            "get": {
+                "tags": [
+                    "API"
+                ],
+                "summary": "Registered assets and trading rules for spot and perpetual markets.",
+                "operationId": "native_exchange_info",
+                "responses": {
+                    "200": {
+                        "description": "Spot and perpetual exchange information",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExchangeInfo"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Spot trading rules not yet available",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -5729,6 +5878,7 @@
                     "maxUtilizationRate",
                     "availableAmount",
                     "borrowedAmount",
+                    "lentToPnlPool",
                     "cumulativeDepositRate",
                     "cumulativeBorrowRate",
                     "accumulatedProtocolFees",
@@ -5783,6 +5933,11 @@
                     "lastUpdateTimestamp": {
                         "type": "integer",
                         "format": "int64"
+                    },
+                    "lentToPnlPool": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Lent interest-free to the USDC PnL pool; part of the deposits but neither available nor\ninterest-bearing. Always \"0\" for non-USDC pools."
                     },
                     "maxUtilizationRate": {
                         "type": "string",
@@ -6158,6 +6313,13 @@
                     "wager",
                     "realizedPnl",
                     "fee",
+                    "totalPayout",
+                    "bonusPaid",
+                    "creditMargin",
+                    "cashMargin",
+                    "creditReturn",
+                    "creditLoss",
+                    "cashPayout",
                     "status",
                     "closeReason",
                     "openedTimestampMicros",
@@ -6172,6 +6334,30 @@
                     "asset": {
                         "type": "string"
                     },
+                    "bonusPaid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Bonus recorded by the settlement event; null when the event metadata is unavailable."
+                    },
+                    "cashMargin": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Original USDC wager, excluding trading credits."
+                    },
+                    "cashPayout": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "USDC credited to cross, including bonus. Does not guarantee withdrawability."
+                    },
                     "closeReason": {
                         "type": "string",
                         "description": "Terminal reason. V2 uses user_close, win_cap, timeout, or degen_liquidation."
@@ -6182,6 +6368,30 @@
                     },
                     "closingTxHash": {
                         "type": "string"
+                    },
+                    "creditLoss": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Trading credits consumed by the position's loss."
+                    },
+                    "creditMargin": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Wager funded by trading credits, reconstructed from returned and spent credits."
+                    },
+                    "creditReturn": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Trading credits returned to cross; null without complete funding metadata."
                     },
                     "direction": {
                         "type": "string",
@@ -6200,7 +6410,7 @@
                     "fee": {
                         "type": "string",
                         "format": "decimal",
-                        "description": "Zero for V2 vault settlements, which currently charge no separate user fee."
+                        "description": "What the settlement kept beyond the price result: the close fee, or on a liquidation what\nthe price loss left of the wager. Already deducted from `realizedPnl`."
                     },
                     "holdTimeMicros": {
                         "type": "integer",
@@ -6240,6 +6450,11 @@
                         "type": "string",
                         "description": "Terminal lifecycle status: closed or liquidated."
                     },
+                    "totalPayout": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Recorded payout, including bonus and net of the settlement's fee."
+                    },
                     "wager": {
                         "type": "string",
                         "format": "decimal",
@@ -6256,6 +6471,10 @@
                     "timeoutRuns",
                     "winBonusBps",
                     "maxMargin",
+                    "minMargin",
+                    "maxLeverage",
+                    "maxQueueLen",
+                    "maxActionsPerRun",
                     "flowWindowRuns",
                     "maxFlow",
                     "minFlow",
@@ -6299,17 +6518,39 @@
                         },
                         "description": "Every market with a Degen book, in market-id order. A market is absent until its Degen\nvault takes its first deposit, or while this server does not know it; do not offer a Degen\nopen on it."
                     },
+                    "maxActionsPerRun": {
+                        "type": "integer",
+                        "format": "int32",
+                        "description": "Per-market per-run budget shared by settlements, deposit mints, fills and withdrawals.",
+                        "minimum": 0
+                    },
                     "maxFlow": {
                         "type": "string",
                         "description": "Most wager a market fills per flow window, both directions together, in USDC, as a decimal\nstring. \"0\" means no cap. The cap in force can be lower after a window the vault lost in."
+                    },
+                    "maxLeverage": {
+                        "type": "integer",
+                        "format": "int32",
+                        "description": "Protocol leverage ceiling for a Degen fill, independent of ordinary perp risk tiers.",
+                        "minimum": 0
                     },
                     "maxMargin": {
                         "type": "string",
                         "description": "Largest wager one open may carry, in USDC, as a decimal string. \"0\" means no maximum."
                     },
+                    "maxQueueLen": {
+                        "type": "integer",
+                        "format": "int32",
+                        "description": "Market queue admission limit for opens and the separate pending-deposit queue. Closes remain accepted.",
+                        "minimum": 0
+                    },
                     "minFlow": {
                         "type": "string",
                         "description": "Lowest the cap in force can fall to, in USDC, as a decimal string."
+                    },
+                    "minMargin": {
+                        "type": "string",
+                        "description": "Smallest wager accepted by the protocol, in USDC as a decimal string."
                     },
                     "runDelayRuns": {
                         "type": "string",
@@ -6332,19 +6573,148 @@
                 "required": [
                     "marketId",
                     "symbol",
-                    "status"
+                    "status",
+                    "maxMargin",
+                    "price",
+                    "run",
+                    "publishTimestampMicros",
+                    "bonusPool",
+                    "flowCap",
+                    "flowFilled",
+                    "remainingFlow",
+                    "flowWindowStartRun",
+                    "flowWindowEndRun",
+                    "flowWindowRunsRemaining",
+                    "queueLen",
+                    "pendingOpens",
+                    "pendingCloses",
+                    "pendingDeposits",
+                    "openPositions",
+                    "availableOpenSlots",
+                    "vaultLocked",
+                    "freeVaultCapacity"
                 ],
                 "properties": {
+                    "availableOpenSlots": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Remaining open admission slots, after counting both queued opens and closes. Not a reservation.",
+                        "minimum": 0
+                    },
+                    "bonusPool": {
+                        "type": "string",
+                        "description": "Current bonus pool in USDC; available funds can change before settlement."
+                    },
+                    "flowCap": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Enforced wager cap for the current flow window, in USDC; null when flow is\ndisabled or its first window has not initialized. Not a fill reservation."
+                    },
+                    "flowFilled": {
+                        "type": "string",
+                        "description": "Wager filled in the stored window, in USDC; zero when flow is disabled."
+                    },
+                    "flowWindowEndRun": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Exclusive end run under current settings: flowWindowStartRun + flowWindowRuns.\nNull without an active cap or if the sum exceeds u64."
+                    },
+                    "flowWindowRunsRemaining": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "max(flowWindowEndRun - run, 0), as a decimal-encoded u64. \"1\" reaches the boundary on\nthe next run; \"0\" is already due under current settings and waits for a processed run.\nNull without a representable active end."
+                    },
+                    "flowWindowStartRun": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Run that started the stored window, as a decimal-encoded u64; null with no active cap."
+                    },
+                    "freeVaultCapacity": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Conservative cached cross-USDC asset minus liability, locked win caps and bonus pool. Null\nwhen the archival vault-account snapshot is unavailable or stale. Not a fill quote."
+                    },
                     "marketId": {
                         "type": "integer",
                         "format": "uint16",
                         "minimum": 0
+                    },
+                    "maxMargin": {
+                        "type": "string",
+                        "description": "Global maximum wager applied to this market, in USDC. \"0\" means no maximum;\nthis is independent of the flow capacity available when the queued open fills."
+                    },
+                    "openPositions": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    },
+                    "pendingCloses": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    },
+                    "pendingDeposits": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Deposits waiting to mint, separately capped by maxQueueLen.",
+                        "minimum": 0
+                    },
+                    "pendingOpens": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    },
+                    "price": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Latest actual Degen price as a decimal string; null before the book has a price."
+                    },
+                    "publishTimestampMicros": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64",
+                        "description": "Source publish time of `price`, in Unix microseconds; null with no price."
+                    },
+                    "queueLen": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Total queued opens and closes. Closes can grow this beyond maxQueueLen.",
+                        "minimum": 0
+                    },
+                    "remainingFlow": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Remaining wager capacity in the current window, floored at zero; null with no active cap."
+                    },
+                    "run": {
+                        "type": "string",
+                        "description": "Current Degen run, as a decimal-encoded u64."
                     },
                     "status": {
                         "$ref": "#/components/schemas/DegenMarketState"
                     },
                     "symbol": {
                         "type": "string"
+                    },
+                    "vaultLocked": {
+                        "type": "string",
+                        "description": "USDC reserved for open positions' win caps."
                     }
                 }
             },
@@ -6354,6 +6724,88 @@
                     "on",
                     "close_only"
                 ]
+            },
+            "DegenMarketStats": {
+                "type": "object",
+                "required": [
+                    "marketId",
+                    "openInterest",
+                    "openInterestNotional",
+                    "price",
+                    "run",
+                    "publishTimestampMicros",
+                    "executionTimestampMicros"
+                ],
+                "properties": {
+                    "executionTimestampMicros": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64",
+                        "description": "Chain execution time in Unix microseconds."
+                    },
+                    "marketId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "openInterest": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Sum of open Degen sizes, both directions, from the indexed lifecycle snapshot."
+                    },
+                    "openInterestNotional": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "USDC notional at the latest recorded Degen price; null when no price was indexed."
+                    },
+                    "price": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Exact source price; null when no Degen run was indexed."
+                    },
+                    "publishTimestampMicros": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64",
+                        "description": "Source publication time in Unix microseconds."
+                    },
+                    "run": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "DegenMarketStatsResponse": {
+                "type": "object",
+                "required": [
+                    "asOf",
+                    "markets"
+                ],
+                "properties": {
+                    "asOf": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Successful cache fetch time in Unix microseconds, not an indexing completeness watermark."
+                    },
+                    "markets": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/DegenMarketStats"
+                        }
+                    }
+                }
             },
             "DegenPosition": {
                 "type": "object",
@@ -6372,6 +6824,26 @@
                     "effectiveLeverage",
                     "liquidationPrice",
                     "unrealizedPnl",
+                    "degenPrice",
+                    "pricePnl",
+                    "estimatedCloseFee",
+                    "winCap",
+                    "winPrice",
+                    "winBonus",
+                    "availableWinBonus",
+                    "estimatedCashPayout",
+                    "estimatedCreditReturn",
+                    "estimatedCreditLoss",
+                    "currentRun",
+                    "openedRun",
+                    "eligibleRun",
+                    "eligibleRunsRemaining",
+                    "expiryRun",
+                    "expiryRunsRemaining",
+                    "timeoutRun",
+                    "timeoutRunsRemaining",
+                    "closeEligibleRun",
+                    "closeEligibleRunsRemaining",
                     "status",
                     "openTxHash",
                     "openedAt",
@@ -6381,6 +6853,14 @@
                     "address": {
                         "type": "string"
                     },
+                    "availableWinBonus": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Maximum bonus funded by the current pool, even before winning; not a reserved payout."
+                    },
                     "baseAsset": {
                         "type": "string"
                     },
@@ -6389,10 +6869,35 @@
                         "format": "uint16",
                         "minimum": 0
                     },
+                    "closeEligibleRun": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Eligibility of a pending close; null when no close is queued."
+                    },
+                    "closeEligibleRunsRemaining": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "creditMargin": {
                         "type": "string",
                         "format": "decimal",
                         "description": "Part of the wager funded with trading credits; returned as credits unless lost."
+                    },
+                    "currentRun": {
+                        "type": "string",
+                        "description": "Current market run, encoded as a decimal u64 string."
+                    },
+                    "degenPrice": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Actual Degen price used for valuation; null until the market's first recorded run price."
                     },
                     "effectiveLeverage": {
                         "type": [
@@ -6401,12 +6906,71 @@
                         ],
                         "format": "decimal"
                     },
+                    "eligibleRun": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Queued open or close eligibility run, encoded as a decimal u64 string."
+                    },
+                    "eligibleRunsRemaining": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Runs until the queued action is eligible; zero once eligible."
+                    },
                     "entryPrice": {
                         "type": [
                             "string",
                             "null"
                         ],
                         "format": "decimal"
+                    },
+                    "estimatedCashPayout": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "USDC returned by a settlement at this valuation, including bonus; null if unavailable."
+                    },
+                    "estimatedCloseFee": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Close fee at the live configuration, capped at the wager; null before the open fills."
+                    },
+                    "estimatedCreditLoss": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Committed credits not returned at this valuation; null if the split is unavailable."
+                    },
+                    "estimatedCreditReturn": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Trading credits returned at this valuation, rounded down to USDC token precision."
+                    },
+                    "expiryRun": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Pending open expiry under the live configuration; null for other states or u64 overflow."
+                    },
+                    "expiryRunsRemaining": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "isolatedBalance": {
                         "type": [
@@ -6422,7 +6986,7 @@
                             "null"
                         ],
                         "format": "decimal",
-                        "description": "Oracle price at the loss boundary, where the wager only covers the live close fee."
+                        "description": "Degen price at the loss boundary, where the wager only covers the live close fee."
                     },
                     "marketId": {
                         "type": "integer",
@@ -6444,8 +7008,23 @@
                         "format": "int64",
                         "description": "Fill time in Unix microseconds, when observed by this Trading API instance."
                     },
+                    "openedRun": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Fill run, encoded as a decimal u64 string; null before the open fills."
+                    },
                     "positionId": {
                         "type": "string"
+                    },
+                    "pricePnl": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Uncapped price movement times signed size, before fees and bonus; null without a fill or price."
                     },
                     "size": {
                         "type": "string",
@@ -6456,6 +7035,19 @@
                     },
                     "symbol": {
                         "type": "string"
+                    },
+                    "timeoutRun": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Filled position timeout under the live configuration; null before fill or u64 overflow."
+                    },
+                    "timeoutRunsRemaining": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "unrealizedPnl": {
                         "type": [
@@ -6476,6 +7068,30 @@
                     "wager": {
                         "type": "string",
                         "format": "decimal"
+                    },
+                    "winBonus": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Pool-capped bonus included in unrealizedPnl now; null without a fill or valuation price."
+                    },
+                    "winCap": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Stored maximum price profit, excluding the bonus; null before the open fills."
+                    },
+                    "winPrice": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "description": "Price at the stored win cap; null before fill or when no nonnegative target exists."
                     }
                 }
             },
@@ -6504,6 +7120,79 @@
                         "items": {
                             "$ref": "#/components/schemas/DegenPosition"
                         }
+                    }
+                }
+            },
+            "DegenPriceCoverage": {
+                "type": "string",
+                "enum": [
+                    "empty",
+                    "partial",
+                    "window"
+                ]
+            },
+            "DegenPriceHistoryResponse": {
+                "type": "object",
+                "required": [
+                    "marketId",
+                    "asOf",
+                    "coverage",
+                    "samples"
+                ],
+                "properties": {
+                    "asOf": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Server snapshot time in Unix microseconds.",
+                        "minimum": 0
+                    },
+                    "coverage": {
+                        "$ref": "#/components/schemas/DegenPriceCoverage",
+                        "description": "Availability of samples in this instance's 60-second receive window."
+                    },
+                    "marketId": {
+                        "type": "integer",
+                        "format": "uint16",
+                        "minimum": 0
+                    },
+                    "samples": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/DegenPriceHistorySample"
+                        },
+                        "description": "Observed runs in delivery order, oldest first."
+                    }
+                }
+            },
+            "DegenPriceHistorySample": {
+                "type": "object",
+                "required": [
+                    "run",
+                    "price",
+                    "publishTimestampMicros",
+                    "executionTimestampMicros"
+                ],
+                "properties": {
+                    "executionTimestampMicros": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Chain execution time in Unix microseconds.",
+                        "minimum": 0
+                    },
+                    "price": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact price as a decimal string."
+                    },
+                    "publishTimestampMicros": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Source publication time in Unix microseconds.",
+                        "minimum": 0
+                    },
+                    "run": {
+                        "type": "string",
+                        "description": "Unsigned 64-bit Degen run ID as a decimal string."
                     }
                 }
             },
@@ -7462,6 +8151,13 @@
                                 "wager",
                                 "realizedPnl",
                                 "fee",
+                                "totalPayout",
+                                "bonusPaid",
+                                "creditMargin",
+                                "cashMargin",
+                                "creditReturn",
+                                "creditLoss",
+                                "cashPayout",
                                 "status",
                                 "closeReason",
                                 "openedTimestampMicros",
@@ -7476,6 +8172,30 @@
                                 "asset": {
                                     "type": "string"
                                 },
+                                "bonusPaid": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "decimal",
+                                    "description": "Bonus recorded by the settlement event; null when the event metadata is unavailable."
+                                },
+                                "cashMargin": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "decimal",
+                                    "description": "Original USDC wager, excluding trading credits."
+                                },
+                                "cashPayout": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "decimal",
+                                    "description": "USDC credited to cross, including bonus. Does not guarantee withdrawability."
+                                },
                                 "closeReason": {
                                     "type": "string",
                                     "description": "Terminal reason. V2 uses user_close, win_cap, timeout, or degen_liquidation."
@@ -7486,6 +8206,30 @@
                                 },
                                 "closingTxHash": {
                                     "type": "string"
+                                },
+                                "creditLoss": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "decimal",
+                                    "description": "Trading credits consumed by the position's loss."
+                                },
+                                "creditMargin": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "decimal",
+                                    "description": "Wager funded by trading credits, reconstructed from returned and spent credits."
+                                },
+                                "creditReturn": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "decimal",
+                                    "description": "Trading credits returned to cross; null without complete funding metadata."
                                 },
                                 "direction": {
                                     "type": "string",
@@ -7504,7 +8248,7 @@
                                 "fee": {
                                     "type": "string",
                                     "format": "decimal",
-                                    "description": "Zero for V2 vault settlements, which currently charge no separate user fee."
+                                    "description": "What the settlement kept beyond the price result: the close fee, or on a liquidation what\nthe price loss left of the wager. Already deducted from `realizedPnl`."
                                 },
                                 "holdTimeMicros": {
                                     "type": "integer",
@@ -7543,6 +8287,11 @@
                                 "status": {
                                     "type": "string",
                                     "description": "Terminal lifecycle status: closed or liquidated."
+                                },
+                                "totalPayout": {
+                                    "type": "string",
+                                    "format": "decimal",
+                                    "description": "Recorded payout, including bonus and net of the settlement's fee."
                                 },
                                 "wager": {
                                     "type": "string",

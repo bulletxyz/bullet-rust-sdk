@@ -455,12 +455,26 @@ mod tests {
             "timeoutRuns": "300",
             "winBonusBps": 250,
             "maxMargin": "50",
+            "minMargin": "1",
+            "maxLeverage": 1000,
+            "maxQueueLen": 100,
+            "maxActionsPerRun": 32,
             "flowWindowRuns": "300",
             "maxFlow": "500",
             "minFlow": "50",
             "flowLossThreshold": "150",
             "flowRecoveryBps": 1000,
-            "markets": [{"marketId": 1, "symbol": "BTC-USD", "status": "close_only"}],
+            "markets": [{
+                "marketId": 1, "symbol": "BTC-USD", "status": "close_only",
+                "maxMargin": "50", "price": "78353.2", "run": "18446744073709551615",
+                "publishTimestampMicros": 1794390000000000_i64,
+                "bonusPool": "2.5", "flowCap": "500", "flowFilled": "10",
+                "remainingFlow": "490", "flowWindowStartRun": "18446744073709551315",
+                "flowWindowEndRun": "18446744073709551615", "flowWindowRunsRemaining": "0",
+                "queueLen": 0, "pendingOpens": 0, "pendingCloses": 0, "pendingDeposits": 0,
+                "openPositions": 0, "availableOpenSlots": 100, "vaultLocked": "0",
+                "freeVaultCapacity": "45"
+            }],
             "asOf": 1794390000000000_i64
         });
         let config: DegenConfigResponse = serde_json::from_value(value.clone()).unwrap();
